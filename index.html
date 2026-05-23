@@ -3025,7 +3025,18 @@ function buildFormulaStr(N, reqs){
     const reqOn = reqs && reqs[i] && reqs[i].on;
     return reqOn && (N[n.k]||0)>0;
   }).map(n=>fl2(N[n.k]||0)+'%'+n.lbl).join(' + ');
-  return microStr ? macroStr+' + '+microStr : macroStr;
+  let base = microStr ? macroStr+' + '+microStr : macroStr;
+  const suf = tratamentoSuffix();
+  return suf ? base+' '+suf : base;
+}
+
+function tratamentoSuffix(trat){
+  const t = trat || (S && S.tratamentos) || {};
+  const parts = [];
+  if(t.fertigranP) parts.push('Fertigran P');
+  if(t.superNPro)  parts.push('Super N Pro');
+  if(t.uhf)        parts.push('UHF');
+  return parts.join(' + ');
 }
 // colorFormula → HTML colorizado por nutriente (para exibição)
 // Pinta cada componente da formula com a cor do nutriente correspondente
@@ -5426,9 +5437,11 @@ function _processResult(res, qty, lote){
     if(res.nt) res.nt.cost=(res.nt.cost||0)+(S.tratamentos&&S.tratamentos.uhf?50:0);
     S.lastRes={res,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur,tratamentos:Object.assign({},S.tratamentos)};
     S.hist=S.hist||[];
-    S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K)});
+    const _gradeBase=fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K);
+    const _gradeFull=(_suf=>_suf?_gradeBase+' '+_suf:_gradeBase)(tratamentoSuffix());
+    S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:_gradeFull});
     if(S.hist.length>30) S.hist.shift();
-    dbAdd('formulacoes',{fabs:fab().name,grade:fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K),formula:buildFormulaStr(res.nt,S.reqs),custo:res.cpt,mats:res.mats,nt:res.nt});
+    dbAdd('formulacoes',{fabs:fab().name,grade:_gradeFull,formula:buildFormulaStr(res.nt,S.reqs),custo:res.cpt,mats:res.mats,nt:res.nt});
     renderRes(res,qty,lote);
     sched();
   },150);
@@ -5569,7 +5582,9 @@ function renderRes(res,qty,lote){
   const _npkHTML=_npk.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'</span>').join(_sep);
   const _extHTML=_extras.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join(_plus);
   const _gEl=document.getElementById('gradeLabel');
-  if(_gEl) _gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'');
+  const _sufStr=tratamentoSuffix();
+  const _sufHTML=_sufStr?'<span style="font-size:12px;font-weight:600;color:var(--text2);margin-left:6px">'+_sufStr+'</span>':'';
+  if(_gEl) _gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'')+_sufHTML;
 
   // Custo destacado
   document.getElementById('costBadge').textContent=fmt(res.cpt)+'/t';
@@ -5870,10 +5885,12 @@ function confirmarAddPropFormula(){
   // V11.1: NPK sempre, micros somente >0
   const fullFormula = buildFormulaStr(N, S.reqs);
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
+  const _suf = tratamentoSuffix();
+  const gradeStr = _suf ? macroStr+' '+_suf : macroStr;
   const kgs=fracsToKg(res.res.fracs, qty*1000);
   S.propostas.push({
     type:'formula',
-    grade:macroStr, formula:fullFormula,
+    grade:gradeStr, formula:fullFormula,
     fabs:fabNome,
     custo:res.res.cpt, // USD/t
     mats:res.res.mats.map((m,i)=>({name:m.name, kg:kgs[i], pct:fl2(res.res.fracs[i]*100)})),
@@ -7507,9 +7524,11 @@ function incluirNaCotacao(){
   // Ex.: "18.00-0.00-24.00 + 1.23%S" (sem 0.00%Cu, 0.00%Zn, etc)
   const fullFormula = buildFormulaStr(N, S.reqs);
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
+  const _cotSuf = tratamentoSuffix();
+  const _cotGrade = _cotSuf ? macroStr+' '+_cotSuf : macroStr;
   S.cotacao.push({
     type:'formula',
-    grade: macroStr,
+    grade: _cotGrade,
     formula: fullFormula,    // fórmula completa
     fabs: fab().name,
     custo: res.cpt,           // USD/t
