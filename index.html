@@ -2159,6 +2159,24 @@ select:focus-visible{
         <div class="fg"><label class="fl">Quantidade (ton)</label><input type="number" class="fi" id="qty" value="1" min="0.1" step="0.1"></div>
         <div class="fg"><label class="fl">Fábrica</label><select class="fi" id="fSel2" onchange="switchFactory(+this.value)"></select></div>
       </div>
+      <!-- TRATAMENTOS -->
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tratamentos</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label id="trat-fp-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+            <input type="checkbox" id="chk-fp" onchange="setTratamento('fertigranP',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+            <span style="font-size:13px;font-weight:600;flex:1">Fertigran P <span style="font-size:11px;color:var(--text3);font-weight:400">(+100 U$/t · MAP e TSP)</span></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+            <input type="checkbox" id="chk-sn" onchange="setTratamento('superNPro',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+            <span style="font-size:13px;font-weight:600;flex:1">Super N Pro <span style="font-size:11px;color:var(--text3);font-weight:400">(+50 U$/t · Ureia)</span></span>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+            <input type="checkbox" id="chk-uhf" onchange="setTratamento('uhf',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+            <span style="font-size:13px;font-weight:600;flex:1">UHF <span style="font-size:11px;color:var(--text3);font-weight:400">(+50 U$/t · fórmula)</span></span>
+          </label>
+        </div>
+      </div>
       <!-- BOTÃO CALCULAR GRANDE -->
       <button onclick="runSolve()"
         style="width:100%;padding:18px;font-size:18px;font-weight:800;border:none;border-radius:var(--radius);background:linear-gradient(135deg,var(--green2),#0d7a57);color:#fff;cursor:pointer;letter-spacing:.5px;transition:.2s;box-shadow:0 4px 20px rgba(34,201,138,.3)"
@@ -2187,6 +2205,7 @@ select:focus-visible{
             <span class="grade-badge" id="gradeLabel">—</span>
             <span id="costBadge" class="badge bg-blue" style="margin-left:auto"></span>
           </div>
+          <div id="tratBadges" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.5rem"></div>
 
           <div id="ingBars"></div>
           <div class="chips" id="resChips"></div>
@@ -3112,6 +3131,7 @@ let S={
   reqs:JSON.parse(JSON.stringify(DEF_REQS)),
   qty:2000, lote:1000,
   lastRes:null, hist:[],
+  tratamentos:{fertigranP:false, superNPro:false, uhf:false},
   co:{name:'FERTIGRAN FERT.VALE DO RIO GDE.LTDA',addr:'AV. FILOMENA CARTAFINA 23.840',city:'CATALAO',resp:'Luiz H Gadotti'}
 };
 
@@ -3199,6 +3219,7 @@ async function loadS(){
     if(data?.state && Object.keys(data.state).length){
       Object.assign(S, data.state);
       if(!S.fabs?.length) initFabs();
+      if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
     } else {
       initFabs();
     }
@@ -3261,6 +3282,54 @@ function getRestr(name){ return restr().find(r=>r.name===name)||{min:0,max:1000}
 function setRestr(name,f,v){ let r=restr().find(r=>r.name===name); if(!r){r={name,min:0,max:1000};fab().restr.push(r);} r[f]=v; sched(); }
 function cost(m){ return S.cur==='USD'?m.costUSD:m.costBRL; }
 
+// ── TRATAMENTOS
+function setTratamento(key, val){
+  if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
+  S.tratamentos[key]=val;
+  sched();
+}
+
+function _fabSupportsFertigranP(){
+  const n=(fab().name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  return n.includes('catala') || n.includes('uberaba');
+}
+
+function atualizarTogglesTratamentos(){
+  if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
+  const fpRow=document.getElementById('trat-fp-row');
+  const chkFp=document.getElementById('chk-fp');
+  const chkSn=document.getElementById('chk-sn');
+  const chkUhf=document.getElementById('chk-uhf');
+  if(!chkFp) return;
+  const fpOk=_fabSupportsFertigranP();
+  if(fpRow){ fpRow.style.opacity=fpOk?'1':'0.45'; fpRow.style.pointerEvents=fpOk?'':'none'; }
+  chkFp.disabled=!fpOk;
+  if(!fpOk){ chkFp.checked=false; S.tratamentos.fertigranP=false; }
+  else { chkFp.checked=!!S.tratamentos.fertigranP; }
+  chkSn.checked=!!S.tratamentos.superNPro;
+  chkUhf.checked=!!S.tratamentos.uhf;
+}
+
+function aplicarTratamentos(matsArr){
+  if(!S.tratamentos) return matsArr;
+  return matsArr.map(m=>{
+    const mat=Object.assign({},m);
+    if(S.tratamentos.fertigranP && _fabSupportsFertigranP()){
+      if(mat.name==='MAP'){
+        mat.name='MAP Fertigran P'; mat.N=10.6; mat.P=50.3;
+        mat.costUSD=(mat.costUSD||0)+100; mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+      } else if(mat.name==='TSP'){
+        mat.name='TSP FP'; mat.N=0; mat.P=44.5; mat.Ca=10;
+        mat.costUSD=(mat.costUSD||0)+100; mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+      }
+    }
+    if(S.tratamentos.superNPro && mat.name==='Ureia'){
+      mat.costUSD=(mat.costUSD||0)+50; mat.costBRL=(mat.costBRL||0)+(50*S.fx);
+    }
+    return mat;
+  });
+}
+
 // Auto-desativa MPs com custo = 0 — nunca reativa MP que o usuário desativou manualmente
 function autoDeactivateByPrice(){
   let changed=0;
@@ -3307,6 +3376,7 @@ function switchFactory(idx){
   S.fac=+idx;
   ['factorySel','fSel2','factorySelMob'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=idx;});
   renderAll();
+  atualizarTogglesTratamentos();
   if(document.getElementById('pg-fabs')&&document.getElementById('pg-fabs').style.display!=='none') renderFabList();
   // Recalcula formulação automaticamente se já existe resultado
   if(S.lastRes) setTimeout(()=>{ runSolve(); }, 50);
@@ -3365,7 +3435,7 @@ function goPage(p){
     const akEl=document.getElementById('anthropicKey');
     if(akEl&&S.anthropicKey) akEl.value=S.anthropicKey;
   }
-  if(p==='form'){renderMatSelGrid();renderRestrGrid();}
+  if(p==='form'){renderMatSelGrid();renderRestrGrid();atualizarTogglesTratamentos();}
   if(p==='fabs'){renderFabList();}
   if(p==='cot'){recalcCotacao();}
   if(p==='dash'){renderDash();renderPriceHistCharts();renderArquivo();checkBackupAviso();}
@@ -5351,8 +5421,10 @@ function _processResult(res, qty, lote){
       document.getElementById('resChips').innerHTML='';
       return;
     }
-    if(res.mats) res.mats=res.mats.map(wm=>mats().find(m=>m.name===wm.name)||wm);
-    S.lastRes={res,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur};
+    if(res.mats) res.mats=res.mats.map(wm=>aplicarTratamentos(mats()).find(m=>m.name===wm.name)||wm);
+    if(S.tratamentos&&S.tratamentos.uhf) res.cpt=(res.cpt||0)+50;
+    if(res.nt) res.nt.cost=(res.nt.cost||0)+(S.tratamentos&&S.tratamentos.uhf?50:0);
+    S.lastRes={res,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur,tratamentos:Object.assign({},S.tratamentos)};
     S.hist=S.hist||[];
     S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K)});
     if(S.hist.length>30) S.hist.shift();
@@ -5394,7 +5466,7 @@ function runSolve(){
     setTimeout(()=>{
       try{
         console.log('[FALLBACK] iniciando solver...');
-        const res=solveWithMicros(JSON.parse(JSON.stringify(mats())),S.reqs,restr(),qty);
+        const res=solveWithMicros(JSON.parse(JSON.stringify(aplicarTratamentos(mats()))),S.reqs,restr(),qty);
         console.log('[FALLBACK] res:', res?'OK $'+res.cpt.toFixed(2):'null');
         _processResult(res,qty,lote);
       }catch(e){
@@ -5423,7 +5495,7 @@ function runSolve(){
       runFallback();
     };
     worker.postMessage({
-      materials:JSON.parse(JSON.stringify(mats())),
+      materials:JSON.parse(JSON.stringify(aplicarTratamentos(mats()))),
       reqs:S.reqs,
       restrArr:restr(),
       cur:S.cur,
@@ -5501,6 +5573,17 @@ function renderRes(res,qty,lote){
 
   // Custo destacado
   document.getElementById('costBadge').textContent=fmt(res.cpt)+'/t';
+
+  // Badges de tratamentos ativos
+  const _trat=S.lastRes&&S.lastRes.tratamentos?S.lastRes.tratamentos:(S.tratamentos||{});
+  const _tratLabels=[];
+  if(_trat.fertigranP) _tratLabels.push({lbl:'Fertigran P',col:'#10d59c'});
+  if(_trat.superNPro)  _tratLabels.push({lbl:'Super N Pro',col:'#5b8cff'});
+  if(_trat.uhf)        _tratLabels.push({lbl:'UHF +50 U$/t',col:'#f8b53e'});
+  const _tbEl=document.getElementById('tratBadges');
+  if(_tbEl) _tbEl.innerHTML=_tratLabels.length
+    ? _tratLabels.map(t=>'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+t.col+'22;color:'+t.col+';border:1px solid '+t.col+'55">'+t.lbl+'</span>').join('')
+    : '';
 
   // Barras — mostrar KG em vez de %
   const kgsArr=fracsToKg(res.fracs, qty);
@@ -8508,6 +8591,7 @@ function renderAll(){
   renderNutRows();
   renderMatSelGrid();
   renderRestrGrid();
+  atualizarTogglesTratamentos();
   const fl=document.getElementById('facLbl'); if(fl) fl.textContent=fab().name;
   // Always re-render whichever page is currently visible
   if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none'){ renderMatCards(); renderPDFHistPanel(); }
