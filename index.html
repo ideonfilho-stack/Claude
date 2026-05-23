@@ -8106,127 +8106,122 @@ function recalcCotacao(){
     };
   }
 
-  // ── Itens individuais ──
-  cont.innerHTML = itens.map((item,i)=>{
-    item.params = item.params || {};
-    const P = P_of(item);
-    const X = item.custo; // USD/t (custo base)
-    const calc = calcVendaUSD(X, P);
-    const totalItem = calc.venda * P.qtd;
-    const F  = v => FI(v, P.cur);
-    const TC = v => toCurI(v, P.cur);
+  // ── Itens individuais — layout em tabela de linhas ──
+  const INP_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none;text-align:right';
+  const SEL_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none;cursor:pointer;width:100%';
 
-    // Matérias-primas escaladas pela qtd atual
-    // item.qty = kg de produção para fórmulas; qty*1000 para MPs
-    // Fallback: se qty ausente, usa P.qtd*1000 como base
-    const baseKg = (item.qty > 0) ? item.qty : (P.qtd * 1000);
-    const scale = P.qtd / (baseKg / 1000);
-    const matsRows = item.mats.map(m=>{
-      const kgEscalado = Math.round(m.kg * scale);
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="font-size:13px;color:var(--text)">'+m.name+'</span>'
-        +'<span style="font-size:13px;font-weight:700;color:var(--text2)">'+kgEscalado.toLocaleString('pt-BR')+' kg</span>'
-        +'</div>';
-    }).join('');
+  const thead = '<thead><tr style="background:var(--surface2)">'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">#</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Produto</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Fábrica</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Cliente</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Qtd (t)</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Embalagem</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Moeda</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Taxa %/m</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Prazo</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Com %</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Frete R$/t</th>'
+    +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Custo/t</th>'
+    +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Preço/t</th>'
+    +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Total</th>'
+    +'<th style="padding:8px 10px"></th>'
+    +'</tr></thead>';
 
-    const isMP = item.type==='mp';
-    const accentClass = isMP ? 'card-accent-green' : 'card-accent-amber';
-    const typeBadge = isMP
-      ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:800;color:var(--green);background:var(--green-soft);padding:3px 8px;border-radius:10px;letter-spacing:.06em;text-transform:uppercase"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px"><circle cx="12" cy="12" r="9"/></svg>MP isolada</span>'
-      : '<span style="display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:800;color:var(--amber);background:var(--amber-soft);padding:3px 8px;border-radius:10px;letter-spacing:.06em;text-transform:uppercase"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>Fórmula</span>';
+  const tbody = '<tbody>'
+    + itens.map((item,i)=>{
+      item.params = item.params || {};
+      const P = P_of(item);
+      const X = item.custo;
+      const calc = calcVendaUSD(X, P);
+      const totalItem = calc.venda * P.qtd;
+      const F  = v => FI(v, P.cur);
+      const TC = v => toCurI(v, P.cur);
+      const isMP = item.type==='mp';
+      const rowBg = i%2===0 ? 'var(--surface)' : 'var(--surface2)';
+      const accentCol = isMP ? 'var(--green)' : 'var(--amber)';
+      const accentSoft = isMP ? 'var(--green-soft)' : 'var(--amber-soft)';
+      const typeLbl = isMP ? 'MP' : 'Fórmula';
 
-    // Input de parâmetro numérico (sempre por item)
-    const paramInput = (key, value, step, suffix) => {
-      return '<div style="display:flex;flex-direction:column;gap:2px">'
-        +'<div style="display:flex;align-items:center;gap:5px">'
-        +'<input type="number" value="'+value+'" step="'+step+'" min="0"'
+      const numInp = (key, val, step, w) =>
+        '<input type="number" value="'+val+'" step="'+step+'" min="0"'
         +' onchange="setItemParam('+i+',\''+key+'\',this.value)"'
-        +' style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none">'
-        +(suffix?'<span style="font-size:10px;color:var(--text3);font-weight:600">'+suffix+'</span>':'')
-        +'</div>'
-        +'</div>';
-    };
+        +' style="width:'+(w||60)+'px;'+INP_STYLE+'">';
 
-    return '<div class="card '+accentClass+'" style="position:relative;margin-bottom:.85rem;padding:1.2rem">'
-      // ── HEADER ─────────────────────────────────────────
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem;flex-wrap:wrap;gap:8px">'
-      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0">'
-      +typeBadge
-      +'<span style="font-size:11px;color:var(--text3);font-weight:600">#'+(i+1)+'</span>'
-      +'<span style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.fabs+'</span>'
-      +'</div>'
-      +'<button onclick="removerItemCot('+i+')" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;border-radius:6px;font-size:14px" title="Remover">🗑️</button>'
-      +'</div>'
-      // ── FÓRMULA COMPLETA ────────────────────────────────
-      +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;margin-bottom:.85rem;text-align:center">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">'+(isMP?'Matéria-Prima':'Formulação')+'</div>'
-      +'<div style="font-size:'+(isMP?'15px':'14px')+';font-weight:800;line-height:1.5;letter-spacing:-0.005em">'
-      +(isMP ? '<span style="color:var(--green)">'+(item.formula||item.grade)+'</span>' : colorFormulaFromStr(item.formula||item.grade))
-      +'</div>'
-      +'</div>'
-      // ── CONSUMO MPs (só se for fórmula) ─────────────────
-      +(isMP ? '' :
-      '<div style="margin-bottom:.85rem">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Consumo de MPs ('+P.qtd+'t)</div>'
-      +matsRows
-      +'</div>')
-      // ── CLIENTE + EMBALAGEM + MOEDA ─────────────────────
-      +'<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:.85rem;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)">'
-      +'<div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Cliente</div>'
-      +'<input type="text" value="'+(P.cliente||'').replace(/"/g,'&quot;')+'" placeholder="Nome do cliente"'
-      +' onchange="setItemParam('+i+',\'cliente\',this.value)"'
-      +' style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none">'
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      +'<div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Embalagem</div>'
-      +'<select onchange="setItemParam('+i+',\'embalagem\',this.value)" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none;cursor:pointer">'
-      +'<option value="bag"'+(P.embalagem==='bag'?' selected':'')+'>Big Bag</option>'
-      +'<option value="granel"'+(P.embalagem==='granel'?' selected':'')+'>Granel (−U$8/t)</option>'
-      +'</select>'
-      +'</div>'
-      +'<div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Moeda</div>'
-      +'<select onchange="setItemParam('+i+',\'cur\',this.value)" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none;cursor:pointer">'
-      +'<option value="USD"'+(P.cur==='USD'?' selected':'')+'>U$ (Dólar)</option>'
-      +'<option value="BRL"'+(P.cur==='BRL'?' selected':'')+'>R$ (Real, câmbio '+S.fx.toFixed(2)+')</option>'
-      +'</select>'
-      +'</div>'
-      +'</div>'
-      +'</div>'
-      // ── PARÂMETROS POR ITEM ─────────────────────────────
-      +'<div style="margin-bottom:.85rem">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Parâmetros</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Qtd (t)</div>'+paramInput('qtd', P.qtd, '0.1', 't')+'</div>'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Frete</div>'+paramInput('frete', P.frete, '0.01', 'R$/t')+'</div>'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Taxa i</div>'+paramInput('taxa', P.taxa, '0.01', '%/m')+'</div>'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Prazo n</div>'+paramInput('prazo', P.prazo, '1', 'meses')+'</div>'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Comissão</div>'+paramInput('com', P.com, '0.1', '%')+'</div>'
-      +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Desconto Y</div>'+paramInput('desc', P.desc, '0.01', '$/t')+'</div>'
-      +'</div>'
-      +'</div>'
-      // ── COMPOSIÇÃO DO PREÇO ─────────────────────────────
-      +'<div style="margin-bottom:.25rem">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Composição do Preço</div>'
-      +_cotLinha('Custo base (X)', F(TC(X))+'/t', false)
-      +(P.desc>0 ? _cotLinha('(-) Desconto Y', '-'+F(TC(P.desc))+'/t', false) : '')
-      +(P.embalagem==='granel' ? _cotLinha('(-) Desconto granel', '-'+F(TC(8))+'/t', false) : '')
-      +_cotLinha('Custo efetivo', F(TC(calc.custoEff))+'/t', false)
-      +_cotLinha('(+) Juros ('+P.prazo+'m a '+P.taxa+'%/m)', '+'+F(TC(calc.jurosVal))+'/t', false)
-      +(P.com>0?_cotLinha('(+) Comissão ('+P.com+'%)', '+'+F(TC(calc.comissaoVal))+'/t', false):'')
-      +(P.frete>0?_cotLinha('(+) Frete', '+'+F(TC(calc.freteUSD))+'/t', false):'')
-      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0 0;border-top:2px solid var(--green);margin-top:6px;flex-wrap:wrap;gap:8px">'
-      +'<span style="font-size:13px;font-weight:700;color:var(--green)">Preço de Venda</span>'
-      +'<div style="text-align:right">'
-      +'<div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.01em">'+F(TC(calc.venda))+'/t</div>'
-      +'<div style="font-size:13px;color:var(--amber);font-weight:700">'+F(TC(totalItem))+' total ('+P.qtd+'t)</div>'
-      +'</div>'
-      +'</div>'
-      +'</div>'
-      +'</div>';
-  }).join('');
+      const mainRow = '<tr style="background:'+rowBg+';border-bottom:1px solid var(--border)">'
+        +'<td style="padding:8px 10px;white-space:nowrap;vertical-align:middle">'
+        +'<span style="font-size:9.5px;font-weight:800;color:'+accentCol+';background:'+accentSoft+';padding:2px 7px;border-radius:8px;text-transform:uppercase;white-space:nowrap">'+typeLbl+'</span>'
+        +'<span style="font-size:11px;color:var(--text3);font-weight:700;margin-left:5px">#'+(i+1)+'</span>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;max-width:180px">'
+        +'<div style="font-size:12px;font-weight:700;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        +(isMP ? '<span style="color:var(--green)">'+(item.formula||item.grade)+'</span>' : colorFormulaFromStr(item.formula||item.grade))
+        +'</div>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;white-space:nowrap;font-size:11px;color:var(--text2)">'+item.fabs+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle">'
+        +'<input type="text" value="'+(P.cliente||'').replace(/"/g,'&quot;')+'" placeholder="Cliente"'
+        +' onchange="setItemParam('+i+',\'cliente\',this.value)"'
+        +' style="width:110px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none">'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('qtd',P.qtd,'0.1',55)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'
+        +'<select onchange="setItemParam('+i+',\'embalagem\',this.value)" style="'+SEL_STYLE+';width:90px">'
+        +'<option value="bag"'+(P.embalagem==='bag'?' selected':'')+'>Big Bag</option>'
+        +'<option value="granel"'+(P.embalagem==='granel'?' selected':'')+'>Granel −$8</option>'
+        +'</select>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'
+        +'<select onchange="setItemParam('+i+',\'cur\',this.value)" style="'+SEL_STYLE+';width:68px">'
+        +'<option value="USD"'+(P.cur==='USD'?' selected':'')+'>USD</option>'
+        +'<option value="BRL"'+(P.cur==='BRL'?' selected':'')+'>BRL</option>'
+        +'</select>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('taxa',P.taxa,'0.01',52)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('prazo',P.prazo,'1',45)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('com',P.com,'0.1',45)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('frete',P.frete,'0.01',60)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap;font-size:12px;color:var(--text2);font-weight:600">'+F(TC(X))+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
+        +'<span style="font-size:14px;font-weight:800;color:var(--green)">'+F(TC(calc.venda))+'</span>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
+        +'<span style="font-size:13px;font-weight:700;color:var(--amber)">'+F(TC(totalItem))+'</span>'
+        +'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'
+        +'<button onclick="removerItemCot('+i+')" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;border-radius:6px;font-size:13px" title="Remover">🗑️</button>'
+        +'</td>'
+        +'</tr>';
+
+      const detalheItems = []
+        .concat([['Custo base', F(TC(X))]])
+        .concat(P.desc>0 ? [['(−) Desc. Y', '−'+F(TC(P.desc))]] : [])
+        .concat(P.embalagem==='granel' ? [['(−) Granel', '−'+F(TC(8))]] : [])
+        .concat([['Custo efetivo', F(TC(calc.custoEff))]])
+        .concat([['(+) Juros '+P.prazo+'m', '+'+F(TC(calc.jurosVal))]])
+        .concat(P.com>0 ? [['(+) Com. '+P.com+'%', '+'+F(TC(calc.comissaoVal))]] : [])
+        .concat(P.frete>0 ? [['(+) Frete', '+'+F(TC(calc.freteUSD))]] : []);
+
+      const detalheHTML = detalheItems.map(([lbl,val])=>
+        '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2)">'
+        +'<span style="color:var(--text3)">'+lbl+':</span>'
+        +'<strong style="color:var(--text)">'+val+'</strong>'
+        +'</span>'
+      ).join('<span style="color:var(--border2);margin:0 4px">·</span>');
+
+      const detailRow = '<tr style="background:'+rowBg+';border-bottom:2px solid var(--border2)">'
+        +'<td colspan="16" style="padding:4px 10px 8px 10px">'
+        +'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">'+detalheHTML+'</div>'
+        +'</td>'
+        +'</tr>';
+
+      return mainRow + detailRow;
+    }).join('')
+    + '</tbody>';
+
+  cont.innerHTML = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:var(--radius)">'
+    +'<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>'
+    +'</div>';
 
   // ── Resumo da Cotação ──
   if(total) total.style.display='';
