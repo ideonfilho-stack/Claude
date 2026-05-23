@@ -3198,7 +3198,7 @@ async function loadS(){
     if(error){ console.warn('loadS state', error); initFabs(); return; }
     if(data?.state && Object.keys(data.state).length){
       Object.assign(S, data.state);
-      if(!S.fabs || !S.fabs.length) initFabs();
+      if(!S.fabs?.length) initFabs();
     } else {
       initFabs();
     }
@@ -3213,6 +3213,7 @@ async function loadS(){
   }
 }
 async function saveS(){
+  if(!S.fabs?.length) return;
   const d=document.getElementById('saveDot'), l=document.getElementById('saveLbl');
   try{
     const u = (await _sb().auth.getUser()).data.user;
