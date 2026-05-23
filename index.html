@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>IMC v12 — Fertilizantes (Cloud)</title>
-<meta name="application-name" content="IMC Blender v12">
+<title>Fertilizer Sphere Intelli</title>
+<meta name="application-name" content="Fertilizer Sphere Intelli">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="IMC Blender">
+<meta name="apple-mobile-web-app-title" content="Fertilizer Sphere Intelli">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0f1117">
 <meta name="description" content="Sistema de Formulação de Fertilizantes">
@@ -1800,7 +1800,7 @@ select:focus-visible{
 <!-- ═══════ AUTH GATE (login overlay v12) ═══════ -->
 <div id="authGate">
   <form class="ag-card" id="loginForm" autocomplete="on">
-    <h2>IMC v12 — Login</h2>
+    <h2>Fertilizer Sphere Intelli — Login</h2>
     <div class="ag-sub">Acesse com seu email e senha</div>
     <input id="authEmail" type="email" placeholder="email" autocomplete="username" required>
     <input id="authPass" type="password" placeholder="senha" autocomplete="current-password" required>
@@ -1878,7 +1878,7 @@ select:focus-visible{
 <div class="shell">
 <aside class="sidebar">
   <div class="logo">
-    <h1>IMC Blender</h1>
+    <h1>Fertilizer Sphere Intelli</h1>
     <p>Sistema de Formulação v3.0</p>
   </div>
   <div class="fsel">
@@ -6213,7 +6213,7 @@ function exportPropJPEG(){
 
   const clienteGeral = itens.map(it=>P_of(it).cliente).filter(Boolean)[0] || '';
   ctx.fillStyle='#22c98a'; ctx.font='bold 22px Arial'; ctx.textAlign='left';
-  ctx.fillText('IMC Blender — Análise de Proposta', padX, 36);
+  ctx.fillText('Fertilizer Sphere Intelli — Análise de Proposta', padX, 36);
   ctx.fillStyle='#8b90a8'; ctx.font='13px Arial';
   ctx.fillText((clienteGeral?'Cliente: '+clienteGeral+'  ·  ':'')+'Câmbio: R$ '+fx.toFixed(4)+'  ·  '+new Date().toLocaleDateString('pt-BR'), padX, 56);
   ctx.fillStyle='#5c6485'; ctx.font='11px Arial';
@@ -6335,7 +6335,7 @@ function exportPropJPEG(){
 
   // ── Rodapé ───────────────────────────────────────────────────
   ctx.fillStyle='rgba(139,144,168,0.25)'; ctx.font='10px Arial'; ctx.textAlign='right';
-  ctx.fillText('IMC Blender · '+new Date().toLocaleDateString('pt-BR'), W-16, totalH-10);
+  ctx.fillText('Fertilizer Sphere Intelli · '+new Date().toLocaleDateString('pt-BR'), W-16, totalH-10);
 
   const nomeCliente = itens.map(it=>P_of(it).cliente).filter(Boolean)[0] || 'proposta';
   const link = document.createElement('a');
@@ -7081,7 +7081,7 @@ function exportResultJPEG(){
   ctx.fillStyle=g; ctx.fillRect(0,0,W,headerH-8);
 
   ctx.fillStyle='#22c98a'; ctx.font='bold 22px Arial';
-  ctx.fillText('IMC Blender — Proposta Comercial',20,36);
+  ctx.fillText('Fertilizer Sphere Intelli — Proposta Comercial',20,36);
   ctx.fillStyle='#8b90a8'; ctx.font='13px Arial';
   ctx.fillText(fabNome+' · '+new Date().toLocaleDateString('pt-BR'),20,56);
 
@@ -7171,7 +7171,7 @@ function exportResultJPEG(){
   // Footer
   ctx.fillStyle='rgba(139,144,168,0.25)'; ctx.font='10px Arial';
   ctx.textAlign='right';
-  ctx.fillText('IMC Blender · '+new Date().toLocaleDateString('pt-BR'),W-16,totalH-10);
+  ctx.fillText('Fertilizer Sphere Intelli · '+new Date().toLocaleDateString('pt-BR'),W-16,totalH-10);
 
   var link=document.createElement('a');
   link.download='proposta_'+fabNome.replace(/\s+/g,'_')+'_'+new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')+'.jpg';
