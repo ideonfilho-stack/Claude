@@ -2304,6 +2304,31 @@ select:focus-visible{
     </div>
   </div>
 
+  <!-- MODAL: COPIAR PARÂMETROS -->
+  <div class="mbk" id="mbkCopiarParams">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-hd">
+        <div class="modal-title">Copiar parâmetros</div>
+        <button class="modal-x" onclick="fecharCopiarParams()">×</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.85rem">
+        <div style="font-size:12px;color:var(--text2)">Selecione as linhas que receberão os parâmetros da linha de origem:</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:-4px">Parâmetros que serão copiados</div>
+        <div id="copiarParamsResume" style="font-size:11px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;line-height:1.8"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:-4px">Aplicar em</div>
+        <div id="copiarParamsDestinos" style="display:flex;flex-direction:column;gap:6px"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;margin-top:2px">
+          <input type="checkbox" id="copiarParamsTodos" onchange="toggleTodosDestinos(this.checked)" style="accent-color:var(--blue);width:14px;height:14px">
+          Selecionar todas as linhas
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="fecharCopiarParams()">Cancelar</button>
+        <button class="btn btn-blue" onclick="confirmarCopiarParams()">Aplicar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: ADICIONAR MP ISOLADA -->
   <div class="mbk" id="mbkAddMP">
     <div class="modal" style="max-width:480px">
@@ -8188,7 +8213,8 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
         +'<span style="font-size:13px;font-weight:700;color:var(--amber)">'+F(TC(totalItem))+'</span>'
         +'</td>'
-        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center;white-space:nowrap">'
+        +'<button onclick="abrirCopiarParams('+i+')" style="background:none;border:none;cursor:pointer;color:var(--blue);padding:4px;border-radius:6px;font-size:13px" title="Copiar parâmetros para outra linha">📋</button>'
         +'<button onclick="removerItemCot('+i+')" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;border-radius:6px;font-size:13px" title="Remover">🗑️</button>'
         +'</td>'
         +'</tr>';
@@ -8296,6 +8322,74 @@ function resetItemParam(idx, key){
   if(!S.cotacao[idx] || !S.cotacao[idx].params) return;
   S.cotacao[idx].params[key] = null;
   sched();
+  recalcCotacao();
+}
+
+// ── COPIAR PARÂMETROS ENTRE LINHAS ───────────────────────────────────────────
+let _copiarFromIdx = null;
+const PARAMS_COPIADOS = ['taxa','prazo','com','frete','embalagem','cur','cliente','desc'];
+
+function abrirCopiarParams(fromIdx){
+  _copiarFromIdx = fromIdx;
+  const src = S.cotacao[fromIdx];
+  if(!src) return;
+  const P = src.params || {};
+
+  // Resumo dos parâmetros da origem
+  const fxAdj = S.fx * 0.99;
+  const resumeEl = document.getElementById('copiarParamsResume');
+  if(resumeEl) resumeEl.innerHTML = [
+    P.cliente ? '<strong>Cliente:</strong> '+P.cliente : null,
+    '<strong>Embalagem:</strong> '+(P.embalagem==='granel'?'Granel':'Big Bag'),
+    '<strong>Moeda:</strong> '+(P.cur||'USD'),
+    '<strong>Taxa:</strong> '+(P.taxa!=null?P.taxa:1.6)+'%/m',
+    '<strong>Prazo:</strong> '+(P.prazo!=null?P.prazo:1)+' mes(es)',
+    (P.com ? '<strong>Comissão:</strong> '+P.com+'%' : null),
+    (P.frete ? '<strong>Frete:</strong> R$'+P.frete+'/t' : null),
+    (P.desc ? '<strong>Desconto Y:</strong> $'+P.desc+'/t' : null),
+  ].filter(Boolean).join(' · ');
+
+  // Lista de destinos (todas as linhas exceto a origem)
+  const destEl = document.getElementById('copiarParamsDestinos');
+  if(destEl) destEl.innerHTML = S.cotacao.map((item,i)=>{
+    if(i===fromIdx) return '';
+    const lbl = '#'+(i+1)+' '+(item.formula||item.grade);
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)">'
+      +'<input type="checkbox" class="dest-check" data-idx="'+i+'" style="accent-color:var(--blue);width:14px;height:14px">'
+      +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+lbl+'</span>'
+      +'</label>';
+  }).join('');
+
+  const todosEl = document.getElementById('copiarParamsTodos');
+  if(todosEl) todosEl.checked = false;
+  document.getElementById('mbkCopiarParams').classList.add('open');
+}
+
+function fecharCopiarParams(){
+  document.getElementById('mbkCopiarParams').classList.remove('open');
+  _copiarFromIdx = null;
+}
+
+function toggleTodosDestinos(checked){
+  document.querySelectorAll('.dest-check').forEach(cb => cb.checked = checked);
+}
+
+function confirmarCopiarParams(){
+  if(_copiarFromIdx === null) return;
+  const src = S.cotacao[_copiarFromIdx];
+  if(!src) return;
+  const srcParams = src.params || {};
+  const selecionados = [...document.querySelectorAll('.dest-check:checked')].map(cb=>+cb.dataset.idx);
+  if(!selecionados.length){ alert('Selecione ao menos uma linha de destino.'); return; }
+  selecionados.forEach(toIdx=>{
+    if(!S.cotacao[toIdx]) return;
+    S.cotacao[toIdx].params = S.cotacao[toIdx].params || {};
+    PARAMS_COPIADOS.forEach(key=>{
+      S.cotacao[toIdx].params[key] = srcParams[key] != null ? srcParams[key] : null;
+    });
+  });
+  sched();
+  fecharCopiarParams();
   recalcCotacao();
 }
 
