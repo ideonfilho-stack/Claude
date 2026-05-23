@@ -3198,6 +3198,7 @@ async function loadS(){
     if(error){ console.warn('loadS state', error); initFabs(); return; }
     if(data?.state && Object.keys(data.state).length){
       Object.assign(S, data.state);
+      if(!S.fabs || !S.fabs.length) initFabs();
     } else {
       initFabs();
     }
