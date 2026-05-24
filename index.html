@@ -6226,7 +6226,7 @@ function recalcProposta(){
     const margem = (c.precoFOB - custoAdj) * P.qty;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
       +'<div style="min-width:0;flex:1">'
-      +'<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
       +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qty+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'
@@ -8357,7 +8357,7 @@ function recalcCotacao(){
         +'<span style="font-size:11px;color:var(--text3);font-weight:700;margin-left:5px">#'+(i+1)+'</span>'
         +'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;max-width:180px">'
-        +'<div style="font-size:12px;font-weight:700;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        +'<div style="font-size:12px;font-weight:700;line-height:1.4;word-break:break-word">'
         +(isMP ? '<span style="color:var(--green)">'+(item.formula||item.grade)+'</span>' : colorFormulaFromStr(item.formula||item.grade))
         +'</div>'
         +'</td>'
@@ -8457,7 +8457,7 @@ function recalcCotacao(){
     const TC = v => toCurI(v, P.cur);
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
       +'<div style="min-width:0;flex:1">'
-      +'<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
       +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'
