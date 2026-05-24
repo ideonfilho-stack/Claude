@@ -8351,7 +8351,7 @@ function recalcCotacao(){
         +' style="width:'+(w||60)+'px;'+INP_STYLE+'">';
 
       const mainRow = '<tr style="background:'+rowBg+';border-bottom:1px solid var(--border)">'
-        +'<td style="padding:8px 10px;vertical-align:middle;max-width:200px">'
+        +'<td style="padding:8px 10px;vertical-align:middle;min-width:200px;width:260px">'
         +'<div style="font-size:12px;font-weight:700;line-height:1.4;word-break:break-word">'
         +(isMP ? '<span style="color:var(--green)">'+item.grade+'</span>' : colorFormulaFromStr(item.formula||item.grade))
         +'</div>'
