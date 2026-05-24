@@ -3018,7 +3018,7 @@ function fl2(v){ return (Math.floor(v*100)/100).toFixed(2); }
 // ── Helpers de formatação da fórmula com cores por nutriente ──
 // Regra: NPK sempre presentes (mesmo zerados), micros somente se >0
 // buildFormulaStr → string limpa para armazenamento (sem HTML)
-function buildFormulaStr(N, reqs){
+function buildFormulaStr(N, reqs, matsArr){
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
   const microStr = NUTS.filter((n,i)=>{
     if(['N','P','K'].includes(n.k)) return false;
@@ -3026,16 +3026,22 @@ function buildFormulaStr(N, reqs){
     return reqOn && (N[n.k]||0)>0;
   }).map(n=>fl2(N[n.k]||0)+'%'+n.lbl).join(' + ');
   let base = microStr ? macroStr+' + '+microStr : macroStr;
-  const suf = tratamentoSuffix();
+  const suf = tratamentoSuffix(null, matsArr);
   return suf ? base+' '+suf : base;
 }
 
-function tratamentoSuffix(trat){
+function tratamentoSuffix(trat, matsArr){
   const t = trat || (S && S.tratamentos) || {};
   const parts = [];
-  if(t.fertigranP) parts.push('Fertigran P');
-  if(t.superNPro)  parts.push('Super N Pro');
-  if(t.uhf)        parts.push('UHF');
+  if(t.fertigranP){
+    const ok = !matsArr || matsArr.some(m=>m.name==='MAP Fertigran P'||m.name==='TSP FP');
+    if(ok) parts.push('Fertigran P');
+  }
+  if(t.superNPro){
+    const ok = !matsArr || matsArr.some(m=>m.name==='Ureia');
+    if(ok) parts.push('Super N Pro');
+  }
+  if(t.uhf) parts.push('UHF');
   return parts.join(' + ');
 }
 // colorFormula → HTML colorizado por nutriente (para exibição)
@@ -5438,10 +5444,10 @@ function _processResult(res, qty, lote){
     S.lastRes={res,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur,tratamentos:Object.assign({},S.tratamentos)};
     S.hist=S.hist||[];
     const _gradeBase=fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K);
-    const _gradeFull=(_suf=>_suf?_gradeBase+' '+_suf:_gradeBase)(tratamentoSuffix());
+    const _gradeFull=(_suf=>_suf?_gradeBase+' '+_suf:_gradeBase)(tratamentoSuffix(null,res.mats));
     S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:_gradeFull});
     if(S.hist.length>30) S.hist.shift();
-    dbAdd('formulacoes',{fabs:fab().name,grade:_gradeFull,formula:buildFormulaStr(res.nt,S.reqs),custo:res.cpt,mats:res.mats,nt:res.nt});
+    dbAdd('formulacoes',{fabs:fab().name,grade:_gradeFull,formula:buildFormulaStr(res.nt,S.reqs,res.mats),custo:res.cpt,mats:res.mats,nt:res.nt});
     renderRes(res,qty,lote);
     sched();
   },150);
@@ -5582,7 +5588,7 @@ function renderRes(res,qty,lote){
   const _npkHTML=_npk.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'</span>').join(_sep);
   const _extHTML=_extras.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join(_plus);
   const _gEl=document.getElementById('gradeLabel');
-  const _sufStr=tratamentoSuffix();
+  const _sufStr=tratamentoSuffix(null,res.mats);
   const _sufHTML=_sufStr?'<span style="font-size:12px;font-weight:600;color:var(--text2);margin-left:6px">'+_sufStr+'</span>':'';
   if(_gEl) _gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'')+_sufHTML;
 
@@ -5883,9 +5889,9 @@ function confirmarAddPropFormula(){
   const freteCur=document.getElementById('addPF-frete-cur').value;
   const N=res.res.nt;
   // V11.1: NPK sempre, micros somente >0
-  const fullFormula = buildFormulaStr(N, S.reqs);
+  const fullFormula = buildFormulaStr(N, S.reqs, res.res.mats);
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
-  const _suf = tratamentoSuffix();
+  const _suf = tratamentoSuffix(null, res.res.mats);
   const gradeStr = _suf ? macroStr+' '+_suf : macroStr;
   const kgs=fracsToKg(res.res.fracs, qty*1000);
   S.propostas.push({
@@ -7522,9 +7528,9 @@ function incluirNaCotacao(){
   S.cotacao=S.cotacao||[];
   // V11.1: NPK sempre presente, micros somente quando >0
   // Ex.: "18.00-0.00-24.00 + 1.23%S" (sem 0.00%Cu, 0.00%Zn, etc)
-  const fullFormula = buildFormulaStr(N, S.reqs);
+  const fullFormula = buildFormulaStr(N, S.reqs, res.mats);
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
-  const _cotSuf = tratamentoSuffix();
+  const _cotSuf = tratamentoSuffix(null, res.mats);
   const _cotGrade = _cotSuf ? macroStr+' '+_cotSuf : macroStr;
   S.cotacao.push({
     type:'formula',
