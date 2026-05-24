@@ -1,6 +1,12 @@
 [build]
   publish = "."
 
+[context.branch-deploy]
+  ignore = "exit 0"
+
+[context.deploy-preview]
+  ignore = "exit 0"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
