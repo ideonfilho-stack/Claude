@@ -8937,6 +8937,10 @@ async function relExportar(tipo){
       .replace(/color:var\(--[^)]+\)/g,'color:#374151')
       .replace(/background:var\(--surface2\)/g,'background:#f8fafc')
       .replace(/background:var\(--surface3\)/g,'background:#f1f5f9')
+      .replace(/background:var\(--green[^)]*\)/g,'background:#16a34a')
+      .replace(/background:var\(--amber[^)]*\)/g,'background:#d97706')
+      .replace(/background:var\(--red[^)]*\)/g,'background:#dc2626')
+      .replace(/background:var\(--blue[^)]*\)/g,'background:#1d4ed8')
       .replace(/background:var\(--[^)]+\)/g,'background:#f8fafc')
       .replace(/border[^:]*:\d+px solid var\(--[^)]+\)/g,'border:1px solid #e2e8f0')
       .replace(/border-top:[^;>"]*var\(--[^)]+\)/g,'border-top:1px solid #e2e8f0')
@@ -8990,6 +8994,7 @@ async function relExportar(tipo){
           +(c.formula?'<span>Formula: <strong style="color:#374151">'+c.formula+'</strong></span>':'')
           +(vol(c)>0?'<span>Volume: <strong style="color:#374151">'+vol(c).toFixed(0)+' t</strong></span>':'')
           +'</div>'
+          +(c.ref?'<div style="margin-top:6px;font-size:12px;color:#374151;border-left:2px solid #bfdbfe;background:#eff6ff;border-radius:3px;padding:5px 8px"><span style="font-weight:700;color:#1d4ed8">Parâmetros: </span>'+c.ref+'</div>':'')
           +(c.obs?'<div style="margin-top:6px;font-size:12px;color:#64748b;font-style:italic;border-left:2px solid #cbd5e1;padding-left:8px">'+c.obs+'</div>':'')
           +'</div>';
       });
@@ -9535,12 +9540,12 @@ function relRenderResumo(){
     +(porSafra.length?
       '<div style="overflow-x:auto;margin-top:.5rem">'
       +'<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      +'<thead><tr style="background:var(--surface3)">'
-      +'<th style="text-align:left;padding:8px 10px;font-weight:700;color:var(--text2);border-bottom:2px solid var(--border)">Safra</th>'
-      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--blue);border-bottom:2px solid var(--border)">Mercado</th>'
-      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--green);border-bottom:2px solid var(--border)">Vendas</th>'
-      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--amber);border-bottom:2px solid var(--border)">Share</th>'
-      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--red);border-bottom:2px solid var(--border)">Perdido</th>'
+      +'<thead><tr>'
+      +'<th style="text-align:left;padding:8px 10px;font-weight:700;color:var(--text2);background:var(--surface2);border-bottom:2px solid var(--border)">Safra</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--blue);background:var(--surface2);border-bottom:2px solid var(--border)">Mercado</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--green);background:var(--surface2);border-bottom:2px solid var(--border)">Vendas</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--amber);background:var(--surface2);border-bottom:2px solid var(--border)">Share</th>'
+      +'<th style="padding:8px 10px;text-align:right;font-weight:600;color:var(--red);background:var(--surface2);border-bottom:2px solid var(--border)">Perdido</th>'
       +'</tr></thead>'
       +'<tbody>'
       +porSafra.map(ps=>
