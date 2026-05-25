@@ -2680,7 +2680,11 @@ select:focus-visible{
   <div class="card" style="margin-bottom:1.5rem">
     <div class="card-hd">
       <div class="card-title"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Relatório Semanal</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="rel-editing-badge" style="display:none;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(91,140,255,0.15);color:var(--blue);border:1px solid rgba(91,140,255,0.35)">Editando salvo</span>
+        <button onclick="relNovoRelatorio()" style="background:var(--surface3);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px" title="Limpar e iniciar novo relatório">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo
+        </button>
         <button onclick="salvarRelatorioSemanal()" id="btn-salvar-rel" style="background:var(--surface3);color:var(--green);border:1px solid rgba(16,213,156,0.3);border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Salvar
         </button>
@@ -3218,6 +3222,13 @@ async function dbDelete(store,id){
     if(error) throw error;
     _sbOk();
   }catch(e){ _sbErr('dbDelete '+store, e); }
+}
+async function dbUpdate(store,id,record){
+  try{
+    const { error } = await _sb().from(store).update({ data: record }).eq('id', id);
+    if(error) throw error;
+    _sbOk();
+  }catch(e){ _sbErr('dbUpdate '+store, e); }
 }
 async function dbClear(store){
   try{
@@ -8053,6 +8064,7 @@ function _arqCard(r, store, busca){
   const id=r.id;
   const detailId='arqd_'+store+'_'+id;
   const canRestore=store==='cotacoes'||store==='propostas';
+  const canOpenRel=store==='relatorios'&&r.tipo==='semanal';
 
   // Linha resumo
   let titulo='', sub='', sub2='';
@@ -8069,9 +8081,16 @@ function _arqCard(r, store, busca){
     sub=(r.grade||'')+(r.formula&&r.formula!==r.grade?' · '+r.formula:'');
     sub2=r.custo?'Custo U$ '+r.custo.toFixed(2)+'/t':'';
   } else if(store==='relatorios'){
-    titulo=r.label||'—';
-    sub=Object.keys(r.fabs||{}).join(', ');
-    sub2='';
+    if(r.tipo==='semanal'){
+      titulo=(r.supervisao||r.label||'Relatório')+(r.dtIni?' · '+r.dtIni.slice(5).replace('-','/'):'');
+      const nc=(r.clientes||[]).length, ncc=(r.concorrentes||[]).length;
+      sub=(nc?nc+' cliente(s)':'')+(nc&&ncc?' · ':'')+(ncc?ncc+' concorrente(s)':'') || '—';
+      sub2='';
+    } else {
+      titulo=r.label||'—';
+      sub=Object.keys(r.fabs||{}).join(', ');
+      sub2='';
+    }
   }
 
   // Filtro de busca no card
@@ -8091,6 +8110,7 @@ function _arqCard(r, store, busca){
   // Botões
   html+='<div style="display:flex;gap:5px;flex-shrink:0" onclick="event.stopPropagation()">';
   if(canRestore) html+='<button onclick="arqRestaurar('+id+',\''+store+'\')" style="background:none;border:1px solid rgba(16,213,156,0.35);color:var(--green);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700">Restaurar</button>';
+  if(canOpenRel) html+='<button onclick="arqAbrirRelatorio('+id+')" style="background:none;border:1px solid rgba(16,213,156,0.35);color:var(--green);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700">Abrir</button>';
   html+='<button onclick="arqExcluir('+id+',\''+store+'\')" style="background:none;border:1px solid rgba(239,94,94,0.3);color:var(--red);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;font-weight:700">Excluir</button>';
   html+='</div>';
   html+='<svg class="icon" viewBox="0 0 24 24" id="arqarrow_'+detailId+'" style="width:14px;height:14px;color:var(--text3);flex-shrink:0;transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>';
@@ -8128,15 +8148,26 @@ function _arqCard(r, store, busca){
       html+='</div>';
     }
   } else if(store==='relatorios'){
-    const fabs=r.fabs||{};
-    Object.keys(fabs).forEach(fabNome=>{
-      html+='<div style="font-size:11px;font-weight:700;color:var(--blue);margin:6px 0 3px">'+fabNome+'</div>';
-      html+='<div style="display:flex;flex-wrap:wrap;gap:3px">';
-      Object.entries(fabs[fabNome]).forEach(([mpNome,usd])=>{
-        html+='<span style="font-size:11px;font-weight:600;background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text2)">'+mpNome+' <strong style="color:var(--green)">U$ '+usd.toFixed(2)+'</strong></span>';
+    if(r.tipo==='semanal'){
+      (r.clientes||[]).forEach(c=>{
+        html+='<div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">'
+          +'<span style="color:var(--text2)">'+( c.comprador||c.vendedor||'—')+'</span>'
+          +(c.formula?'<span style="color:var(--green);font-weight:700">'+c.formula+'</span>':'')
+          +(c.volume?'<span style="color:var(--text3)">'+c.volume+'t</span>':'')
+          +'<span style="color:'+(c.status==='Fechado'?'var(--green)':c.status==='Perdido'?'var(--red)':'var(--amber)')+'">'+( c.status||'')+'</span>'
+          +'</div>';
       });
-      html+='</div>';
-    });
+    } else {
+      const fabs=r.fabs||{};
+      Object.keys(fabs).forEach(fabNome=>{
+        html+='<div style="font-size:11px;font-weight:700;color:var(--blue);margin:6px 0 3px">'+fabNome+'</div>';
+        html+='<div style="display:flex;flex-wrap:wrap;gap:3px">';
+        Object.entries(fabs[fabNome]).forEach(([mpNome,usd])=>{
+          html+='<span style="font-size:11px;font-weight:600;background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--text2)">'+mpNome+' <strong style="color:var(--green)">U$ '+usd.toFixed(2)+'</strong></span>';
+        });
+        html+='</div>';
+      });
+    }
   }
   html+='</div></div>';
   return html;
@@ -8178,6 +8209,20 @@ async function arqRestaurar(id,store){
   }
 }
 
+async function arqAbrirRelatorio(id){
+  const rec = await dbGet('relatorios', id);
+  if(!rec) return;
+  _relCurrentId = id;
+  relClientes = JSON.parse(JSON.stringify(rec.clientes||[]));
+  relConcorrentes = JSON.parse(JSON.stringify(rec.concorrentes||[]));
+  if(rec.andamento?.length) relAndamento = JSON.parse(JSON.stringify(rec.andamento));
+  const ini=document.getElementById('rel-dt-ini'); if(ini) ini.value=rec.dtIni||'';
+  const fim=document.getElementById('rel-dt-fim'); if(fim) fim.value=rec.dtFim||'';
+  const sup=document.getElementById('rel-supervisao'); if(sup) sup.value=rec.supervisao||'';
+  const badge=document.getElementById('rel-editing-badge'); if(badge) badge.style.display='';
+  relRenderClientes(); relRenderConcorrentes(); relRenderAndamento();
+  goPage('rel');
+}
 async function arqExcluir(id,store){
   if(!confirm('Excluir este registro permanentemente?')) return;
   await dbDelete(store,id);
@@ -8779,6 +8824,7 @@ function relUpdateClienteSelect(id, campo, valor){
 // Estado do relatório
 let relClientes = [];
 let relConcorrentes = [];
+let _relCurrentId = null;
 let relAndamento = [
   {id:1,produto:'Volume Geral', cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
   {id:2,produto:'Super N PRO',  cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
@@ -9281,6 +9327,7 @@ function relRenderClientes(){
         </div>
       </div>
       <div>
+        ${c.ref ? `<div style="font-size:10.5px;color:var(--text3);background:var(--surface3);border:1px solid var(--border);border-radius:5px;padding:4px 8px;margin-bottom:5px;line-height:1.5"><span style="font-weight:700;color:var(--blue);margin-right:4px">Parâmetros:</span>${c.ref}</div>` : ''}
         <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:3px">Observações</label>
         <input class="fi" value="${c.obs}" onblur="relUpdateCliente(${c.id},'obs',this.value)" oninput="relUpdateCliente(${c.id},'obs',this.value)" placeholder="Detalhes da negociação…" style="font-size:13px">
       </div>
@@ -9437,7 +9484,8 @@ function relConfirmarImport(){
       formula,
       safra: 'Verão',
       status: 'Em negociação',
-      obs
+      ref: obs,
+      obs: ''
     });
   });
 
@@ -9889,26 +9937,59 @@ function relConfirmarFormulaConc(){
 }
 
 // ── Fix 5: Salvar Relatório no DB ─────────────────────────────────────────────
-function salvarRelatorioSemanal(){
+async function salvarRelatorioSemanal(){
   const dtIni=document.getElementById('rel-dt-ini')?.value||'';
   const dtFim=document.getElementById('rel-dt-fim')?.value||'';
   const sup=document.getElementById('rel-supervisao')?.value||'';
   const pan=document.getElementById('rel-panorama-content')?.innerHTML||'';
   const label=sup+(dtIni?' '+dtIni.slice(5):'');
-  dbAdd('relatorios',{
+  const payload={
     tipo:'semanal',
     dtIni,dtFim,supervisao:sup,label,
     panorama:pan,
     clientes:JSON.parse(JSON.stringify(relClientes)),
     concorrentes:JSON.parse(JSON.stringify(relConcorrentes)),
     andamento:JSON.parse(JSON.stringify(relAndamento)),
-  });
+  };
+  if(_relCurrentId){
+    await dbUpdate('relatorios',_relCurrentId,payload);
+  } else {
+    _relCurrentId = await dbAdd('relatorios',payload);
+  }
+  const badge=document.getElementById('rel-editing-badge');
+  if(badge) badge.style.display='';
   const btn=document.getElementById('btn-salvar-rel');
   if(btn){const orig=btn.innerHTML;btn.innerHTML='✓ Salvo!';setTimeout(()=>btn.innerHTML=orig,1800);}
 }
 
+function relNovoRelatorio(){
+  if(!confirm('Iniciar novo relatório? Os dados atuais não salvos serão perdidos.')) return;
+  _relCurrentId=null;
+  relClientes=[]; relConcorrentes=[];
+  relAndamento=[
+    {id:1,produto:'Volume Geral',cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
+    {id:2,produto:'Super N PRO', cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
+    {id:3,produto:'Fertigran P', cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
+    {id:4,produto:'Mastergran',  cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
+    {id:5,produto:'UHF',         cart25:'',entr25:'',cart26:'',entr26:'',meta26:''},
+  ];
+  const ini=document.getElementById('rel-dt-ini'); if(ini) ini.value='';
+  const fim=document.getElementById('rel-dt-fim'); if(fim) fim.value='';
+  const sup=document.getElementById('rel-supervisao'); if(sup) sup.value='';
+  const badge=document.getElementById('rel-editing-badge'); if(badge) badge.style.display='none';
+  initRelPage();
+}
+
 // Auto-fetch rate on startup
 startFxLive();
+
+// Auto-select ao focar qualquer input de texto/número
+document.addEventListener('focusin', function(e){
+  const t = e.target;
+  if(t.tagName==='INPUT' && t.type!=='checkbox' && t.type!=='radio' && t.type!=='file' && t.type!=='range' && t.type!=='color'){
+    t.select();
+  }
+});
 
 // ════════════════════════════════════════════════════════════════
 // ROTAS MARÍTIMAS — Maritime NPK Route Animation Engine v2
