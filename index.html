@@ -8330,6 +8330,7 @@ function recalcCotacao(){
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Prazo</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Com %</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Frete R$/t</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Desc U$/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Custo/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Preço/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Total</th>'
@@ -8354,6 +8355,7 @@ function recalcCotacao(){
       const numInp = (key, val, step, w) =>
         '<input type="number" value="'+val+'" step="'+step+'" min="0"'
         +' onchange="setItemParam('+i+',\''+key+'\',this.value)"'
+        +' onfocus="this.select()"'
         +' style="width:'+(w||60)+'px;'+INP_STYLE+'">';
 
       const mainRow = '<tr style="background:'+rowBg+';border-bottom:1px solid var(--border)">'
@@ -8366,6 +8368,7 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle">'
         +'<input type="text" value="'+(P.cliente||'').replace(/"/g,'&quot;')+'" placeholder="Cliente"'
         +' onchange="setItemParam('+i+',\'cliente\',this.value)"'
+        +' onfocus="this.select()"'
         +' style="width:110px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none">'
         +'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('qtd',P.qtd,'0.1',55)+'</td>'
@@ -8385,6 +8388,7 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('prazo',P.prazo,'1',45)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('com',P.com,'0.1',45)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('frete',P.frete,'0.01',60)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('desc',P.desc,'0.01',55)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap;font-size:12px;color:var(--text2);font-weight:600">'+F(TC(X))+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
         +'<span style="font-size:14px;font-weight:800;color:var(--green)">'+F(TC(calc.venda))+'</span>'
@@ -8424,9 +8428,12 @@ function recalcCotacao(){
     }).join('')
     + '</tbody>';
 
+  const _prevScroll = cont.querySelector('div[style*="overflow-x"]');
+  const _savedSX = _prevScroll ? _prevScroll.scrollLeft : 0;
   cont.innerHTML = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border);border-radius:var(--radius)">'
     +'<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>'
     +'</div>';
+  if(_savedSX) { const _newScroll = cont.querySelector('div[style*="overflow-x"]'); if(_newScroll) _newScroll.scrollLeft = _savedSX; }
 
   // ── Resumo da Cotação ──
   if(total) total.style.display='';
