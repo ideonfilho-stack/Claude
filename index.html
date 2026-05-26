@@ -221,6 +221,9 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
   padding:0 0 1.25rem;
   justify-content:center;
 }
+.sidebar.collapsed #sidebar-logo{
+  width:44px;height:44px;border-radius:11px;
+}
 .sidebar.collapsed .nav-section{
   padding:0 .25rem;
 }
@@ -1863,6 +1866,7 @@ select:focus-visible{
 <!-- ═══════ AUTH GATE (login overlay v12) ═══════ -->
 <div id="authGate">
   <form class="ag-card" id="loginForm" autocomplete="on">
+    <img id="ag-logo" src="" alt="FSI" style="width:100px;height:100px;border-radius:18px;display:block;margin:0 auto 20px;object-fit:cover;box-shadow:0 6px 24px rgba(0,0,0,.45)">
     <h2>Fertilizer Sphere Intelli — Login</h2>
     <div class="ag-sub">Acesse com seu email e senha</div>
     <input id="authEmail" type="email" placeholder="email" autocomplete="username" required>
@@ -1941,6 +1945,7 @@ select:focus-visible{
 <div class="shell">
 <aside class="sidebar">
   <div class="logo">
+    <img id="sidebar-logo" src="" alt="FSI" style="width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.4)">
     <div class="logo-text">
       <h1>Fertilizer Sphere Intelli</h1>
       <p>Sistema de Formulação v3.0</p>
@@ -8672,6 +8677,10 @@ function renderAll(){
 
 // ── INIT (v12: gated por autenticação Supabase) ─────────────────────────
 async function initApp(){
+  // Inject logo from apple-touch-icon (avoids duplicating the base64)
+  const logoUrl = document.querySelector('link[rel="apple-touch-icon"]')?.href || '';
+  if(logoUrl){ ['ag-logo','sidebar-logo'].forEach(id=>{ const el=document.getElementById(id); if(el) el.src=logoUrl; }); }
+
   if(localStorage.getItem('sidebarCollapsed')==='1'){
     document.querySelector('.sidebar').classList.add('collapsed');
     document.querySelector('.shell').classList.add('sidebar-collapsed');
