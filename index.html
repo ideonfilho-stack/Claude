@@ -9146,49 +9146,44 @@ async function relGerarPanorama(){
 
   const status = document.getElementById('rel-panorama-status');
   const cont = document.getElementById('rel-panorama-content');
-  if(status) status.innerHTML='<span style="color:var(--amber)">Buscando informacoes... aguarde.</span>';
+  if(status) status.innerHTML='<span style="color:var(--amber)">Gerando com Claude... aguarde.</span>';
   if(cont) cont.innerHTML='';
 
   const linhas=[
-    'Voce e um analista de mercado agricola e fertilizantes no Brasil.',
-    'Gere um relatorio de mercado para a semana de '+ini+' a '+fim+', supervisao '+sup+'.',
-    'Secoes (sempre com fonte e data):',
-    '1. SOJA - noticias, precos CBOT e mercado domestico.',
-    '2. MILHO - noticias, precos CBOT e mercado domestico.',
-    '3. CANA-DE-ACUCAR - mercado de alcool e acucar.',
-    '4. TRIGO - noticias e precos.',
-    '5. CAFE - noticias e precos.',
-    '6. BOI GORDO - mercado pecuario e precos.',
-    '7. MERCADO DE FERTILIZANTES - tendencias globais e domesticas.',
-    '8. GEOPOLITICA - fatores que afetam o agronegocio.',
-    '9. PRECOS CFR MPs - MAP, TSP, SSP, KCL, UREIA, SAM, NAM (dados mais recentes, informar data e fonte).',
-    'Seja objetivo. Formate cada secao com titulo em negrito.'
+    'Você é um analista sênior de mercado agrícola e fertilizantes no Brasil.',
+    'Gere um relatório de mercado para a semana de '+ini+' a '+fim+', supervisão '+sup+'.',
+    'Seções (sempre com título em negrito, inclua tendências, fatores de influência e perspectivas):',
+    '**1. SOJA** — dinâmica de mercado, preços CBOT e mercado doméstico.',
+    '**2. MILHO** — dinâmica de mercado, preços CBOT e mercado doméstico.',
+    '**3. CANA-DE-AÇÚCAR** — mercado de álcool e açúcar.',
+    '**4. TRIGO** — dinâmica e perspectivas.',
+    '**5. CAFÉ** — dinâmica e perspectivas.',
+    '**6. BOI GORDO** — mercado pecuário e perspectivas.',
+    '**7. MERCADO DE FERTILIZANTES** — tendências globais e domésticas de MAP, TSP, KCL, Ureia, SAM.',
+    '**8. GEOPOLÍTICA** — fatores geopolíticos e macroeconômicos que afetam o agronegócio brasileiro.',
+    '**9. PREÇOS CFR MPs** — indicar faixas de preço para MAP, TSP, SSP, KCl, Ureia, SAM, NAM.',
+    'Seja objetivo, analítico e use linguagem profissional. Formate com marcadores onde adequado.'
   ];
-  const prompt = linhas.join(' ');
+  const prompt = linhas.join('\n');
 
   try {
-    const apiKey=getApiKey();
-    if(!apiKey) throw new Error('Configure a Gemini API Key nas Configurações.');
-    const geminiUrl='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+apiKey;
-    const resp = await fetch(geminiUrl, {
+    const resp = await fetch('/api/panorama', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        contents:[{parts:[{text:prompt}]}],
-        generationConfig:{maxOutputTokens:4000,temperature:0.3}
-      })
+      body: JSON.stringify({prompt})
     });
     if(!resp.ok){
-      const err=await resp.json().catch(()=>({}));
-      throw new Error('HTTP '+resp.status+': '+(err.error?.message||resp.statusText));
+      const err = await resp.json().catch(()=>({}));
+      throw new Error('HTTP '+resp.status+': '+(err.error||resp.statusText));
     }
     const data = await resp.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text||'Sem resposta.';
-    if(status) status.innerHTML='<span style="color:var(--green);font-size:12px">Gerado em '+new Date().toLocaleTimeString('pt-BR')+'</span>';
+    const raw = data.content?.[0]?.text || 'Sem resposta.';
+    if(status) status.innerHTML='<span style="color:var(--green);font-size:12px">✓ Gerado pelo Claude em '+new Date().toLocaleTimeString('pt-BR')+'</span>';
     if(cont) cont.innerHTML=_relFormatarPanorama(raw);
     return;
   } catch(e){
-    console.log('API nao disponivel localmente:', e.message);
+    console.warn('Claude API indisponivel:', e.message);
+    if(status) status.innerHTML='<span style="color:var(--red);font-size:12px">Erro: '+e.message+'</span>';
   }
 
   // Fallback: mostrar prompt para copiar no Claude.ai
