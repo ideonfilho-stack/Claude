@@ -2892,29 +2892,6 @@ select:focus-visible{
     </div>
   </div>
 
-  <!-- API CLAUDE -->
-  <div class="card card-accent-blue">
-    <div class="card-title" style="margin-bottom:.85rem">
-      <svg class="icon" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
-      Chave da API Claude (Anthropic)
-    </div>
-    <div class="alert alert-info" style="margin-bottom:1rem;font-size:12px">
-      <svg class="icon" viewBox="0 0 24 24" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-      <span>Necessária para gerar o Panorama de Culturas no Relatório Semanal. Obtenha em <a href="https://console.anthropic.com/api-keys" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:600">console.anthropic.com</a> · Salva no banco de dados</span>
-    </div>
-    <div class="fg" style="margin-bottom:.75rem">
-      <label class="fl">Claude API Key</label>
-      <input class="fi" id="anthropicKey" type="password" placeholder="sk-ant-..." autocomplete="off"
-        style="font-family:monospace;font-size:12.5px;letter-spacing:.05em">
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="toggleAnthropicKeyVis()">
-        <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        Mostrar/Ocultar
-      </button>
-    </div>
-  </div>
-
   <!-- CÂMBIO -->
   <div class="card card-accent-green">
     <div class="card-hd">
@@ -3282,7 +3259,6 @@ async function loadS(){
     // Settings (substitui 'imc_apikey')
     const { data: cfg } = await _sb().from('user_settings').select('settings').maybeSingle();
     if(cfg?.settings?.apikey){ S._apikey = cfg.settings.apikey; }
-    if(cfg?.settings?.anthropicKey){ S.anthropicKey = cfg.settings.anthropicKey; }
     _sbOk();
   }catch(e){
     console.error('loadS', e);
@@ -3489,8 +3465,6 @@ function goPage(p){
   if(p==='prop'){initPropPage();}
   if(p==='rel'){initRelPage();}
   if(p==='cfg'){
-    const akEl=document.getElementById('anthropicKey');
-    if(akEl&&S.anthropicKey) akEl.value=S.anthropicKey;
   }
   if(p==='form'){renderMatSelGrid();renderRestrGrid();atualizarTogglesTratamentos();}
   if(p==='fabs'){renderFabList();}
@@ -4282,10 +4256,6 @@ function deleteXLSXHist(i){
 function toggleApiKeyVis(){
   const inp=document.getElementById('apiKey');
   inp.type=inp.type==='password'?'text':'password';
-}
-function toggleAnthropicKeyVis(){
-  const inp=document.getElementById('anthropicKey');
-  if(inp) inp.type=inp.type==='password'?'text':'password';
 }
 function getApiKey(){
   const el=document.getElementById('apiKey');
@@ -8673,8 +8643,6 @@ function _cotLinha(lbl,val,destaque){
 // ── CONFIG
 function saveCfg(){
   // Salvar API key Anthropic
-  const akEl=document.getElementById('anthropicKey');
-  if(akEl){ S.anthropicKey=akEl.value.trim(); saveSettings({anthropicKey:S.anthropicKey}); }
   S.fx=+document.getElementById('fxRate').value||5.20;
   const key=document.getElementById('apiKey').value.trim();
   if(key){ S._apikey=key; saveSettings({apikey:key}); }
