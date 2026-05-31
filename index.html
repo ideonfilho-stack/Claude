@@ -9192,7 +9192,7 @@ Seja objetivo e profissional. Use marcadores para listar fatores. Formate cada s
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         contents:[{parts:[{text:prompt}]}],
-        generationConfig:{maxOutputTokens:4000, temperature:0.2}
+        generationConfig:{maxOutputTokens:16000, temperature:0.2}
       })
     });
     if(!resp.ok){
