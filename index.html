@@ -9145,38 +9145,42 @@ async function relGerarPanorama(){
   if(cont) cont.innerHTML='';
 
   const prompt = `Você é um analista sênior especializado em mercado agrícola e fertilizantes no Brasil.
-Gere um relatório de mercado completo e atualizado para a semana de ${ini} a ${fim}, supervisão ${sup}.
+Gere um relatório de mercado sobre o período PASSADO de ${ini} a ${fim}, supervisão ${sup}.
 
-Para cada seção abaixo, inclua: situação atual, principais fatores de influência, movimentação de preços e perspectivas para as próximas semanas. Use dados e notícias reais e recentes. Cite fontes e datas sempre que possível.
+IMPORTANTE: Este relatório descreve o que ACONTECEU nessa semana — use tempo verbal no passado (ocorreu, registrou, fechou, subiu, caiu, foi negociado). Não use futuro nem presente genérico. Relate fatos e movimentos que ocorreram naquele período específico.
+
+Para cada seção: descreva o que aconteceu, os fatores que influenciaram, os preços registrados e o contexto. Cite fontes e datas dos dados.
 
 **1. SOJA**
-Preços CBOT (US¢/bushel) e mercado doméstico (R$/saca 60kg). Exportações, estoques, clima nas principais regiões produtoras.
+Preços CBOT (US¢/bushel) e mercado doméstico (R$/saca 60kg) registrados na semana. Exportações, estoques, clima nas regiões produtoras.
 
 **2. MILHO**
-Preços CBOT e mercado doméstico. Oferta/demanda, uso em etanol e ração.
+Preços CBOT e mercado doméstico registrados. Oferta/demanda, movimentos de etanol e ração.
 
 **3. CANA-DE-AÇÚCAR**
-Mix açúcar/etanol, preços spot, perspectivas de safra.
+Mix açúcar/etanol praticado, preços spot registrados, andamento de safra.
 
 **4. TRIGO**
-Mercado global e doméstico, importações e preços.
+Mercado global e doméstico, importações e preços praticados.
 
 **5. CAFÉ**
-Arábica e Robusta, bolsa NY e Londres, preços ao produtor brasileiro.
+Arábica e Robusta — fechamentos na bolsa NY e Londres, preços ao produtor.
 
 **6. BOI GORDO**
-Arroba (R$/@), abates, exportações e tendências.
+Arroba (R$/@) negociada, volume de abates, exportações realizadas.
 
 **7. MERCADO DE FERTILIZANTES**
-Tendências globais e domésticas. Produção, demanda, logística e preços no Brasil.
+Movimentos de preços globais e domésticos. Produção, demanda, logística e preços praticados no Brasil.
 
 **8. GEOPOLÍTICA E MACRO**
-Fatores geopolíticos, câmbio USD/BRL, juros e questões que impactam o agronegócio brasileiro.
+Fatos geopolíticos, câmbio USD/BRL, juros e eventos que impactaram o agronegócio brasileiro na semana.
 
 **9. PREÇOS CFR BRASIL — MATÉRIAS-PRIMAS**
-Informe os preços CFR mais recentes (US$/t) para: MAP, TSP, SSP, KCl, Ureia granulada, SAM, NAM. Indique data de referência.
+Para cada produto abaixo, informe: preço CFR Brasil (US$/t), data de referência e fonte da cotação.
+Produtos: MAP, TSP, SSP, KCl, Ureia granulada, SAM, NAM.
+Formato por item: **PRODUTO** — US$ XX/t (data, fonte)
 
-Seja objetivo e profissional. Use marcadores para listar fatores. Formate cada seção com o título em negrito.`;
+Seja objetivo e profissional. Use marcadores para listar fatos. Formate cada seção com título em negrito.`;
 
   const apiKey = getApiKey();
   if(!apiKey){
