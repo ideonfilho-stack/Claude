@@ -9173,46 +9173,57 @@ async function relGerarPanorama(){
 
   const status = document.getElementById('rel-panorama-status');
   const cont = document.getElementById('rel-panorama-content');
-  if(status) status.innerHTML='<span style="color:var(--amber)">⏳ Gerando com Claude Opus... aguarde.</span>';
+  if(status) status.innerHTML='<span style="color:var(--amber)">⏳ Buscando dados e gerando análise com Gemini Pro... aguarde.</span>';
   if(cont) cont.innerHTML='';
 
-  const linhas=[
-    'Você é um analista sênior de mercado agrícola e fertilizantes no Brasil.',
-    'Gere um relatório de mercado para a semana de '+ini+' a '+fim+', supervisão '+sup+'.',
-    'Seções (sempre com título em negrito, inclua tendências, fatores de influência e perspectivas):',
-    '**1. SOJA** — dinâmica de mercado, preços CBOT e mercado doméstico.',
-    '**2. MILHO** — dinâmica de mercado, preços CBOT e mercado doméstico.',
-    '**3. CANA-DE-AÇÚCAR** — mercado de álcool e açúcar.',
-    '**4. TRIGO** — dinâmica e perspectivas.',
-    '**5. CAFÉ** — dinâmica e perspectivas.',
-    '**6. BOI GORDO** — mercado pecuário e perspectivas.',
-    '**7. MERCADO DE FERTILIZANTES** — tendências globais e domésticas de MAP, TSP, KCL, Ureia, SAM.',
-    '**8. GEOPOLÍTICA** — fatores geopolíticos e macroeconômicos que afetam o agronegócio brasileiro.',
-    '**9. PREÇOS CFR MPs** — indicar faixas de preço para MAP, TSP, SSP, KCl, Ureia, SAM, NAM.',
-    'Seja objetivo, analítico e use linguagem profissional. Formate com marcadores onde adequado.'
-  ];
-  const prompt = linhas.join('\n');
+  const prompt = `Você é um analista sênior especializado em mercado agrícola e fertilizantes no Brasil.
+Gere um relatório de mercado completo e atualizado para a semana de ${ini} a ${fim}, supervisão ${sup}.
 
-  const apiKey = S.anthropicKey || document.getElementById('anthropicKey')?.value.trim();
+Para cada seção abaixo, inclua: situação atual, principais fatores de influência, movimentação de preços e perspectivas para as próximas semanas. Use dados e notícias reais e recentes. Cite fontes e datas sempre que possível.
+
+**1. SOJA**
+Preços CBOT (US¢/bushel) e mercado doméstico (R$/saca 60kg). Exportações, estoques, clima nas principais regiões produtoras.
+
+**2. MILHO**
+Preços CBOT e mercado doméstico. Oferta/demanda, uso em etanol e ração.
+
+**3. CANA-DE-AÇÚCAR**
+Mix açúcar/etanol, preços spot, perspectivas de safra.
+
+**4. TRIGO**
+Mercado global e doméstico, importações e preços.
+
+**5. CAFÉ**
+Arábica e Robusta, bolsa NY e Londres, preços ao produtor brasileiro.
+
+**6. BOI GORDO**
+Arroba (R$/@), abates, exportações e tendências.
+
+**7. MERCADO DE FERTILIZANTES**
+Tendências globais e domésticas. Produção, demanda, logística e preços no Brasil.
+
+**8. GEOPOLÍTICA E MACRO**
+Fatores geopolíticos, câmbio USD/BRL, juros e questões que impactam o agronegócio brasileiro.
+
+**9. PREÇOS CFR BRASIL — MATÉRIAS-PRIMAS**
+Informe os preços CFR mais recentes (US$/t) para: MAP, TSP, SSP, KCl, Ureia granulada, SAM, NAM. Indique data de referência.
+
+Seja objetivo e profissional. Use marcadores para listar fatores. Formate cada seção com o título em negrito.`;
+
+  const apiKey = getApiKey();
   if(!apiKey){
-    if(status) status.innerHTML='<span style="color:var(--red);font-size:12px">Configure a Claude API Key em Configurações.</span>';
-    if(cont) cont.innerHTML='';
+    if(status) status.innerHTML='<span style="color:var(--red);font-size:12px">Configure a Gemini API Key em Configurações.</span>';
     return;
   }
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key='+apiKey;
+    const resp = await fetch(url, {
       method:'POST',
-      headers:{
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json'
-      },
+      headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        model: 'claude-opus-4-8',
-        max_tokens: 4000,
-        messages:[{role:'user', content:prompt}]
+        contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:8000, temperature:0.2}
       })
     });
     if(!resp.ok){
@@ -9220,29 +9231,26 @@ async function relGerarPanorama(){
       throw new Error('HTTP '+resp.status+': '+(err.error?.message||resp.statusText));
     }
     const data = await resp.json();
-    const raw = data.content?.[0]?.text || 'Sem resposta.';
-    if(status) status.innerHTML='<span style="color:var(--green);font-size:12px">✓ Gerado pelo Claude em '+new Date().toLocaleTimeString('pt-BR')+'</span>';
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text||'Sem resposta.';
+    if(status) status.innerHTML='<span style="color:var(--green);font-size:12px">✓ Gerado com Gemini 2.5 Pro em '+new Date().toLocaleTimeString('pt-BR')+'</span>';
     if(cont) cont.innerHTML=_relFormatarPanorama(raw);
     return;
   } catch(e){
-    console.warn('Claude API erro:', e.message);
+    console.warn('Gemini API erro:', e.message);
     if(status) status.innerHTML='<span style="color:var(--red);font-size:12px">Erro: '+e.message+'</span>';
   }
 
-  // Fallback: mostrar prompt para copiar no Claude.ai
-  if(status) status.innerHTML='<span style="color:var(--amber);font-size:12px">API indisponivel — copie o prompt e use no Claude.ai</span>';
+  // Fallback: mostrar prompt para copiar
+  if(status) status.innerHTML='<span style="color:var(--amber);font-size:12px">API indisponível — copie o prompt e use no Gemini ou Claude</span>';
   if(cont) cont.innerHTML=
     '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem">'
-    +'<div style="font-size:12px;color:var(--text3);margin-bottom:.5rem">Copie este prompt e cole no <a href="https://claude.ai" target="_blank" style="color:var(--blue)">Claude.ai</a>:</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-bottom:.5rem">Copie este prompt e cole no <a href="https://gemini.google.com" target="_blank" style="color:var(--blue)">Gemini</a> ou <a href="https://claude.ai" target="_blank" style="color:var(--blue)">Claude.ai</a>:</div>'
     +'<div id="rel-prompt-box" style="background:var(--surface3);border-radius:6px;padding:.75rem;font-size:12px;color:var(--text2);white-space:pre-wrap;user-select:all;cursor:text">'+prompt+'</div>'
-    +'<button onclick="relCopyPrompt()" '
-    +'style="margin-top:.5rem;background:var(--blue2);color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer">Copiar prompt</button>'
+    +'<button onclick="relCopyPrompt()" style="margin-top:.5rem;background:var(--blue2);color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer">Copiar prompt</button>'
     +'</div>'
     +'<div style="font-size:12px;color:var(--text3);margin-bottom:.5rem">Cole aqui o resultado:</div>'
-    +'<textarea class="fi" id="rel-panorama-manual" placeholder="Cole aqui o resultado do Claude.ai..." '
-    +'style="width:100%;min-height:250px;font-size:13px;line-height:1.6;resize:vertical"></textarea>'
-    +'<button onclick="relAplicarPanorama()" '
-    +'style="margin-top:.5rem;background:var(--green2);color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer">Aplicar</button>'
+    +'<textarea class="fi" id="rel-panorama-manual" placeholder="Cole aqui o resultado..." style="width:100%;min-height:250px;font-size:13px;line-height:1.6;resize:vertical"></textarea>'
+    +'<button onclick="relAplicarPanorama()" style="margin-top:.5rem;background:var(--green2);color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer">Aplicar</button>'
     +'<div id="rel-panorama-content2" style="margin-top:1rem;font-size:13px;line-height:1.7;color:var(--text2)"></div>';
 }
 
