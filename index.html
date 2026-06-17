@@ -1887,6 +1887,39 @@ select:focus-visible{
 .dash-cost-card:first-child::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad-blue);border-radius:var(--radius) var(--radius) 0 0}
 .dash-cost-card:last-child::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad-green);border-radius:var(--radius) var(--radius) 0 0}
 .dash-cost-card:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+
+/* ── CRM ───────────────────────────────────────────────── */
+.crm-kanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:12px;min-height:60vh;align-items:flex-start}
+.crm-col{flex-shrink:0;width:230px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px;display:flex;flex-direction:column;gap:8px}
+.crm-col-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.crm-col-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.crm-col-lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;flex:1;margin-left:7px}
+.crm-col-cnt{font-size:11px;font-weight:700;color:var(--text3);background:var(--surface2);border-radius:10px;padding:1px 7px}
+.crm-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 11px;cursor:pointer;transition:border-color .15s,box-shadow .15s;position:relative}
+.crm-card:hover{border-color:var(--blue);box-shadow:0 0 0 1px rgba(91,140,255,.15),var(--shadow)}
+.crm-card-name{font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-card-sub{font-size:10.5px;color:var(--text3);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-card-val{font-size:12px;font-weight:800;color:var(--blue)}
+.crm-card-action{font-size:10px;color:var(--amber);font-weight:600;margin-top:5px;display:flex;align-items:center;gap:4px}
+.crm-card-overdue{color:var(--red)!important}
+.crm-add-btn{width:100%;background:none;border:1px dashed var(--border2);border-radius:var(--radius-sm);padding:7px;color:var(--text3);font-size:11px;cursor:pointer;transition:color .15s,border-color .15s}
+.crm-add-btn:hover{color:var(--blue);border-color:var(--blue)}
+.crm-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+.crm-modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:100%;max-width:580px;padding:1.5rem;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.crm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px}
+.crm-modal-close:hover{color:var(--red)}
+.crm-section-title{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 8px}
+.crm-hist-item{font-size:11px;color:var(--text2);padding:5px 0;border-bottom:1px solid var(--border);display:flex;gap:8px}
+.crm-hist-ts{color:var(--text3);flex-shrink:0;font-size:10px;padding-top:1px}
+.crm-cliente-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.crm-cli-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;cursor:pointer;transition:border-color .15s}
+.crm-cli-card:hover{border-color:var(--blue)}
+.crm-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.crm-tag{font-size:9.5px;font-weight:700;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--text2)}
+.crm-subtab{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:1rem}
+.crm-subtab-btn{padding:6px 16px;font-size:11.5px;font-weight:600;background:none;border:none;color:var(--text2);cursor:pointer;transition:background .15s,color .15s}
+.crm-subtab-btn.active{background:var(--blue);color:#fff}
+@media(max-width:768px){.crm-col{width:200px}.crm-kanban{min-height:50vh}}
 </style>
 </head>
 <body>
@@ -1961,6 +1994,7 @@ select:focus-visible{
     <button class="mnav-btn" id="mnb-cfg"  onclick="goPage('cfg')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Config</button>
     <button class="mnav-btn" id="mnb-dash" onclick="goPage('dash')"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dash</button>
     <button class="mnav-btn" id="mnb-rotas" onclick="goPage('rotas')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Rotas</button>
+    <button class="mnav-btn" id="mnb-crm" onclick="goPage('crm')"><svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>CRM</button>
   </div>
 </nav>
 
@@ -2003,6 +2037,10 @@ select:focus-visible{
     <div class="nav-label">Relatórios</div>
     <button class="nav-btn" id="nb-dash" onclick="goPage('dash')"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="nav-lbl">Dashboard</span></button>
     <button class="nav-btn" id="nb-rotas" onclick="goPage('rotas')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span class="nav-lbl">Rotas Marítimas</span></button>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">CRM</div>
+    <button class="nav-btn" id="nb-crm" onclick="goPage('crm')"><svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="nav-lbl">CRM</span></button>
   </div>
   <div class="save-ind">
     <div class="save-dot" id="saveDot"></div>
@@ -3032,6 +3070,36 @@ select:focus-visible{
   </div>
 </div>
 
+<!-- CRM -->
+<div class="content" id="pg-crm" style="display:none">
+  <div class="pg-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
+    <div>
+      <div class="pg-title">CRM</div>
+      <div class="pg-sub">Pipeline de vendas e clientes</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input type="search" id="crmSearch" placeholder="Buscar lead ou cliente…" oninput="crmDoSearch()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 12px;font-size:12px;width:190px;outline:none">
+      <button class="btn btn-sm" onclick="abrirNovoCliente()">+ Cliente</button>
+      <button class="btn btn-sm btn-green" onclick="abrirNovoLead()">+ Lead</button>
+    </div>
+  </div>
+  <div class="crm-subtab">
+    <button class="crm-subtab-btn active" id="crmTabPipeline" onclick="crmShowTab('pipeline')">Pipeline</button>
+    <button class="crm-subtab-btn" id="crmTabClientes" onclick="crmShowTab('clientes')">Clientes</button>
+  </div>
+  <div id="crmPipelineView">
+    <div class="crm-kanban" id="crmKanban"></div>
+  </div>
+  <div id="crmClientesView" style="display:none">
+    <div class="crm-cliente-grid" id="crmClienteGrid"></div>
+    <div id="crmClienteEmpty" style="text-align:center;padding:3rem;color:var(--text3);font-size:13px;display:none">Nenhum cliente cadastrado ainda.</div>
+  </div>
+  <!-- Detail modal (shared for lead and client) -->
+  <div id="crmModalOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)fecharCrmModal()">
+    <div class="crm-modal" id="crmModalContent"></div>
+  </div>
+</div>
+
 </div><!-- /main -->
 </div><!-- /shell -->
 
@@ -3289,6 +3357,7 @@ async function loadS(){
       Object.assign(S, data.state);
       if(!S.fabs?.length) initFabs();
       if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
+      if(!S.crm) S.crm={clientes:[],leads:[]};
     } else {
       initFabs();
     }
@@ -3463,7 +3532,7 @@ let _rotasRAF=null, _rotasActive=false, _rotasAbortCtrl=null;
 const _vt={scale:1,tx:0,ty:0,dragging:false,lx:0,ly:0};
 const _rotasHL={id:null}; // id da rota destacada (hover no painel ou sobre navio)
 let _rotasPanelCollapsed=false;
-const PAGES=['dash','form','cot','mats','fabs','comp','prop','rel','cfg','rotas'];
+const PAGES=['dash','form','cot','mats','fabs','comp','prop','rel','cfg','rotas','crm'];
 function switchFormTab(tab){
   const isForm = tab==='form';
   const fbtn = document.getElementById('ftab-form');
@@ -3496,7 +3565,7 @@ function goPage(p){
     const b=document.getElementById('nb-'+pg); if(b) b.classList.toggle('active',pg===p);
     const mb=document.getElementById('mnb-'+pg); if(mb) mb.classList.toggle('active',pg===p);
   });
-  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas'}[p]||p;
+  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM'}[p]||p;
   if(p==='mats'){_expandedMat=null;renderMatCards();renderPDFHistPanel();}
   if(p==='prop'){initPropPage();}
   if(p==='rel'){initRelPage();}
@@ -3507,6 +3576,7 @@ function goPage(p){
   if(p==='cot'){recalcCotacao();}
   if(p==='dash'){renderDash();renderPriceHistCharts();renderArquivo();checkBackupAviso();}
   if(p==='rotas'){initRotasPage();}
+  if(p==='crm'){renderCRM();}
   // Scroll to top on mobile page change
   window.scrollTo(0,0);
 }
@@ -11355,6 +11425,413 @@ function _simulateRotasUpdate(){
   [..._LINEUP.paranagua,..._LINEUP.santos].forEach(v=>{
     if(v.status==='rte'&&Math.random()>0.97) v.status='anc';
   });
+}
+
+// ── CRM ────────────────────────────────────────────────────────────────────
+
+const CRM_ETAPAS=[
+  {key:'prospeccao',  lbl:'Prospecção',      color:'#9ba2bd'},
+  {key:'qualificacao',lbl:'Qualificação',     color:'#a78bfa'},
+  {key:'tecnica',     lbl:'Análise Técnica',  color:'#f8b53e'},
+  {key:'proposta',    lbl:'Proposta Enviada', color:'#5b8cff'},
+  {key:'negociacao',  lbl:'Negociação',       color:'#fb923c'},
+  {key:'fechado',     lbl:'Pedido Fechado',   color:'#4ade80'},
+  {key:'perdido',     lbl:'Perdido',          color:'#f87171'},
+];
+const CRM_TIPOS_ACAO=['Ligar','Visitar','Enviar proposta','Enviar cotação','Follow-up e-mail','Reunião','Outro'];
+
+function crmId(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
+function crmNow(){return new Date().toISOString();}
+function crmFmtDate(iso){if(!iso)return'';try{const d=new Date(iso);return d.toLocaleDateString('pt-BR');}catch(e){return iso;}}
+function crmFmtMoney(v){return'$'+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function crmCliente(id){return(S.crm&&S.crm.clientes||[]).find(c=>c.id===id)||null;}
+function crmCliNome(id){const c=crmCliente(id);return c?(c.nome+(c.fazenda?' · '+c.fazenda:'')):'—';}
+function crmIsOverdue(lead){
+  if(!lead.proximaAcao||!lead.proximaAcao.data) return false;
+  return new Date(lead.proximaAcao.data)<new Date();
+}
+
+function renderCRM(){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  S.crm.clientes=S.crm.clientes||[];
+  S.crm.leads=S.crm.leads||[];
+  const view=document.getElementById('crmPipelineView');
+  if(view&&view.style.display!=='none') renderKanban();
+  else renderClientesGrid();
+}
+
+function crmShowTab(tab){
+  document.getElementById('crmPipelineView').style.display=tab==='pipeline'?'':'none';
+  document.getElementById('crmClientesView').style.display=tab==='clientes'?'':'none';
+  document.getElementById('crmTabPipeline').classList.toggle('active',tab==='pipeline');
+  document.getElementById('crmTabClientes').classList.toggle('active',tab==='clientes');
+  if(tab==='pipeline') renderKanban();
+  else renderClientesGrid();
+}
+
+function crmDoSearch(){
+  const q=(document.getElementById('crmSearch').value||'').toLowerCase().trim();
+  const view=document.getElementById('crmPipelineView');
+  if(view&&view.style.display!=='none') renderKanban(q);
+  else renderClientesGrid(q);
+}
+
+function renderKanban(q){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const leads=S.crm.leads||[];
+  const kb=document.getElementById('crmKanban');
+  if(!kb) return;
+  const filterFn=lead=>{
+    if(!q) return true;
+    const cli=crmCliente(lead.clienteId);
+    const txt=((lead.titulo||'')+(cli?cli.nome+cli.fazenda:'')+(lead.etapa||'')).toLowerCase();
+    return txt.includes(q);
+  };
+  kb.innerHTML=CRM_ETAPAS.map(et=>{
+    const col=leads.filter(l=>l.etapa===et.key&&filterFn(l));
+    const totalVal=col.reduce((a,l)=>a+(+l.valorUSD||0),0);
+    const cards=col.map(lead=>{
+      const cli=crmCliente(lead.clienteId);
+      const overdue=crmIsOverdue(lead);
+      const acaoIcon={'Ligar':'📞','Visitar':'🚗','Enviar proposta':'📄','Enviar cotação':'💰','Reunião':'🗓️','Follow-up e-mail':'✉️','Outro':'📌'};
+      const acaoLbl=lead.proximaAcao&&lead.proximaAcao.tipo?lead.proximaAcao.tipo:'';
+      const acaoData=lead.proximaAcao&&lead.proximaAcao.data?crmFmtDate(lead.proximaAcao.data):'';
+      return `<div class="crm-card" onclick="abrirLead('${lead.id}')">
+        <div class="crm-card-name">${lead.titulo||'(sem título)'}</div>
+        <div class="crm-card-sub">${cli?cli.nome:''}</div>
+        ${lead.valorUSD?`<div class="crm-card-val">${crmFmtMoney(lead.valorUSD)}${lead.qtdTons?' · '+lead.qtdTons+'t':''}</div>`:''}
+        ${acaoLbl?`<div class="crm-card-action${overdue?' crm-card-overdue':''}">${acaoIcon[acaoLbl]||'📌'} ${acaoLbl}${acaoData?' · '+acaoData:''}</div>`:''}
+      </div>`;
+    }).join('');
+    return `<div class="crm-col">
+      <div class="crm-col-hdr">
+        <div class="crm-col-dot" style="background:${et.color}"></div>
+        <div class="crm-col-lbl" style="color:${et.color}">${et.lbl}</div>
+        <div class="crm-col-cnt">${col.length}</div>
+      </div>
+      ${cards}
+      ${totalVal>0?`<div style="font-size:10px;color:var(--text3);text-align:center;padding:4px 0;border-top:1px solid var(--border);margin-top:2px">${crmFmtMoney(totalVal)} total</div>`:''}
+      <button class="crm-add-btn" onclick="abrirNovoLead('${et.key}')">+ Adicionar</button>
+    </div>`;
+  }).join('');
+}
+
+function renderClientesGrid(q){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const clientes=S.crm.clientes||[];
+  const grid=document.getElementById('crmClienteGrid');
+  const empty=document.getElementById('crmClienteEmpty');
+  if(!grid) return;
+  const filtered=q?clientes.filter(c=>(c.nome+c.fazenda+c.municipio+c.estado+c.culturas).toLowerCase().includes(q)):clientes;
+  if(!filtered.length){
+    grid.innerHTML='';
+    if(empty) empty.style.display='';
+    return;
+  }
+  if(empty) empty.style.display='none';
+  const leads=S.crm.leads||[];
+  grid.innerHTML=filtered.map(c=>{
+    const cLeads=leads.filter(l=>l.clienteId===c.id&&l.etapa!=='perdido');
+    const totalVal=cLeads.reduce((a,l)=>a+(+l.valorUSD||0),0);
+    const culturas=(c.culturas||'').split(',').map(s=>s.trim()).filter(Boolean);
+    return `<div class="crm-cli-card" onclick="abrirCliente('${c.id}')">
+      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:3px">${c.nome}</div>
+      ${c.fazenda?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${c.fazenda}</div>`:''}
+      ${c.municipio?`<div style="font-size:11px;color:var(--text3)">${c.municipio}${c.estado?' / '+c.estado:''}</div>`:''}
+      <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+        ${c.area?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Área:</span> ${(+c.area).toLocaleString('pt-BR')} ha</div>`:''}
+        ${c.volumeAnual?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Vol.:</span> ${c.volumeAnual}t/ano</div>`:''}
+        ${totalVal>0?`<div style="font-size:11px;font-weight:700;color:var(--blue)">${crmFmtMoney(totalVal)} em pipeline</div>`:''}
+      </div>
+      ${culturas.length?`<div class="crm-tags">${culturas.map(t=>`<span class="crm-tag">${t}</span>`).join('')}</div>`:''}
+      ${cLeads.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">${cLeads.length} oportunidade${cLeads.length>1?'s':''} ativa${cLeads.length>1?'s':''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── MODAL ──────────────────────────────────────────────────────────────────
+
+function fecharCrmModal(){
+  const ov=document.getElementById('crmModalOverlay');
+  if(ov) ov.style.display='none';
+  renderKanban(); renderClientesGrid();
+}
+
+function _showModal(html){
+  const ov=document.getElementById('crmModalOverlay');
+  const ct=document.getElementById('crmModalContent');
+  if(!ov||!ct) return;
+  ct.innerHTML=html;
+  ov.style.display='flex';
+}
+
+// ── LEAD MODAL ──────────────────────────────────────────────────────────────
+
+function abrirNovoLead(etapaInit){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const clientes=S.crm.clientes||[];
+  const etapa=etapaInit||'prospeccao';
+  const cliOpts=clientes.map((c)=>`<option value="${c.id}">${c.nome}${c.fazenda?' — '+c.fazenda:''}</option>`).join('');
+  const etapaOpts=CRM_ETAPAS.map(e=>`<option value="${e.key}"${e.key===etapa?' selected':''}>${e.lbl}</option>`).join('');
+  const tipoOpts=CRM_TIPOS_ACAO.map(t=>`<option value="${t}">${t}</option>`).join('');
+  _showModal(`
+    <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
+    <div style="font-size:16px;font-weight:800;margin-bottom:1rem">Novo Lead / Oportunidade</div>
+    <div class="crm-section-title">Informações gerais</div>
+    <div style="display:grid;gap:10px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Título *</div><input id="ld-titulo" type="text" placeholder="Ex: Soja safra 2025/26" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Cliente</div>
+        <select id="ld-cliente" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">
+          <option value="">— selecionar —</option>${cliOpts}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Etapa</div>
+          <select id="ld-etapa" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">${etapaOpts}</select>
+        </div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Probabilidade (%)</div><input id="ld-prob" type="number" min="0" max="100" value="50" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Valor estimado (USD)</div><input id="ld-valor" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Quantidade (t)</div><input id="ld-tons" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      </div>
+    </div>
+    <div class="crm-section-title">Próxima ação</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tipo</div>
+        <select id="ld-atp" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"><option value="">—</option>${tipoOpts}</select>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ld-atd" type="date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ld-ato" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+    </div>
+    <div class="crm-section-title">Referência de cotação</div>
+    <input id="ld-cot" type="text" placeholder="Ex: Cotação Março Rev.2" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;margin-bottom:1rem">
+    <button class="btn btn-green" style="width:100%" onclick="salvarNovoLead()">Salvar Lead</button>
+  `);
+}
+
+function salvarNovoLead(){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const titulo=(document.getElementById('ld-titulo').value||'').trim();
+  if(!titulo){alert('Informe um título.');return;}
+  const lead={
+    id:crmId(),
+    clienteId:document.getElementById('ld-cliente').value||'',
+    titulo,
+    etapa:document.getElementById('ld-etapa').value||'prospeccao',
+    valorUSD:+document.getElementById('ld-valor').value||0,
+    qtdTons:+document.getElementById('ld-tons').value||0,
+    probabilidade:+document.getElementById('ld-prob').value||50,
+    proximaAcao:{tipo:document.getElementById('ld-atp').value||'',data:document.getElementById('ld-atd').value||'',obs:document.getElementById('ld-ato').value||''},
+    cotacao:document.getElementById('ld-cot').value||'',
+    historico:[{ts:crmNow(),obs:'Lead criado.'}],
+    criadoEm:crmNow(),fechadoEm:null
+  };
+  S.crm.leads.push(lead);
+  sched();
+  fecharCrmModal();
+}
+
+function abrirLead(id){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const lead=S.crm.leads.find(l=>l.id===id);
+  if(!lead) return;
+  const cli=crmCliente(lead.clienteId);
+  const etapa=CRM_ETAPAS.find(e=>e.key===lead.etapa)||CRM_ETAPAS[0];
+  const etapaOpts=CRM_ETAPAS.map(e=>`<option value="${e.key}"${e.key===lead.etapa?' selected':''}>${e.lbl}</option>`).join('');
+  const tipoOpts=CRM_TIPOS_ACAO.map(t=>`<option value="${t}"${t===(lead.proximaAcao&&lead.proximaAcao.tipo)?' selected':''}>${t}</option>`).join('');
+  const hist=(lead.historico||[]).slice().reverse().map(h=>`<div class="crm-hist-item"><div class="crm-hist-ts">${crmFmtDate(h.ts)}</div><div>${h.obs}</div></div>`).join('');
+  const overdue=crmIsOverdue(lead);
+  _showModal(`
+    <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
+      <div style="width:10px;height:10px;border-radius:50%;background:${etapa.color};flex-shrink:0"></div>
+      <div style="font-size:15px;font-weight:800;flex:1">${lead.titulo}</div>
+    </div>
+    ${cli?`<div style="font-size:12px;color:var(--text3);margin-bottom:1rem">${cli.nome}${cli.fazenda?' · '+cli.fazenda:''}${cli.municipio?' · '+cli.municipio:''}</div>`:'<div style="margin-bottom:1rem"></div>'}
+    <div class="crm-section-title">Pipeline</div>
+    <select id="ed-etapa" onchange="crmMoverLead('${id}',this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;margin-bottom:10px">${etapaOpts}</select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Valor (USD)</div><input id="ed-val" type="number" value="${lead.valorUSD||''}" onchange="crmEditLeadField('${id}','valorUSD',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tonelagem</div><input id="ed-tons" type="number" value="${lead.qtdTons||''}" onchange="crmEditLeadField('${id}','qtdTons',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Prob. (%)</div><input id="ed-prob" type="number" min="0" max="100" value="${lead.probabilidade||50}" onchange="crmEditLeadField('${id}','probabilidade',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+    </div>
+    <div class="crm-section-title">Próxima ação ${overdue?'<span style="color:var(--red);font-weight:800">⚠ VENCIDA</span>':''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tipo</div>
+        <select id="ed-atp" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"><option value="">—</option>${tipoOpts}</select>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ed-atd" type="date" value="${(lead.proximaAcao&&lead.proximaAcao.data)||''}" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ed-ato" type="text" value="${(lead.proximaAcao&&lead.proximaAcao.obs)||''}" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+    </div>
+    ${lead.cotacao?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Ref. cotação: <strong style="color:var(--blue)">${lead.cotacao}</strong></div>`:''}
+    <div class="crm-section-title">Registrar atividade</div>
+    <div style="display:flex;gap:8px;margin-bottom:1rem">
+      <input id="ed-hist-obs" type="text" placeholder="Ex: Ligou, pediu prazo até sexta" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+      <button class="btn btn-sm btn-green" onclick="crmAddHist('${id}')">Registrar</button>
+    </div>
+    <div class="crm-section-title">Histórico</div>
+    <div style="max-height:140px;overflow-y:auto" id="ed-hist-list">${hist||'<div style="color:var(--text3);font-size:11px">Sem registros.</div>'}</div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn btn-sm btn-red" onclick="crmDeleteLead('${id}')">Excluir</button>
+    </div>
+  `);
+}
+
+function crmMoverLead(id,etapa){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead) return;
+  const old=CRM_ETAPAS.find(e=>e.key===lead.etapa);
+  lead.etapa=etapa;
+  const nova=CRM_ETAPAS.find(e=>e.key===etapa);
+  if(etapa==='fechado') lead.fechadoEm=crmNow();
+  lead.historico=lead.historico||[];
+  lead.historico.push({ts:crmNow(),obs:'Etapa alterada: '+(old?old.lbl:'?')+' → '+(nova?nova.lbl:'?')});
+  sched();
+}
+
+function crmEditLeadField(id,key,val){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead) return;
+  lead[key]=val;
+  sched();
+}
+
+function crmEditProxAcao(id){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead) return;
+  lead.proximaAcao={
+    tipo:document.getElementById('ed-atp').value||'',
+    data:document.getElementById('ed-atd').value||'',
+    obs:document.getElementById('ed-ato').value||''
+  };
+  sched();
+}
+
+function crmAddHist(id){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead) return;
+  const obs=(document.getElementById('ed-hist-obs').value||'').trim();
+  if(!obs) return;
+  lead.historico=lead.historico||[];
+  lead.historico.push({ts:crmNow(),obs});
+  sched();
+  document.getElementById('ed-hist-obs').value='';
+  const list=document.getElementById('ed-hist-list');
+  if(list) list.innerHTML=lead.historico.slice().reverse().map(h=>`<div class="crm-hist-item"><div class="crm-hist-ts">${crmFmtDate(h.ts)}</div><div>${h.obs}</div></div>`).join('');
+}
+
+function crmDeleteLead(id){
+  if(!confirm('Excluir este lead?')) return;
+  S.crm.leads=S.crm.leads.filter(l=>l.id!==id);
+  sched();
+  fecharCrmModal();
+}
+
+// ── CLIENTE MODAL ─────────────────────────────────────────────────────────
+
+function abrirNovoCliente(){
+  _showModal(`
+    <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
+    <div style="font-size:16px;font-weight:800;margin-bottom:1rem">Novo Cliente</div>
+    <div style="display:grid;gap:10px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome *</div><input id="cl-nome" type="text" placeholder="Nome do cliente / empresa" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Fazenda</div><input id="cl-faz" type="text" placeholder="Nome da propriedade" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Estado</div><input id="cl-uf" type="text" maxlength="2" placeholder="MT" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;text-transform:uppercase"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Área (ha)</div><input id="cl-area" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Volume anual (t)</div><input id="cl-vol" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Culturas (separar por vírgula)</div><input id="cl-cult" type="text" placeholder="Ex: Soja, Milho, Algodão" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div class="crm-section-title" style="margin-top:4px">Contato principal</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome</div><input id="cl-ctn" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Telefone</div><input id="cl-ctt" type="tel" placeholder="(00) 0000-0000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">E-mail</div><input id="cl-cte" type="email" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Observações</div><textarea id="cl-obs" rows="2" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;resize:vertical"></textarea></div>
+    </div>
+    <button class="btn btn-green" style="width:100%;margin-top:1rem" onclick="salvarNovoCliente()">Salvar Cliente</button>
+  `);
+}
+
+function salvarNovoCliente(){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const nome=(document.getElementById('cl-nome').value||'').trim();
+  if(!nome){alert('Informe o nome do cliente.');return;}
+  const ctn=document.getElementById('cl-ctn').value||'';
+  const ctt=document.getElementById('cl-ctt').value||'';
+  const cte=document.getElementById('cl-cte').value||'';
+  const cli={
+    id:crmId(),
+    nome,
+    fazenda:document.getElementById('cl-faz').value||'',
+    municipio:document.getElementById('cl-mun').value||'',
+    estado:(document.getElementById('cl-uf').value||'').toUpperCase(),
+    area:+document.getElementById('cl-area').value||0,
+    volumeAnual:+document.getElementById('cl-vol').value||0,
+    culturas:document.getElementById('cl-cult').value||'',
+    contatos:(ctn||ctt||cte)?[{nome:ctn,tel:ctt,email:cte}]:[],
+    obs:document.getElementById('cl-obs').value||'',
+    criadoEm:crmNow()
+  };
+  S.crm.clientes.push(cli);
+  sched();
+  fecharCrmModal();
+}
+
+function abrirCliente(id){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const cli=S.crm.clientes.find(c=>c.id===id);
+  if(!cli) return;
+  const leads=(S.crm.leads||[]).filter(l=>l.clienteId===id);
+  const ctt=(cli.contatos&&cli.contatos[0])||{};
+  const leadsHtml=leads.map(l=>{
+    const et=CRM_ETAPAS.find(e=>e.key===l.etapa)||CRM_ETAPAS[0];
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:8px;cursor:pointer" onclick="fecharCrmModal();setTimeout(()=>abrirLead('${l.id}'),50)">
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--text)">${l.titulo}</div>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:2px"><div style="width:7px;height:7px;border-radius:50%;background:${et.color}"></div><span style="font-size:10px;color:var(--text3)">${et.lbl}</span></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">${l.valorUSD?`<div style="font-size:12px;font-weight:700;color:var(--blue)">${crmFmtMoney(l.valorUSD)}</div>`:''}
+        ${l.qtdTons?`<div style="font-size:10px;color:var(--text3)">${l.qtdTons}t</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  _showModal(`
+    <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
+    <div style="font-size:16px;font-weight:800;margin-bottom:2px">${cli.nome}</div>
+    ${cli.fazenda?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${cli.fazenda}</div>`:''}
+    ${cli.municipio?`<div style="font-size:11px;color:var(--text3);margin-bottom:1rem">${cli.municipio}${cli.estado?' / '+cli.estado:''}</div>`:'<div style="margin-bottom:1rem"></div>'}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
+      ${cli.area?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Área</div><div style="font-size:14px;font-weight:800;color:var(--text)">${(+cli.area).toLocaleString('pt-BR')} ha</div></div>`:''}
+      ${cli.volumeAnual?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Volume</div><div style="font-size:14px;font-weight:800;color:var(--text)">${cli.volumeAnual}t/ano</div></div>`:''}
+      ${cli.culturas?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Culturas</div><div style="font-size:12px;font-weight:600;color:var(--text)">${cli.culturas}</div></div>`:''}
+    </div>
+    ${ctt.nome||ctt.tel||ctt.email?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:1rem">
+      ${ctt.nome?`<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px">${ctt.nome}</div>`:''}
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${ctt.tel?`<a href="tel:${ctt.tel}" style="font-size:12px;color:var(--blue);text-decoration:none">📞 ${ctt.tel}</a>`:''}
+        ${ctt.email?`<a href="mailto:${ctt.email}" style="font-size:12px;color:var(--blue);text-decoration:none">✉️ ${ctt.email}</a>`:''}
+      </div>
+    </div>`:''}
+    ${cli.obs?`<div style="font-size:12px;color:var(--text2);margin-bottom:1rem;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">${cli.obs}</div>`:''}
+    <div class="crm-section-title">Oportunidades (${leads.length})</div>
+    ${leadsHtml||'<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Nenhuma oportunidade vinculada.</div>'}
+    <div style="margin-top:8px"><button class="btn btn-sm btn-green" onclick="fecharCrmModal();setTimeout(()=>abrirNovoLead('prospeccao'),50)">+ Nova oportunidade para este cliente</button></div>
+    <div style="display:flex;gap:8px;margin-top:1.25rem">
+      <button class="btn btn-sm btn-red" onclick="crmDeleteCliente('${id}')">Excluir cliente</button>
+    </div>
+  `);
+}
+
+function crmDeleteCliente(id){
+  if(!confirm('Excluir este cliente? Os leads vinculados não serão excluídos.')) return;
+  S.crm.clientes=S.crm.clientes.filter(c=>c.id!==id);
+  sched();
+  fecharCrmModal();
 }
 </script>
 </body>
