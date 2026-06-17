@@ -1904,6 +1904,9 @@ select:focus-visible{
 .crm-card-overdue{color:var(--red)!important}
 .crm-add-btn{width:100%;background:none;border:1px dashed var(--border2);border-radius:var(--radius-sm);padding:7px;color:var(--text3);font-size:11px;cursor:pointer;transition:color .15s,border-color .15s}
 .crm-add-btn:hover{color:var(--blue);border-color:var(--blue)}
+.crm-card{cursor:grab}
+.crm-card--dragging{opacity:.35;cursor:grabbing!important;box-shadow:none!important}
+.crm-col--drag-over{border-color:var(--blue)!important;background:rgba(91,140,255,0.07)!important;box-shadow:0 0 0 2px rgba(91,140,255,0.25)!important}
 .crm-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
 .crm-modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);width:100%;max-width:580px;padding:1.5rem;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.5)}
 .crm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px}
@@ -11511,14 +11514,22 @@ function renderKanban(q){
       const acaoIcon={'Ligar':'📞','Visitar':'🚗','Enviar proposta':'📄','Enviar cotação':'💰','Reunião':'🗓️','Follow-up e-mail':'✉️','Outro':'📌'};
       const acaoLbl=lead.proximaAcao&&lead.proximaAcao.tipo?lead.proximaAcao.tipo:'';
       const acaoData=lead.proximaAcao&&lead.proximaAcao.data?crmFmtDate(lead.proximaAcao.data):'';
-      return `<div class="crm-card" onclick="abrirLead('${lead.id}')">
+      return `<div class="crm-card"
+        draggable="true"
+        ondragstart="crmDragStart(event,'${lead.id}')"
+        ondragend="crmDragEnd(event)"
+        onclick="if(!window._crmWasDrag)abrirLead('${lead.id}')">
         <div class="crm-card-name">${lead.titulo||'(sem título)'}</div>
         <div class="crm-card-sub">${cli?cli.nome:''}</div>
         ${lead.valorUSD?`<div class="crm-card-val">${crmFmtMoney(lead.valorUSD)}${lead.qtdTons?' · '+lead.qtdTons+'t':''}</div>`:''}
         ${acaoLbl?`<div class="crm-card-action${overdue?' crm-card-overdue':''}">${acaoIcon[acaoLbl]||'📌'} ${acaoLbl}${acaoData?' · '+acaoData:''}</div>`:''}
       </div>`;
     }).join('');
-    return `<div class="crm-col">
+    return `<div class="crm-col"
+      ondragover="crmDragOver(event)"
+      ondragenter="crmDragEnter(event)"
+      ondragleave="crmDragLeave(event)"
+      ondrop="crmDrop(event,'${et.key}')">
       <div class="crm-col-hdr">
         <div class="crm-col-dot" style="background:${et.color}"></div>
         <div class="crm-col-lbl" style="color:${et.color}">${et.lbl}</div>
@@ -11529,6 +11540,59 @@ function renderKanban(q){
       <button class="crm-add-btn" onclick="abrirNovoLead('${et.key}')">+ Adicionar</button>
     </div>`;
   }).join('');
+}
+
+let _crmDragId=null;
+window._crmWasDrag=false;
+
+function crmDragStart(e,id){
+  _crmDragId=id;
+  window._crmWasDrag=false;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',id);
+  // Atrasar a classe para o snapshot do drag image não ficar transparente
+  setTimeout(()=>e.target.classList.add('crm-card--dragging'),0);
+}
+
+function crmDragEnd(e){
+  e.target.classList.remove('crm-card--dragging');
+  document.querySelectorAll('.crm-col--drag-over').forEach(el=>el.classList.remove('crm-col--drag-over'));
+  // Marcar como drag para suprimir o click que vem logo depois
+  window._crmWasDrag=true;
+  setTimeout(()=>{window._crmWasDrag=false;},200);
+  _crmDragId=null;
+}
+
+function crmDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+}
+
+function crmDragEnter(e){
+  e.preventDefault();
+  // Garantir que o alvo é a coluna e não um filho
+  const col=e.currentTarget;
+  col.classList.add('crm-col--drag-over');
+}
+
+function crmDragLeave(e){
+  const col=e.currentTarget;
+  // Só remover quando sair da coluna de fato (não ao passar por filho)
+  if(!col.contains(e.relatedTarget)){
+    col.classList.remove('crm-col--drag-over');
+  }
+}
+
+function crmDrop(e,etapaKey){
+  e.preventDefault();
+  const id=_crmDragId||e.dataTransfer.getData('text/plain');
+  const col=e.currentTarget;
+  col.classList.remove('crm-col--drag-over');
+  if(!id) return;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead||lead.etapa===etapaKey) return;
+  crmMoverLead(id,etapaKey);
+  renderKanban();
 }
 
 function renderClientesGrid(q){
