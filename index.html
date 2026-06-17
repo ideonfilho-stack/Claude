@@ -11514,11 +11514,59 @@ function renderCRM(){
   S.crm=S.crm||{clientes:[],leads:[]};
   S.crm.clientes=S.crm.clientes||[];
   S.crm.leads=S.crm.leads||[];
+  _seedCrmClientes();
   const view=document.getElementById('crmPipelineView');
   const dashView=document.getElementById('crmDashView');
   if(view&&view.style.display!=='none') renderKanban();
   else if(dashView&&dashView.style.display!=='none') renderCrmDashboard();
   else renderClientesGrid();
+}
+
+function _seedCrmClientes(){
+  if(S.crm.clientes.length) return;
+  const now=crmNow();
+  const D=[
+    ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650],
+    ['ALESSANDRO CHIOGNA','Alessandro','Castelândia','064-9 9209-1280','achiogna@uol.com.br',2500,0,1000,875,0,500,1375],
+    ['APARECIDO ALDEMIR COCARELLI','Elton','Rio Verde','064-9 9933-3034','tatiana@cocarelii.com.br',6000,0,6000,2100,0,3000,5100],
+    ['BRUNO ABREU LEÃO','Bruno Abreu','Rio Verde','','',2600,0,2600,910,0,1300,2210],
+    ['CARGILL BIOENERGIA','Juliano Souza','Quirinópolis','034-9 9994-6924','cleber_cabral@sjcbioenergia.com.br',65000,0,15000,22750,0,7500,30250],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU','Tiago','Rio Verde','067-9 9856-6272','tiago@cargill.com',75000,0,40000,26250,0,20000,46250],
+    ['CEREAL OURO','Arthur','Rio Verde','064 99975-0989','',21200,0,10000,7420,0,5000,12420],
+    ['DANIEL PRANTE','Daniel','Montividiu','64 99213-3434','',17000,0,13000,5950,0,6500,12450],
+    ['DIEGO LOBON','Diego Filho','Montividiu','(64) 99925-8005','lobon.jimenez@gmail.com',14800,0,13500,5180,0,6750,11930],
+    ['DIRCEU ZANCHE','Dirceu','Rio Verde','064 99870-101','',1300,0,1300,455,0,650,1105],
+    ['EDGAR LEÃO','Humberto','Rio Verde','','',4000,0,3500,1400,0,1750,3150],
+    ['FAMÍLIA CESCA','Alysson Cesca','Rio Verde','064-9 9987-0757','kasuecesca@gmail.com',9000,0,6000,3150,0,3000,6150],
+    ['FAZENDA REUNIDAS BAUMGART','Claudio','Rio Verde','064-9 9218-5237','',6000,0,3000,2100,0,1500,3600],
+    ['GRUPO CASSOL','Marcos','Rio Verde','(64) 99977-0238','marcos.dir@aclmaquinas.com.br',30000,0,24000,10500,0,12000,22500],
+    ['GRUPO CBAGRO','Josiel','Rio Verde','064-9 9987-8663','compras2.cbagro@uol.com.br',34000,0,28000,11900,0,14000,25900],
+    ['GRUPO G5','Elias','Rio Verde','064-9 9987-8239','',60000,0,40000,21000,0,20000,41000],
+    ['GRUPO GAPES','Zizo','Rio Verde','64 99641-0323','zizo@gapescna.agr.br',100000,0,80000,35000,0,40000,75000],
+    ['GRUPO SOMA','Cida','Rio Verde','064-9 9994-6576','regis@somaagronegocio.com.br',80000,0,60000,28000,0,30000,58000],
+    ['GRUPO TERRA FORTE','Maicon','Rio Verde','64 99604-2058','administrativo@grupoterraforte.com',12000,0,8000,4200,0,4000,8200],
+    ['GRUPO VALE RIO','Chiquinho','Rio Verde','64 98407-9729','',4000,0,2000,1400,0,1000,2400],
+    ['HELIO FERREIRA LIMA','Helio','Rio Verde','(64) 99987-2923','agrocastrorv@terra.com.br',4000,0,3000,1400,0,1500,2900],
+    ['JOAO DOS SANTOS CANCIANO','João dos Santos','Rio Verde','(64) 9671-7666','joaoscanciano@gmail.com',3750,0,3750,1313,0,1875,3188],
+    ['JOSÉ DIOGO','José Diogo','Rio Verde','064-9 9987-0536','zediogoagrorv@gmail.com',4000,0,2000,1400,0,1000,2400],
+    ['JOSE ROBERTO BRUCELLI','Jose Roberto Brucelli','Rio Verde','(64) 9987-7360','jrbrucceli@uol.com.br',4500,0,4000,1575,0,2000,3575],
+    ['JUNIOR RIZZI','Junior','Rio Verde','64 9 9217-0462','',12000,0,7000,4200,0,3500,7700],
+    ['SEBASTIÃO CRUVINEL','Sebastião','Montividiu','64 99642-8284','tiaocruvinel@uol.com.br',2000,0,1500,700,0,750,1450],
+    ['SEMENTES VITORIA','Zito','Montividiu','064 99246-0087','',3000,500,500,1050,0,250,1300],
+    ['SILMAR / LINDOMAR CRUVINEL','Lindomar','Montividiu','64 99641-1833','lindomaragro@gmail.com',10000,0,7000,3500,0,3500,7000],
+    ['VALDIR ANTONIO JACOMINI','Guilherme','Rio Verde','064-9 9987-1025','grupojacomini@yahoo.com.br',3500,0,2000,1225,0,1000,2225],
+    ['WALTER DELFINO MUNIZ','Camilla','Rio Verde','064-9 9609-9406','delfinomuniz@hotmail.com',8000,0,4000,2800,0,2000,4800],
+  ];
+  D.forEach((r,i)=>{
+    S.crm.clientes.push({
+      id:'seed'+i,nome:r[0],contato:r[1],municipio:r[2],telefone:r[3],email:r[4],
+      categoria:'ferti30',subcategoria:'',
+      areaVerao:r[5],areaIrrigado:r[6],areaSafrinha:r[7],
+      potencialVerao:r[8],potencialIrrigado:r[9],potencialSafrinha:r[10],potencialTotal:r[11],
+      obs:'',criadoEm:now
+    });
+  });
+  sched();
 }
 
 function crmShowTab(tab){
