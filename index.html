@@ -9020,6 +9020,7 @@ async function initApp(){
     const u = (await window.sb.auth.getUser()).data.user;
     const el = document.getElementById('currentUserEmail');
     if(el && u) el.textContent = u.email;
+    if(u) window._authEmail = u.email;
   }catch(e){}
   await loadS();
   const savedKey = S._apikey||'';
@@ -11524,6 +11525,7 @@ function renderCRM(){
 
 function _seedCrmClientes(){
   if(S.crm.clientes.length) return;
+  if(window._authEmail !== 'ideondw@gmail.com') return;
   const now=crmNow();
   const D=[
     ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650],
