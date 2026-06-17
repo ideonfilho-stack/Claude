@@ -2373,10 +2373,6 @@ select:focus-visible{
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
       </button>
-      <button class="btn btn-sm" style="border-color:rgba(248,181,62,0.3);color:var(--amber)" onclick="recalcCotacao()">
-        <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        Forçar cálculo
-      </button>
       <button class="btn btn-sm btn-red" onclick="limparCotacao()">Limpar</button>
     </div>
   </div>
@@ -2536,10 +2532,6 @@ select:focus-visible{
       <button class="btn btn-sm" style="border-color:rgba(91,140,255,0.3);color:var(--blue)" onclick="exportPropJPEG()">
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
-      </button>
-      <button class="btn btn-sm" style="border-color:rgba(248,181,62,0.3);color:var(--amber)" onclick="recalcProposta()">
-        <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        Forçar cálculo
       </button>
       <button class="btn btn-sm btn-red" onclick="limparProposta()">Limpar</button>
     </div>
@@ -6060,16 +6052,105 @@ function setItemPropParam(idx, key, value){
   recalcProposta();
 }
 
-function setItemPropParamLive(idx, key, value){
-  const ae=document.activeElement;
-  const savedKey=ae?ae.dataset.pkey:null;
-  const savedIdx=ae?ae.dataset.pidx:null;
-  const savedSel=ae?ae.selectionStart:null;
-  setItemPropParam(idx,key,value);
-  if(savedKey){
-    const el=document.querySelector('[data-pkey="'+savedKey+'"][data-pidx="'+savedIdx+'"]');
-    if(el){ el.focus(); try{el.setSelectionRange(savedSel,savedSel);}catch(e){} }
+function _propP_of(item){
+  const p=item.params||{};
+  return{qty:p.qty!=null?p.qty:1,vcto:p.vcto||'',valor:p.valor!=null?p.valor:0,valorCur:p.valorCur||'BRL',frete:p.frete!=null?p.frete:0,freteCur:p.freteCur||'BRL',taxa:p.taxa!=null?p.taxa:1.6,comissao:p.comissao!=null?p.comissao:0,embalagem:p.embalagem||'bag',cliente:p.cliente||''};
+}
+function _propCalcFOB(item,P,fx){
+  const valor=P.valorCur==='USD'?P.valor*fx:P.valor;
+  const frete=P.freteCur==='USD'?P.frete*fx:P.frete;
+  let meses=0;
+  if(P.vcto){const vcto=new Date(P.vcto+'T12:00:00');const hoje=new Date();meses=Math.max(0,(vcto.getFullYear()-hoje.getFullYear())*12+(vcto.getMonth()-hoje.getMonth()));}
+  const valorLiqR=valor-frete;
+  const valorUSD0=fx>0?valorLiqR/fx:0;
+  const fatorJuros=meses>0?Math.pow(1+(P.taxa||0)/100,meses):1;
+  const valorUSD1=valorUSD0/fatorJuros;
+  const comissaoUSD=valorUSD1*((P.comissao||0)/100);
+  const precoFOB=valorUSD1-comissaoUSD;
+  return{valor,frete,valorLiqR,valorUSD0,fatorJuros,valorUSD1,jurosUSD:valorUSD0-valorUSD1,comissaoUSD,precoFOB,meses};
+}
+function _propAnalysisInner(P,c,custoAdj,margem,fx){
+  return '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Análise</div>'
+    +_cotLinha('Valor proposta CIF',(P.valorCur==='USD'?fmtMoney(+P.valor||0,'USD'):fmtMoney(+P.valor||0,'BRL'))+'/t',false)
+    +_cotLinha('(−) Frete','−'+(P.freteCur==='USD'?fmtMoney(+P.frete||0,'USD'):fmtMoney(+P.frete||0,'BRL'))+'/t',false)
+    +_cotLinha('Líquido em R$',fmtMoney(c.valorLiqR,'BRL')+'/t',false)
+    +_cotLinha('(÷) Câmbio R$ '+fx.toFixed(4),fmtMoney(c.valorUSD0,'USD')+'/t',false)
+    +_cotLinha('(−) Juros '+P.taxa+'% × '+c.meses+'m','−'+fmtMoney(c.jurosUSD,'USD')+'/t',false)
+    +(P.comissao>0?_cotLinha('(−) Comissão '+P.comissao+'%','−'+fmtMoney(c.comissaoUSD,'USD')+'/t',false):'')
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border);margin-top:4px;flex-wrap:wrap;gap:8px">'
+    +'<span style="font-size:13px;font-weight:700;color:var(--blue)">= Preço FOB líquido</span>'
+    +'<span style="font-size:16px;font-weight:800;color:var(--blue)">'+fmtMoney(c.precoFOB,'USD')+'/t</span>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0 0;border-top:2px solid '+(margem>=0?'var(--green)':'var(--red)')+';margin-top:6px;flex-wrap:wrap;gap:8px">'
+    +'<div style="min-width:0;flex:1">'
+    +'<div style="font-size:13px;font-weight:700;color:'+(margem>=0?'var(--green)':'var(--red)')+'">'+(margem>=0?'✅ Margem':'⚠️ Déficit')+'</div>'
+    +(P.embalagem==='granel'?'<div style="font-size:10px;color:var(--text3);margin-top:2px">vs custo granel ('+fmtMoney(custoAdj,'USD')+'/t)</div>':'<div style="font-size:10px;color:var(--text3);margin-top:2px">vs custo ('+fmtMoney(custoAdj,'USD')+'/t)</div>')
+    +'</div>'
+    +'<div style="text-align:right;flex-shrink:0">'
+    +'<div style="font-size:20px;font-weight:800;color:'+(margem>=0?'var(--green)':'var(--red)')+';letter-spacing:-0.01em">'+(margem>=0?'+ ':'− ')+fmtMoney(Math.abs(margem),'USD')+'/t</div>'
+    +'<div style="font-size:13px;color:var(--amber);font-weight:700">'+(margem>=0?'+ ':'− ')+fmtMoney(Math.abs(margem)*P.qty,'USD')+' total ('+P.qty+'t)</div>'
+    +'</div>'
+    +'</div>';
+}
+function _propRebuildTotal(){
+  const itens=S.propostas||[];
+  const tc=document.getElementById('propTotalContent');
+  if(!tc) return;
+  const fx=S.fx||5.20;
+  let totalTons=0,totalCusto=0,totalProposta=0,totalMargem=0;
+  itens.forEach(item=>{
+    const P=_propP_of(item);const c=_propCalcFOB(item,P,fx);
+    const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
+    totalTons+=P.qty;totalCusto+=custoAdj*P.qty;totalProposta+=c.precoFOB*P.qty;totalMargem+=(c.precoFOB-custoAdj)*P.qty;
+  });
+  const clientesItens=itens.map(it=>_propP_of(it).cliente).filter(Boolean);
+  const cliente=clientesItens.length?clientesItens[0]:'';
+  let resumo='';
+  resumo+='<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:.25rem">PROPOSTA</div>';
+  if(cliente) resumo+='<div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Cliente: <strong style="color:var(--text)">'+cliente+'</strong></div>';
+  resumo+='<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
+  resumo+=itens.map((item,i)=>{
+    const P=_propP_of(item);const c=_propCalcFOB(item,P,fx);
+    const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
+    const margem=(c.precoFOB-custoAdj)*P.qty;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
+      +'<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qty+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:'+(margem>=0?'var(--green)':'var(--red)')+'">'+(margem>=0?'+ ':'− ')+fmtMoney(Math.abs(margem),'USD')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">margem total</div></div>'
+      +'</div>';
+  }).join('');
+  resumo+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'
+    +'<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Total Custo</div><div style="font-size:15px;font-weight:800;color:var(--text)">'+fmtMoney(totalCusto,'USD')+'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Total Proposta</div><div style="font-size:15px;font-weight:800;color:var(--text)">'+fmtMoney(totalProposta,'USD')+'</div></div>'
+    +'</div>';
+  resumo+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:12px;border-top:2px solid '+(totalMargem>=0?'var(--green)':'var(--red)')+';gap:10px;flex-wrap:wrap">'
+    +'<div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">'+(totalMargem>=0?'Margem Total':'Déficit Total')+'</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totalTons.toFixed(1)+'t</div></div>'
+    +'<div style="font-size:24px;font-weight:800;color:'+(totalMargem>=0?'var(--green)':'var(--red)')+';letter-spacing:-0.02em;text-align:right">'+(totalMargem>=0?'+ ':'− ')+fmtMoney(Math.abs(totalMargem),'USD')+'</div>'
+    +'</div>';
+  tc.innerHTML=resumo;
+}
+function setItemPropParamLive(idx,key,value){
+  if(!S.propostas[idx]) return;
+  S.propostas[idx].params=S.propostas[idx].params||{};
+  if(key==='vcto'||key.endsWith('Cur')){
+    S.propostas[idx].params[key]=value;
+  } else {
+    const v=value===''||value==null?0:+value;
+    S.propostas[idx].params[key]=isNaN(v)?0:v;
   }
+  const itens=S.propostas||[];
+  const fx=S.fx||5.20;
+  itens.forEach((item,i)=>{
+    const P=_propP_of(item);
+    const c=_propCalcFOB(item,P,fx);
+    const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
+    const margem=c.precoFOB-custoAdj;
+    const ra=document.getElementById('prop-ra-'+i);
+    if(ra) ra.innerHTML=_propAnalysisInner(P,c,custoAdj,margem,fx);
+  });
+  _propRebuildTotal();
 }
 function recalcProposta(){
   const itens=S.propostas||[];
@@ -6236,7 +6317,7 @@ function recalcProposta(){
       +'</div>'
       +'</div>'
       // ── ANÁLISE ────────────────────────────────────────
-      +'<div style="margin-bottom:.25rem">'
+      +'<div id="prop-ra-'+i+'" style="margin-bottom:.25rem">'
       +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Análise</div>'
       +_cotLinha('Valor proposta CIF', (P.valorCur==='USD'?fmtMoney(+P.valor||0,'USD'):fmtMoney(+P.valor||0,'BRL'))+'/t', false)
       +_cotLinha('(−) Frete', '−'+(P.freteCur==='USD'?fmtMoney(+P.frete||0,'USD'):fmtMoney(+P.frete||0,'BRL'))+'/t', false)
