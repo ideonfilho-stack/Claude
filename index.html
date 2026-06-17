@@ -8387,6 +8387,23 @@ function removerItemCot(i){
   recalcCotacao();
 }
 
+function _cotP_of(item){
+  const p=item.params||{};
+  return {desc:p.desc!=null?p.desc:0,taxa:p.taxa!=null?p.taxa:1.6,prazo:p.prazo!=null?p.prazo:1,com:p.com!=null?p.com:0,frete:p.frete!=null?p.frete:0,qtd:p.qtd!=null?p.qtd:1,embalagem:p.embalagem||'bag',cur:p.cur||'USD',cliente:p.cliente||''};
+}
+function _cotCalcVenda(custoUSD,p){
+  const fxAdj=S.fx*0.99;
+  const freteUSD=fxAdj>0?(p.frete||0)/fxAdj:0;
+  const granelDesc=p.embalagem==='granel'?8:0;
+  const custoEff=custoUSD-(p.desc||0)-granelDesc;
+  const comJuros=custoEff*Math.pow(1+(p.taxa||0)/100,(p.prazo||0));
+  const com=p.com||0;
+  const comCom=com>0?comJuros/(1-com/100):comJuros;
+  return {venda:comCom+freteUSD,custoEff,comJuros,jurosVal:comJuros-custoEff,comissaoVal:comCom-comJuros,freteUSD,granelDesc,desc:p.desc||0};
+}
+function _cotFI(v,cur){return fmtMoney(v,cur==='BRL'?'BRL':'USD');}
+function _cotTC(v,cur){return cur==='BRL'?v*S.fx:v;}
+
 function recalcCotacao(){
   const itens=S.cotacao||[];
   // Frete BRL → USD usando câmbio com 1% de spread
@@ -8517,12 +8534,12 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('com',P.com,'0.1',45)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('frete',P.frete,'0.01',60)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('desc',P.desc,'0.01',55)+'</td>'
-        +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap;font-size:12px;color:var(--text2);font-weight:600">'+F(TC(X))+'</td>'
+        +'<td id="cot-rc-'+i+'" style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap;font-size:12px;color:var(--text2);font-weight:600">'+F(TC(X))+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
-        +'<span style="font-size:14px;font-weight:800;color:var(--green)">'+F(TC(calc.venda))+'</span>'
+        +'<span id="cot-rv-'+i+'" style="font-size:14px;font-weight:800;color:var(--green)">'+F(TC(calc.venda))+'</span>'
         +'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
-        +'<span style="font-size:13px;font-weight:700;color:var(--amber)">'+F(TC(totalItem))+'</span>'
+        +'<span id="cot-rt-'+i+'" style="font-size:13px;font-weight:700;color:var(--amber)">'+F(TC(totalItem))+'</span>'
         +'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center;white-space:nowrap">'
         +'<button onclick="abrirCopiarParams('+i+')" style="background:none;border:none;cursor:pointer;color:var(--blue);padding:4px;border-radius:6px;font-size:13px" title="Copiar parâmetros para outra linha">📋</button>'
@@ -8548,7 +8565,7 @@ function recalcCotacao(){
 
       const detailRow = '<tr style="background:'+rowBg+';border-bottom:2px solid var(--border2)">'
         +'<td colspan="16" style="padding:4px 10px 8px 10px">'
-        +'<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">'+detalheHTML+'</div>'
+        +'<div id="cot-rd-'+i+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">'+detalheHTML+'</div>'
         +'</td>'
         +'</tr>';
 
@@ -8633,15 +8650,57 @@ function setItemParam(idx, key, value){
   recalcCotacao();
 }
 function setItemParamLive(idx, key, value){
-  const ae=document.activeElement;
-  const savedKey=ae?ae.dataset.ckey:null;
-  const savedIdx=ae?ae.dataset.cidx:null;
-  const savedSel=ae?ae.selectionStart:null;
-  setItemParam(idx,key,value);
-  if(savedKey){
-    const el=document.querySelector('[data-ckey="'+savedKey+'"][data-cidx="'+savedIdx+'"]');
-    if(el){ el.focus(); try{el.setSelectionRange(savedSel,savedSel);}catch(e){} }
+  if(!S.cotacao[idx]) return;
+  S.cotacao[idx].params=S.cotacao[idx].params||{};
+  if(key==='cliente'||key==='embalagem'||key==='cur'){
+    S.cotacao[idx].params[key]=(value||'').toString();
+  } else {
+    const v=value===''||value==null?null:+value;
+    S.cotacao[idx].params[key]=isNaN(v)?null:v;
   }
+  // Atualiza apenas células de resultado — sem recriar tabela, sem perder foco
+  const itens=S.cotacao||[];
+  const SEP='<span style="color:var(--border2);margin:0 4px">·</span>';
+  itens.forEach((item,i)=>{
+    const P=_cotP_of(item);
+    const X=item.custo;
+    const c=_cotCalcVenda(X,P);
+    const F=v=>_cotFI(v,P.cur);
+    const TC=v=>_cotTC(v,P.cur);
+    const rc=document.getElementById('cot-rc-'+i);
+    const rv=document.getElementById('cot-rv-'+i);
+    const rt=document.getElementById('cot-rt-'+i);
+    const rd=document.getElementById('cot-rd-'+i);
+    if(rc) rc.textContent=F(TC(X));
+    if(rv) rv.textContent=F(TC(c.venda));
+    if(rt) rt.textContent=F(TC(c.venda*P.qtd));
+    if(rd){
+      const det=[['Custo base',F(TC(X))]]
+        .concat(P.desc>0?[['(−) Desc. Y','−'+F(TC(P.desc))]]:[])
+        .concat(P.embalagem==='granel'?[['(−) Granel','−'+F(TC(8))]]:[])
+        .concat([['Custo efetivo',F(TC(c.custoEff))]])
+        .concat([['(+) Juros '+P.prazo+'m','+'+F(TC(c.jurosVal))]])
+        .concat(P.com>0?[['(+) Com. '+P.com+'%','+'+F(TC(c.comissaoVal))]]:[])
+        .concat(P.frete>0?[['(+) Frete','+'+F(TC(c.freteUSD))]]:[]);
+      rd.innerHTML=det.map(([l,v])=>'<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2)"><span style="color:var(--text3)">'+l+':</span><strong style="color:var(--text)">'+v+'</strong></span>').join(SEP);
+    }
+  });
+  // Atualiza resumo (está fora da tabela, pode ser recriado)
+  const tc=document.getElementById('cotTotalContent');
+  if(!tc) return;
+  let totT=0,totU=0;
+  itens.forEach(item=>{const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);totT+=P.qtd;totU+=c.venda*P.qtd;});
+  const cli=itens.map(it=>_cotP_of(it).cliente).filter(Boolean)[0]||'';
+  let r='<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:.25rem">COTAÇÃO</div>';
+  if(cli) r+='<div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Cliente: <strong style="color:var(--text)">'+cli+'</strong></div>';
+  r+='<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
+  r+=itens.map((item,i)=>{
+    const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);
+    const F=v=>_cotFI(v,P.cur);const TC=v=>_cotTC(v,P.cur);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+F(TC(c.venda))+'/t</div><div style="font-size:11px;color:var(--amber)">'+F(TC(c.venda*P.qtd))+'</div></div></div>';
+  }).join('');
+  r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral (USD)</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totU,'USD')+'</div><div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:4px">'+fmtMoney(totU*S.fx,'BRL')+'</div></div></div>';
+  tc.innerHTML=r;
 }
 function resetItemParam(idx, key){
   if(!S.cotacao[idx] || !S.cotacao[idx].params) return;
