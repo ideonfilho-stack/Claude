@@ -3101,6 +3101,7 @@ select:focus-visible{
   <div class="crm-subtab">
     <button class="crm-subtab-btn active" id="crmTabPipeline" onclick="crmShowTab('pipeline')">Pipeline</button>
     <button class="crm-subtab-btn" id="crmTabClientes" onclick="crmShowTab('clientes')">Clientes</button>
+    <button class="crm-subtab-btn" id="crmTabDash" onclick="crmShowTab('dash')">Dashboard</button>
   </div>
   <div id="crmPipelineView">
     <div class="crm-kanban" id="crmKanban"></div>
@@ -3108,6 +3109,20 @@ select:focus-visible{
   <div id="crmClientesView" style="display:none">
     <div class="crm-cliente-grid" id="crmClienteGrid"></div>
     <div id="crmClienteEmpty" style="text-align:center;padding:3rem;color:var(--text3);font-size:13px;display:none">Nenhum cliente cadastrado ainda.</div>
+  </div>
+  <div id="crmDashView" style="display:none">
+    <div id="crmDashFilters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+      <span style="font-size:11px;color:var(--text3)">Categoria:</span>
+      <span id="crmDashCatChips"></span>
+      <span style="font-size:11px;color:var(--text3);margin-left:8px">Subcategoria:</span>
+      <span id="crmDashSubChips"></span>
+    </div>
+    <div id="crmDashKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1rem">
+      <div class="chart-box" style="padding:16px"><canvas id="crmDashBar" height="220"></canvas></div>
+      <div class="chart-box" style="padding:16px"><canvas id="crmDashPie" height="220"></canvas></div>
+    </div>
+    <div class="chart-box" style="padding:16px;margin-bottom:1rem" id="crmDashCompetTable"></div>
   </div>
   <!-- Detail modal (shared for lead and client) -->
   <div id="crmModalOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)fecharCrmModal()">
@@ -11462,13 +11477,34 @@ const CRM_CATEGORIAS=[
   {key:'spot',    lbl:'Spot',     color:'#5b8cff'},
 ];
 const CRM_SUBCATEGORIAS=['Trade','Revenda','Usinas','Grupo de Compras','Consumidor Final PF','Consumidor Final PJ'];
+const CRM_EMPRESAS=[
+  {key:'fertigran',lbl:'Fertigran',color:'#4ade80'},
+  {key:'cibra',lbl:'Cibra',color:'#a78bfa'},
+  {key:'comigo',lbl:'COMIGO',color:'#f8b53e'},
+  {key:'eurochem',lbl:'Eurochem',color:'#fb923c'},
+  {key:'mosaic',lbl:'Mosaic',color:'#5b8cff'},
+  {key:'yara',lbl:'Yara',color:'#34d399'},
+  {key:'cargill',lbl:'Cargill',color:'#f472b6'},
+  {key:'adm',lbl:'ADM',color:'#94a3b8'},
+  {key:'ldc',lbl:'LDC',color:'#e879f9'},
+  {key:'bunge',lbl:'Bunge',color:'#38bdf8'},
+  {key:'cofco',lbl:'COFCO',color:'#fbbf24'},
+  {key:'sudoeste',lbl:'Sudoeste',color:'#6ee7b7'},
+  {key:'gen',lbl:'GEN',color:'#c4b5fd'},
+  {key:'nutrien',lbl:'Nutrien',color:'#fca5a5'},
+  {key:'rifertil',lbl:'Rifertil',color:'#67e8f9'},
+  {key:'fertiman',lbl:'Fertiman',color:'#86efac'},
+  {key:'outras',lbl:'Outras',color:'#9ba2bd'},
+];
+const CRM_PRODUTOS_FERTIGRAN=['Convencional','Fertigran P','Super N Pro','UHF','Mastergran'];
+const CRM_SAFRAS=[{key:'verao',lbl:'Verão'},{key:'irrigado',lbl:'Irrigado'},{key:'safrinha',lbl:'Safrinha'}];
 
 function crmId(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function crmNow(){return new Date().toISOString();}
 function crmFmtDate(iso){if(!iso)return'';try{const d=new Date(iso);return d.toLocaleDateString('pt-BR');}catch(e){return iso;}}
 function crmFmtMoney(v){return'$'+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}
 function crmCliente(id){return(S.crm&&S.crm.clientes||[]).find(c=>c.id===id)||null;}
-function crmCliNome(id){const c=crmCliente(id);return c?(c.nome+(c.fazenda?' · '+c.fazenda:'')):'—';}
+function crmCliNome(id){const c=crmCliente(id);return c?(c.nome+(c.municipio?' · '+c.municipio:'')):'—';}
 function crmIsOverdue(lead){
   if(!lead.proximaAcao||!lead.proximaAcao.data) return false;
   return new Date(lead.proximaAcao.data)<new Date();
@@ -11479,17 +11515,22 @@ function renderCRM(){
   S.crm.clientes=S.crm.clientes||[];
   S.crm.leads=S.crm.leads||[];
   const view=document.getElementById('crmPipelineView');
+  const dashView=document.getElementById('crmDashView');
   if(view&&view.style.display!=='none') renderKanban();
+  else if(dashView&&dashView.style.display!=='none') renderCrmDashboard();
   else renderClientesGrid();
 }
 
 function crmShowTab(tab){
   document.getElementById('crmPipelineView').style.display=tab==='pipeline'?'':'none';
   document.getElementById('crmClientesView').style.display=tab==='clientes'?'':'none';
+  document.getElementById('crmDashView').style.display=tab==='dash'?'':'none';
   document.getElementById('crmTabPipeline').classList.toggle('active',tab==='pipeline');
   document.getElementById('crmTabClientes').classList.toggle('active',tab==='clientes');
+  document.getElementById('crmTabDash').classList.toggle('active',tab==='dash');
   if(tab==='pipeline') renderKanban();
-  else renderClientesGrid();
+  else if(tab==='clientes') renderClientesGrid();
+  else renderCrmDashboard();
 }
 
 function crmDoSearch(){
@@ -11507,7 +11548,7 @@ function renderKanban(q){
   const filterFn=lead=>{
     if(!q) return true;
     const cli=crmCliente(lead.clienteId);
-    const txt=((lead.titulo||'')+(cli?cli.nome+cli.fazenda:'')+(lead.etapa||'')).toLowerCase();
+    const txt=((lead.titulo||'')+(cli?cli.nome+(cli.municipio||''):'')+(lead.etapa||'')).toLowerCase();
     return txt.includes(q);
   };
   kb.innerHTML=CRM_ETAPAS.map(et=>{
@@ -11606,7 +11647,7 @@ function renderClientesGrid(q){
   const grid=document.getElementById('crmClienteGrid');
   const empty=document.getElementById('crmClienteEmpty');
   if(!grid) return;
-  const filtered=q?clientes.filter(c=>(c.nome+c.fazenda+c.municipio+c.estado+c.culturas+(c.categoria||'')+(c.subcategoria||'')).toLowerCase().includes(q)):clientes;
+  const filtered=q?clientes.filter(c=>((c.nome||'')+(c.municipio||'')+(c.contato||'')+(c.categoria||'')+(c.subcategoria||'')).toLowerCase().includes(q)):clientes;
   if(!filtered.length){
     grid.innerHTML='';
     if(empty) empty.style.display='';
@@ -11617,22 +11658,20 @@ function renderClientesGrid(q){
   grid.innerHTML=filtered.map(c=>{
     const cLeads=leads.filter(l=>l.clienteId===c.id&&l.etapa!=='perdido');
     const totalVal=cLeads.reduce((a,l)=>a+(+l.valorUSD||0),0);
-    const culturas=(c.culturas||'').split(',').map(s=>s.trim()).filter(Boolean);
     const catObj=CRM_CATEGORIAS.find(x=>x.key===c.categoria);
+    const potTotal=+c.potencialTotal||(+c.potencialVerao||0)+(+c.potencialIrrigado||0)+(+c.potencialSafrinha||0);
     return `<div class="crm-cli-card" onclick="abrirCliente('${c.id}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:3px">
         <div style="font-size:13px;font-weight:800;color:var(--text)">${c.nome}</div>
         ${catObj?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${catObj.color}22;color:${catObj.color};border:1px solid ${catObj.color}55;white-space:nowrap;flex-shrink:0">${catObj.lbl}</span>`:''}
       </div>
       ${c.subcategoria?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${c.subcategoria}</div>`:''}
-      ${c.fazenda?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${c.fazenda}</div>`:''}
-      ${c.municipio?`<div style="font-size:11px;color:var(--text3)">${c.municipio}${c.estado?' / '+c.estado:''}</div>`:''}
+      ${c.municipio?`<div style="font-size:11px;color:var(--text3);margin-bottom:2px">${c.municipio}</div>`:''}
+      ${c.contato?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${c.contato}${c.telefone?' · '+c.telefone:''}</div>`:''}
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
-        ${c.area?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Área:</span> ${(+c.area).toLocaleString('pt-BR')} ha</div>`:''}
-        ${c.volumeAnual?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Vol.:</span> ${c.volumeAnual}t/ano</div>`:''}
+        ${potTotal>0?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Pot.:</span> ${potTotal.toLocaleString('pt-BR')}t</div>`:''}
         ${totalVal>0?`<div style="font-size:11px;font-weight:700;color:var(--blue)">${crmFmtMoney(totalVal)} em pipeline</div>`:''}
       </div>
-      ${culturas.length?`<div class="crm-tags">${culturas.map(t=>`<span class="crm-tag">${t}</span>`).join('')}</div>`:''}
       ${cLeads.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">${cLeads.length} oportunidade${cLeads.length>1?'s':''} ativa${cLeads.length>1?'s':''}</div>`:''}
     </div>`;
   }).join('');
@@ -11660,7 +11699,7 @@ function abrirNovoLead(etapaInit){
   S.crm=S.crm||{clientes:[],leads:[]};
   const clientes=S.crm.clientes||[];
   const etapa=etapaInit||'prospeccao';
-  const cliOpts=clientes.map((c)=>`<option value="${c.id}">${c.nome}${c.fazenda?' — '+c.fazenda:''}</option>`).join('');
+  const cliOpts=clientes.map((c)=>`<option value="${c.id}">${c.nome}${c.municipio?' — '+c.municipio:''}</option>`).join('');
   const etapaOpts=CRM_ETAPAS.map(e=>`<option value="${e.key}"${e.key===etapa?' selected':''}>${e.lbl}</option>`).join('');
   const tipoOpts=CRM_TIPOS_ACAO.map(t=>`<option value="${t}">${t}</option>`).join('');
   _showModal(`
@@ -11693,6 +11732,28 @@ function abrirNovoLead(etapaInit){
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ld-atd" type="date" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ld-ato" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
     </div>
+    <div class="crm-section-title">Fechamento</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Empresa</div>
+        <select id="ld-emp" onchange="document.getElementById('ld-prod-row').style.display=this.value==='fertigran'?'':'none'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+          <option value="">— selecionar —</option>
+          ${CRM_EMPRESAS.map(e=>`<option value="${e.key}">${e.lbl}</option>`).join('')}
+        </select>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Safra</div>
+        <select id="ld-safra" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+          <option value="">— selecionar —</option>
+          ${CRM_SAFRAS.map(s=>`<option value="${s.key}">${s.lbl}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Volume fechado (t)</div><input id="ld-volf" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+    <div id="ld-prod-row" style="display:none;margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Produto Fertigran</div>
+      <select id="ld-prod" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+        <option value="">— selecionar —</option>
+        ${CRM_PRODUTOS_FERTIGRAN.map(p=>`<option value="${p}">${p}</option>`).join('')}
+      </select>
+    </div>
     <div class="crm-section-title">Referência de cotação</div>
     <input id="ld-cot" type="text" placeholder="Ex: Cotação Março Rev.2" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;margin-bottom:1rem">
     <button class="btn btn-green" style="width:100%" onclick="salvarNovoLead()">Salvar Lead</button>
@@ -11703,6 +11764,7 @@ function salvarNovoLead(){
   S.crm=S.crm||{clientes:[],leads:[]};
   const titulo=(document.getElementById('ld-titulo').value||'').trim();
   if(!titulo){alert('Informe um título.');return;}
+  const empVal=document.getElementById('ld-emp')?document.getElementById('ld-emp').value||'':'';
   const lead={
     id:crmId(),
     clienteId:document.getElementById('ld-cliente').value||'',
@@ -11713,6 +11775,10 @@ function salvarNovoLead(){
     probabilidade:+document.getElementById('ld-prob').value||50,
     proximaAcao:{tipo:document.getElementById('ld-atp').value||'',data:document.getElementById('ld-atd').value||'',obs:document.getElementById('ld-ato').value||''},
     cotacao:document.getElementById('ld-cot').value||'',
+    empresa:empVal,
+    safra:document.getElementById('ld-safra')?document.getElementById('ld-safra').value||'':'',
+    volumeFechado:document.getElementById('ld-volf')?+document.getElementById('ld-volf').value||0:0,
+    produto:(empVal==='fertigran'&&document.getElementById('ld-prod'))?document.getElementById('ld-prod').value||'':'',
     historico:[{ts:crmNow(),obs:'Lead criado.'}],
     criadoEm:crmNow(),fechadoEm:null
   };
@@ -11736,7 +11802,7 @@ function abrirLead(id){
       <div style="width:10px;height:10px;border-radius:50%;background:${etapa.color};flex-shrink:0"></div>
       <div style="font-size:15px;font-weight:800;flex:1">${lead.titulo}</div>
     </div>
-    ${cli?`<div style="font-size:11px;color:var(--text3);margin-bottom:.6rem">${cli.nome}${cli.fazenda?' · '+cli.fazenda:''}${cli.municipio?' · '+cli.municipio:''}</div>`:'<div style="margin-bottom:.6rem"></div>'}
+    ${cli?`<div style="font-size:11px;color:var(--text3);margin-bottom:.6rem">${cli.nome}${cli.municipio?' · '+cli.municipio:''}</div>`:'<div style="margin-bottom:.6rem"></div>'}
     <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:.75rem">
       <button class="crm-subtab-btn active" id="lt-det" onclick="crmLeadTab('${id}','det')" style="flex:1;font-size:11px">Detalhes</button>
       <button class="crm-subtab-btn" id="lt-cot" onclick="crmLeadTab('${id}','cot')" style="flex:1;font-size:11px">Cotações${nc(lead)?` (${nc(lead)})`:''}</button>
@@ -11784,6 +11850,28 @@ function _crmLeadDetHTML(id,lead){
       </div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ed-atd" type="date" value="${(lead.proximaAcao&&lead.proximaAcao.data)||''}" onchange="crmEditProxAcao('${id}')" style="${INP}"></div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ed-ato" type="text" value="${(lead.proximaAcao&&lead.proximaAcao.obs)||''}" onchange="crmEditProxAcao('${id}')" style="${INP}"></div>
+    </div>
+    <div class="crm-section-title">Fechamento</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Empresa</div>
+        <select onchange="crmEditLeadField('${id}','empresa',this.value);document.getElementById('ed-prod-row').style.display=this.value==='fertigran'?'':'none'" style="${INP}">
+          <option value="">— selecionar —</option>
+          ${CRM_EMPRESAS.map(e=>`<option value="${e.key}"${(lead.empresa||'')===(e.key)?' selected':''}>${e.lbl}</option>`).join('')}
+        </select>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Safra</div>
+        <select onchange="crmEditLeadField('${id}','safra',this.value)" style="${INP}">
+          <option value="">— selecionar —</option>
+          ${CRM_SAFRAS.map(s=>`<option value="${s.key}"${(lead.safra||'')===(s.key)?' selected':''}>${s.lbl}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Volume fechado (t)</div><input type="number" min="0" value="${lead.volumeFechado||''}" onchange="crmEditLeadField('${id}','volumeFechado',+this.value)" style="${INP}"></div>
+    <div id="ed-prod-row" style="display:${(lead.empresa||'')==='fertigran'?'':'none'};margin-bottom:10px"><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Produto Fertigran</div>
+      <select onchange="crmEditLeadField('${id}','produto',this.value)" style="${INP}">
+        <option value="">— selecionar —</option>
+        ${CRM_PRODUTOS_FERTIGRAN.map(p=>`<option value="${p}"${(lead.produto||'')===(p)?' selected':''}>${p}</option>`).join('')}
+      </select>
     </div>
     <div class="crm-section-title">Registrar atividade</div>
     <div style="display:flex;gap:8px;margin-bottom:1rem">
@@ -12089,42 +12177,49 @@ function crmDeleteLead(id){
 // ── CLIENTE MODAL ─────────────────────────────────────────────────────────
 
 function abrirNovoCliente(){
+  const INP='width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none';
   _showModal(`
     <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
     <div style="font-size:16px;font-weight:800;margin-bottom:1rem">Novo Cliente</div>
-    <div style="display:grid;gap:10px">
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome *</div><input id="cl-nome" type="text" placeholder="Nome do cliente / empresa" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Categoria</div>
-          <select id="cl-cat" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">
-            <option value="">— nenhuma —</option>
-            ${CRM_CATEGORIAS.map(x=>`<option value="${x.key}">${x.lbl}</option>`).join('')}
-          </select>
-        </div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Subcategoria</div>
-          <select id="cl-sub" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">
-            <option value="">— nenhuma —</option>
-            ${CRM_SUBCATEGORIAS.map(s=>`<option value="${s}">${s}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Fazenda</div><input id="cl-faz" type="text" placeholder="Nome da propriedade" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Estado</div><input id="cl-uf" type="text" maxlength="2" placeholder="MT" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;text-transform:uppercase"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Área (ha)</div><input id="cl-area" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Volume anual (t)</div><input id="cl-vol" type="number" min="0" placeholder="0" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      </div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Culturas (separar por vírgula)</div><input id="cl-cult" type="text" placeholder="Ex: Soja, Milho, Algodão" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      <div class="crm-section-title" style="margin-top:4px">Contato principal</div>
+    <div class="crm-section-title">Dados Pessoais</div>
+    <div style="display:grid;gap:10px;margin-bottom:6px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome do Cliente *</div><input id="cl-nome" type="text" placeholder="Nome do cliente / empresa" style="${INP};font-size:13px"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome</div><input id="cl-ctn" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Telefone</div><input id="cl-ctt" type="tel" placeholder="(00) 0000-0000" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">E-mail</div><input id="cl-cte" type="email" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Contato</div><input id="cl-cto" type="text" placeholder="Responsável" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Telefone</div><input id="cl-tel" type="tel" placeholder="(00) 00000-0000" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">E-mail</div><input id="cl-email" type="email" style="${INP}"></div>
       </div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Observações</div><textarea id="cl-obs" rows="2" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none;resize:vertical"></textarea></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso - MT" style="${INP}"></div>
+    </div>
+    <div class="crm-section-title">Categoria</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Categoria</div>
+        <select id="cl-cat" style="${INP}">
+          <option value="">— nenhuma —</option>
+          ${CRM_CATEGORIAS.map(x=>`<option value="${x.key}">${x.lbl}</option>`).join('')}
+        </select>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Subcategoria</div>
+        <select id="cl-sub" style="${INP}">
+          <option value="">— nenhuma —</option>
+          ${CRM_SUBCATEGORIAS.map(s=>`<option value="${s}">${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="crm-section-title">Informações Comerciais</div>
+    <div style="display:grid;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Área Verão (ha)</div><input id="cl-av" type="number" min="0" placeholder="0" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Área Irrigado (ha)</div><input id="cl-ai" type="number" min="0" placeholder="0" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Área Safrinha (ha)</div><input id="cl-as" type="number" min="0" placeholder="0" style="${INP}"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Verão (t)</div><input id="cl-pv" type="number" min="0" placeholder="0" oninput="(function(){const v=(+document.getElementById('cl-pv').value||0)+(+document.getElementById('cl-pi').value||0)+(+document.getElementById('cl-ps').value||0);document.getElementById('cl-pt').value=v||''})()" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Irrigado (t)</div><input id="cl-pi" type="number" min="0" placeholder="0" oninput="(function(){const v=(+document.getElementById('cl-pv').value||0)+(+document.getElementById('cl-pi').value||0)+(+document.getElementById('cl-ps').value||0);document.getElementById('cl-pt').value=v||''})()" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Safrinha (t)</div><input id="cl-ps" type="number" min="0" placeholder="0" oninput="(function(){const v=(+document.getElementById('cl-pv').value||0)+(+document.getElementById('cl-pi').value||0)+(+document.getElementById('cl-ps').value||0);document.getElementById('cl-pt').value=v||''})()" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Total (t)</div><input id="cl-pt" type="number" min="0" placeholder="auto" style="${INP};border-color:var(--blue)"></div>
+      </div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Observações</div><textarea id="cl-obs" rows="2" style="${INP};resize:vertical"></textarea></div>
     </div>
     <button class="btn btn-green" style="width:100%;margin-top:1rem" onclick="salvarNovoCliente()">Salvar Cliente</button>
   `);
@@ -12134,21 +12229,26 @@ function salvarNovoCliente(){
   S.crm=S.crm||{clientes:[],leads:[]};
   const nome=(document.getElementById('cl-nome').value||'').trim();
   if(!nome){alert('Informe o nome do cliente.');return;}
-  const ctn=document.getElementById('cl-ctn').value||'';
-  const ctt=document.getElementById('cl-ctt').value||'';
-  const cte=document.getElementById('cl-cte').value||'';
+  const pv=+document.getElementById('cl-pv').value||0;
+  const pi=+document.getElementById('cl-pi').value||0;
+  const ps=+document.getElementById('cl-ps').value||0;
+  const ptRaw=+document.getElementById('cl-pt').value||0;
   const cli={
     id:crmId(),
     nome,
+    contato:document.getElementById('cl-cto').value||'',
+    telefone:document.getElementById('cl-tel').value||'',
+    email:document.getElementById('cl-email').value||'',
+    municipio:document.getElementById('cl-mun').value||'',
     categoria:document.getElementById('cl-cat').value||'',
     subcategoria:document.getElementById('cl-sub').value||'',
-    fazenda:document.getElementById('cl-faz').value||'',
-    municipio:document.getElementById('cl-mun').value||'',
-    estado:(document.getElementById('cl-uf').value||'').toUpperCase(),
-    area:+document.getElementById('cl-area').value||0,
-    volumeAnual:+document.getElementById('cl-vol').value||0,
-    culturas:document.getElementById('cl-cult').value||'',
-    contatos:(ctn||ctt||cte)?[{nome:ctn,tel:ctt,email:cte}]:[],
+    areaVerao:+document.getElementById('cl-av').value||0,
+    areaIrrigado:+document.getElementById('cl-ai').value||0,
+    areaSafrinha:+document.getElementById('cl-as').value||0,
+    potencialVerao:pv,
+    potencialIrrigado:pi,
+    potencialSafrinha:ps,
+    potencialTotal:ptRaw||(pv+pi+ps),
     obs:document.getElementById('cl-obs').value||'',
     criadoEm:crmNow()
   };
@@ -12162,40 +12262,103 @@ function abrirCliente(id){
   const cli=S.crm.clientes.find(c=>c.id===id);
   if(!cli) return;
   const leads=(S.crm.leads||[]).filter(l=>l.clienteId===id);
-  const ctt=(cli.contatos&&cli.contatos[0])||{};
+  const catObj=CRM_CATEGORIAS.find(x=>x.key===cli.categoria);
+
+  // Closed leads
+  const fechados=leads.filter(l=>l.etapa==='fechado');
+  const fgLeads=fechados.filter(l=>l.empresa==='fertigran');
+  const ccLeads=fechados.filter(l=>l.empresa&&l.empresa!=='fertigran');
+  const tons=l=>(+l.volumeFechado||+l.qtdTons||0);
+  const fgTons=fgLeads.reduce((a,l)=>a+tons(l),0);
+  const ccTons=ccLeads.reduce((a,l)=>a+tons(l),0);
+  const prodMap={};
+  fgLeads.forEach(l=>{const p=l.produto||'Convencional';prodMap[p]=(prodMap[p]||0)+tons(l);});
+  const ccMap={};
+  ccLeads.forEach(l=>{const k=l.empresa;if(!ccMap[k])ccMap[k]=0;ccMap[k]+=tons(l);});
+
+  // Per-safra stats
+  const safraStats=[
+    {lbl:'Verão',  aKey:'areaVerao',   pKey:'potencialVerao',   sKey:'verao'},
+    {lbl:'Irrigado',aKey:'areaIrrigado',pKey:'potencialIrrigado',sKey:'irrigado'},
+    {lbl:'Safrinha',aKey:'areaSafrinha',pKey:'potencialSafrinha',sKey:'safrinha'},
+  ].map(s=>{
+    const pot=+cli[s.pKey]||0;
+    const fg=fechados.filter(l=>l.empresa==='fertigran'&&l.safra===s.sKey).reduce((a,l)=>a+tons(l),0);
+    return {...s,area:+cli[s.aKey]||0,pot,fg,pct:pot>0?Math.round(fg/pot*100):0};
+  });
+  const potTotal=+cli.potencialTotal||(+cli.potencialVerao||0)+(+cli.potencialIrrigado||0)+(+cli.potencialSafrinha||0);
+  const pctTot=potTotal>0?Math.round(fgTons/potTotal*100):0;
+  const pctColor=p=>p>=50?'#4ade80':p>=25?'#f8b53e':'#f87171';
+
   const leadsHtml=leads.map(l=>{
     const et=CRM_ETAPAS.find(e=>e.key===l.etapa)||CRM_ETAPAS[0];
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:8px;cursor:pointer" onclick="fecharCrmModal();setTimeout(()=>abrirLead('${l.id}'),50)">
       <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--text)">${l.titulo}</div>
         <div style="display:flex;align-items:center;gap:5px;margin-top:2px"><div style="width:7px;height:7px;border-radius:50%;background:${et.color}"></div><span style="font-size:10px;color:var(--text3)">${et.lbl}</span></div>
       </div>
-      <div style="text-align:right;flex-shrink:0">${l.valorUSD?`<div style="font-size:12px;font-weight:700;color:var(--blue)">${crmFmtMoney(l.valorUSD)}</div>`:''}
-        ${l.qtdTons?`<div style="font-size:10px;color:var(--text3)">${l.qtdTons}t</div>`:''}
+      <div style="text-align:right;flex-shrink:0">
+        ${l.valorUSD?`<div style="font-size:12px;font-weight:700;color:var(--blue)">${crmFmtMoney(l.valorUSD)}</div>`:''}
+        ${tons(l)?`<div style="font-size:10px;color:var(--text3)">${tons(l)}t</div>`:''}
       </div>
     </div>`;
   }).join('');
-  const catObj2=CRM_CATEGORIAS.find(x=>x.key===cli.categoria);
+
   _showModal(`
     <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:2px">
       <div style="font-size:16px;font-weight:800;color:var(--text)">${cli.nome}</div>
-      ${catObj2?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${catObj2.color}22;color:${catObj2.color};border:1px solid ${catObj2.color}55;white-space:nowrap;flex-shrink:0">${catObj2.lbl}</span>`:''}
+      ${catObj?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${catObj.color}22;color:${catObj.color};border:1px solid ${catObj.color}55;white-space:nowrap;flex-shrink:0">${catObj.lbl}</span>`:''}
     </div>
-    ${cli.subcategoria?`<div style="font-size:11px;color:var(--text3);margin-bottom:4px">${cli.subcategoria}</div>`:''}
-    ${cli.fazenda?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${cli.fazenda}</div>`:''}
-    ${cli.municipio?`<div style="font-size:11px;color:var(--text3);margin-bottom:1rem">${cli.municipio}${cli.estado?' / '+cli.estado:''}</div>`:'<div style="margin-bottom:1rem"></div>'}
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
-      ${cli.area?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Área</div><div style="font-size:14px;font-weight:800;color:var(--text)">${(+cli.area).toLocaleString('pt-BR')} ha</div></div>`:''}
-      ${cli.volumeAnual?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Volume</div><div style="font-size:14px;font-weight:800;color:var(--text)">${cli.volumeAnual}t/ano</div></div>`:''}
-      ${cli.culturas?`<div><div style="font-size:9.5px;color:var(--text3);text-transform:uppercase;font-weight:700">Culturas</div><div style="font-size:12px;font-weight:600;color:var(--text)">${cli.culturas}</div></div>`:''}
+    ${cli.subcategoria?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">${cli.subcategoria}</div>`:''}
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:1rem">
+      ${cli.municipio?`<div style="font-size:12px;color:var(--text2)">📍 ${cli.municipio}</div>`:''}
+      ${cli.contato?`<div style="font-size:12px;color:var(--text2)">👤 ${cli.contato}</div>`:''}
+      ${cli.telefone?`<a href="tel:${cli.telefone}" style="font-size:12px;color:var(--blue);text-decoration:none">📞 ${cli.telefone}</a>`:''}
+      ${cli.email?`<a href="mailto:${cli.email}" style="font-size:12px;color:var(--blue);text-decoration:none">✉️ ${cli.email}</a>`:''}
     </div>
-    ${ctt.nome||ctt.tel||ctt.email?`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:1rem">
-      ${ctt.nome?`<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px">${ctt.nome}</div>`:''}
-      <div style="display:flex;gap:16px;flex-wrap:wrap">
-        ${ctt.tel?`<a href="tel:${ctt.tel}" style="font-size:12px;color:var(--blue);text-decoration:none">📞 ${ctt.tel}</a>`:''}
-        ${ctt.email?`<a href="mailto:${ctt.email}" style="font-size:12px;color:var(--blue);text-decoration:none">✉️ ${ctt.email}</a>`:''}
+
+    <div class="crm-section-title">Informações Comerciais</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:1rem">
+      <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
+        <th style="text-align:left;padding:4px 6px">Safra</th>
+        <th style="text-align:right;padding:4px 6px">Área (ha)</th>
+        <th style="text-align:right;padding:4px 6px">Potencial (t)</th>
+        <th style="text-align:right;padding:4px 6px">Fertigran (t)</th>
+        <th style="text-align:right;padding:4px 6px">% Mercado</th>
+      </tr></thead>
+      <tbody>
+        ${safraStats.map(s=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:5px 6px;font-weight:700;color:var(--text)">${s.lbl}</td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text2)">${s.area.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text2)">${s.pot.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:5px 6px;color:#4ade80;font-weight:700">${s.fg.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:5px 6px"><span style="color:${pctColor(s.pct)};font-weight:700">${s.pct}%</span></td>
+        </tr>`).join('')}
+        <tr style="border-top:2px solid var(--border);font-weight:800">
+          <td style="padding:6px 6px;color:var(--text)">Total</td>
+          <td style="text-align:right;padding:6px 6px;color:var(--text2)">${safraStats.reduce((a,s)=>a+s.area,0).toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:6px 6px;color:var(--text2)">${potTotal.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:6px 6px;color:#4ade80;font-weight:700">${fgTons.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:6px 6px"><span style="color:${pctColor(pctTot)};font-weight:700">${pctTot}%</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${fechados.length?`
+    <div class="crm-section-title">Resumo de Fechamentos</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem">
+      <div style="background:#4ade8018;border:1px solid #4ade8044;border-radius:8px;padding:10px 14px;flex:1;min-width:130px">
+        <div style="font-size:10px;color:#4ade80;font-weight:700;text-transform:uppercase;margin-bottom:3px">Fertigran</div>
+        <div style="font-size:20px;font-weight:800;color:#4ade80">${fgTons.toLocaleString('pt-BR')}t</div>
+        ${Object.keys(prodMap).length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.keys(prodMap).map(p=>`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:#4ade8025;color:#4ade80">${p}: ${prodMap[p]}t</span>`).join('')}</div>`:''}
+      </div>
+      <div style="background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.3);border-radius:8px;padding:10px 14px;flex:1;min-width:130px">
+        <div style="font-size:10px;color:#fb923c;font-weight:700;text-transform:uppercase;margin-bottom:3px">Concorrentes</div>
+        <div style="font-size:20px;font-weight:800;color:#fb923c">${ccTons.toLocaleString('pt-BR')}t</div>
+        ${Object.keys(ccMap).length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${Object.keys(ccMap).map(k=>{const e=CRM_EMPRESAS.find(x=>x.key===k);return`<span style="font-size:10px;padding:2px 7px;border-radius:8px;background:${(e?.color||'#9ba2bd')}22;color:${e?.color||'#9ba2bd'}">${e?.lbl||k}: ${ccMap[k]}t</span>`;}).join('')}</div>`:''}
       </div>
     </div>`:''}
+
     ${cli.obs?`<div style="font-size:12px;color:var(--text2);margin-bottom:1rem;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">${cli.obs}</div>`:''}
     <div class="crm-section-title">Oportunidades (${leads.length})</div>
     ${leadsHtml||'<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Nenhuma oportunidade vinculada.</div>'}
