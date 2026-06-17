@@ -4236,7 +4236,12 @@ function applyAllPDFPrices(){
   };
   S.fabs.forEach(fab=>{
     snap.fabs[fab.name]={};
-    fab.mats.forEach(m=>{ if(m.costUSD>0) snap.fabs[fab.name][m.name]=m.costUSD; });
+    const col=colunas.find(c=>c.fabSistema===fab.name);
+    if(col){
+      (col.precos||[]).forEach(p=>{
+        if(p.mpSistema&&p.usd>0) snap.fabs[fab.name][p.mpSistema]=p.usd;
+      });
+    }
   });
 
   // Remove duplicata com mesmo label se já existir (reimportação da mesma revisão)
