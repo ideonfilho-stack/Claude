@@ -11832,113 +11832,109 @@ function _crmLeadFormHTML(id,lead){
 
 // ── SALVAR NO CRM — modais de seleção de lead ──────────────────────────────
 
-function _crmLeadSelectModal(title, subtitle, onConfirmFn){
+let _crmSalvType=null;
+function _crmToast(msg){const n=document.createElement('div');n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';n.textContent=msg;document.body.appendChild(n);setTimeout(()=>n.remove(),2800);}
+
+function _crmLeadSelectModal(title,subtitle,type){
   S.crm=S.crm||{clientes:[],leads:[]};
   const leads=S.crm.leads.filter(l=>l.etapa!=='perdido');
   if(!leads.length){if(confirm('Nenhum lead ativo. Criar um novo lead?')){abrirNovoLead();}return;}
+  _crmSalvType=type;
   const opts=leads.map(l=>{
     const cli=crmCliente(l.clienteId);
     const et=CRM_ETAPAS.find(e=>e.key===l.etapa);
-    return `<option value="${l.id}">${l.titulo}${cli?' — '+cli.nome:''}${et?' ['+et.lbl+']':''}`;
+    return '<option value="'+l.id+'">'+l.titulo+(cli?' — '+cli.nome:'')+(et?' ['+et.lbl+']':'')+' </option>';
   }).join('');
   const ov=document.createElement('div');
   ov.id='crmSalvModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
-  ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px">
-    <div style="font-size:15px;font-weight:800;margin-bottom:.5rem">${title}</div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:1rem">${subtitle}</div>
-    <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Lead</div>
-    <select id="salmCrmLead" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;margin-bottom:1rem">${opts}</select>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-green" style="flex:1" onclick="(${onConfirmFn.toString()})(document.getElementById('salmCrmLead').value)">Salvar</button>
-      <button class="btn" onclick="document.getElementById('crmSalvModal').remove()">Cancelar</button>
-    </div>
-  </div>`;
+  ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px">'
+    +'<div style="font-size:15px;font-weight:800;margin-bottom:.5rem">'+title+'</div>'
+    +'<div style="font-size:12px;color:var(--text2);margin-bottom:1rem">'+subtitle+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Lead</div>'
+    +'<select id="salmCrmLead" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;margin-bottom:1rem">'+opts+'</select>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="btn btn-green" style="flex:1" onclick="crmExecutarSalvar()">Salvar</button>'
+    +'<button class="btn" onclick="document.getElementById(\'crmSalvModal\').remove()">Cancelar</button>'
+    +'</div></div>';
   document.body.appendChild(ov);
+}
+
+function crmExecutarSalvar(){
+  const sel=document.getElementById('salmCrmLead');
+  if(!sel) return;
+  const leadId=sel.value;
+  if(_crmSalvType==='cotacao') _crmDoSalvCotacao(leadId);
+  else if(_crmSalvType==='proposta') _crmDoSalvProposta(leadId);
+  else if(_crmSalvType==='formulacao') _crmDoSalvFormulacao(leadId);
 }
 
 function crmSalvarCotacaoModal(){
   const itens=S.cotacao||[];
   if(!itens.length){alert('Cotação vazia.');return;}
-  _crmLeadSelectModal(
-    'Salvar Cotação no CRM',
-    `${itens.length} item(s) · Câmbio R$${(S.fx||5.20).toFixed(4)}`,
-    function(leadId){
-      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
-      if(!lead) return;
-      const fx=S.fx||5.20;
-      const snap={ts:crmNow(),fx,itens:(S.cotacao||[]).map(item=>{
-        const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);
-        const TC=v=>P.cur==='BRL'?v*fx:v;
-        return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
-          params:{desc:P.desc,taxa:P.taxa,prazo:P.prazo,com:P.com,frete:P.frete,qtd:P.qtd,embalagem:P.embalagem,cur:P.cur,cliente:P.cliente},
-          calc:{custoEff:c.custoEff,jurosVal:c.jurosVal,comissaoVal:c.comissaoVal,freteUSD:c.freteUSD,venda:c.venda,total:TC(c.venda)*P.qtd}};
-      }),totalUSD:(S.cotacao||[]).reduce((s,item)=>{const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);return s+c.venda*P.qtd;},0)};
-      lead.cotacoes=lead.cotacoes||[];lead.cotacoes.push(snap);
-      lead.historico=lead.historico||[];
-      lead.historico.push({ts:crmNow(),obs:`Cotação salva: ${snap.itens.length} item(s) · Total ${fmtMoney(snap.totalUSD,'USD')}`});
-      sched();
-      document.getElementById('crmSalvModal').remove();
-      const n=document.createElement('div');
-      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
-      n.textContent='✓ Cotação salva no lead "'+lead.titulo+'"';
-      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
-    }
-  );
+  _crmLeadSelectModal('Salvar Cotação no CRM',itens.length+' item(s) · Câmbio R$'+(S.fx||5.20).toFixed(4),'cotacao');
 }
-
 function crmSalvarPropostaModal(){
   const itens=S.propostas||[];
   if(!itens.length){alert('Proposta vazia.');return;}
-  _crmLeadSelectModal(
-    'Salvar Proposta no CRM',
-    `${itens.length} item(s) · Câmbio R$${(S.fx||5.20).toFixed(4)}`,
-    function(leadId){
-      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
-      if(!lead) return;
-      const fx=S.fx||5.20;
-      const snap={ts:crmNow(),fx,itens:(S.propostas||[]).map(item=>{
-        const P=_propP_of(item);const c=_propCalcFOB(item,P,fx);
-        const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
-        return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
-          params:{qty:P.qty,vcto:P.vcto,valor:P.valor,valorCur:P.valorCur,frete:P.frete,freteCur:P.freteCur,taxa:P.taxa,comissao:P.comissao,embalagem:P.embalagem,cliente:P.cliente},
-          calc:{valorLiqR:c.valorLiqR,valorUSD0:c.valorUSD0,meses:c.meses,jurosUSD:c.jurosUSD,comissaoUSD:c.comissaoUSD,precoFOB:c.precoFOB,margem:c.precoFOB-custoAdj}};
-      })};
-      lead.propostas=lead.propostas||[];lead.propostas.push(snap);
-      lead.historico=lead.historico||[];
-      const totalMargem=snap.itens.reduce((a,it)=>a+(it.calc?it.calc.margem*(it.params&&it.params.qty||1):0),0);
-      lead.historico.push({ts:crmNow(),obs:`Proposta salva: ${snap.itens.length} item(s) · Margem ${totalMargem>=0?'+':'-'}${fmtMoney(Math.abs(totalMargem),'USD')}`});
-      sched();
-      document.getElementById('crmSalvModal').remove();
-      const n=document.createElement('div');
-      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
-      n.textContent='✓ Proposta salva no lead "'+lead.titulo+'"';
-      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
-    }
-  );
+  _crmLeadSelectModal('Salvar Proposta no CRM',itens.length+' item(s) · Câmbio R$'+(S.fx||5.20).toFixed(4),'proposta');
 }
-
 function crmSalvarFormulacaoModal(){
   const f=window._crmLastFormulacao;
   if(!f){alert('Execute uma formulação primeiro.');return;}
-  _crmLeadSelectModal(
-    'Salvar Formulação no CRM',
-    `${f.grade} · ${f.fabs} · ${fmtMoney(f.custo,'USD')}/t`,
-    function(leadId){
-      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
-      if(!lead) return;
-      const snap={ts:crmNow(),grade:f.grade,fabs:f.fabs,custo:f.custo,qty:f.qty,nt:f.nt,mats:f.mats};
-      lead.formulacoes=lead.formulacoes||[];lead.formulacoes.push(snap);
-      lead.historico=lead.historico||[];
-      lead.historico.push({ts:crmNow(),obs:`Formulação salva: ${f.grade} · ${fmtMoney(f.custo,'USD')}/t`});
-      sched();
-      document.getElementById('crmSalvModal').remove();
-      const n=document.createElement('div');
-      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
-      n.textContent='✓ Formulação salva no lead "'+lead.titulo+'"';
-      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
-    }
-  );
+  _crmLeadSelectModal('Salvar Formulação no CRM',f.grade+' · '+f.fabs+' · '+fmtMoney(f.custo,'USD')+'/t','formulacao');
+}
+
+function _crmDoSalvCotacao(leadId){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead) return;
+  const fx=S.fx||5.20;
+  const snap={ts:crmNow(),fx,itens:(S.cotacao||[]).map(item=>{
+    const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);
+    const TC=v=>P.cur==='BRL'?v*fx:v;
+    return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
+      params:{desc:P.desc,taxa:P.taxa,prazo:P.prazo,com:P.com,frete:P.frete,qtd:P.qtd,embalagem:P.embalagem,cur:P.cur,cliente:P.cliente},
+      calc:{custoEff:c.custoEff,jurosVal:c.jurosVal,comissaoVal:c.comissaoVal,freteUSD:c.freteUSD,venda:c.venda,total:TC(c.venda)*P.qtd}};
+  }),totalUSD:(S.cotacao||[]).reduce((s,item)=>{const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);return s+c.venda*P.qtd;},0)};
+  lead.cotacoes=lead.cotacoes||[];lead.cotacoes.push(snap);
+  lead.historico=lead.historico||[];
+  lead.historico.push({ts:crmNow(),obs:'Cotação salva: '+snap.itens.length+' item(s) · Total '+fmtMoney(snap.totalUSD,'USD')});
+  sched();
+  document.getElementById('crmSalvModal').remove();
+  _crmToast('✓ Cotação salva no lead "'+lead.titulo+'"');
+}
+
+function _crmDoSalvProposta(leadId){
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead) return;
+  const fx=S.fx||5.20;
+  const snap={ts:crmNow(),fx,itens:(S.propostas||[]).map(item=>{
+    const P=_propP_of(item);const c=_propCalcFOB(item,P,fx);
+    const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
+    return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
+      params:{qty:P.qty,vcto:P.vcto,valor:P.valor,valorCur:P.valorCur,frete:P.frete,freteCur:P.freteCur,taxa:P.taxa,comissao:P.comissao,embalagem:P.embalagem,cliente:P.cliente},
+      calc:{valorLiqR:c.valorLiqR,valorUSD0:c.valorUSD0,meses:c.meses,jurosUSD:c.jurosUSD,comissaoUSD:c.comissaoUSD,precoFOB:c.precoFOB,margem:c.precoFOB-custoAdj}};
+  })};
+  lead.propostas=lead.propostas||[];lead.propostas.push(snap);
+  lead.historico=lead.historico||[];
+  const totalMargem=snap.itens.reduce((a,it)=>a+(it.calc?it.calc.margem*(it.params&&it.params.qty||1):0),0);
+  lead.historico.push({ts:crmNow(),obs:'Proposta salva: '+snap.itens.length+' item(s) · Margem '+(totalMargem>=0?'+':'-')+fmtMoney(Math.abs(totalMargem),'USD')});
+  sched();
+  document.getElementById('crmSalvModal').remove();
+  _crmToast('✓ Proposta salva no lead "'+lead.titulo+'"');
+}
+
+function _crmDoSalvFormulacao(leadId){
+  const f=window._crmLastFormulacao;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead||!f) return;
+  const snap={ts:crmNow(),grade:f.grade,fabs:f.fabs,custo:f.custo,qty:f.qty,nt:f.nt,mats:f.mats};
+  lead.formulacoes=lead.formulacoes||[];lead.formulacoes.push(snap);
+  lead.historico=lead.historico||[];
+  lead.historico.push({ts:crmNow(),obs:'Formulação salva: '+f.grade+' · '+fmtMoney(f.custo,'USD')+'/t'});
+  sched();
+  document.getElementById('crmSalvModal').remove();
+  _crmToast('✓ Formulação salva no lead "'+lead.titulo+'"');
 }
 
 function crmDeleteCotacao(leadId,idx){
