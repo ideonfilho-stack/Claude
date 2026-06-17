@@ -6634,8 +6634,12 @@ function renderPriceHistCharts(){
     if(!canvas) return;
 
     // Coleta MPs macros que apareceram nesta fábrica (exclui micro elementos)
+    const _MACRO=['N','P','K','S','Ca','Mg','Cl'];
     function isMicroByName(name){
-      for(const fab of S.fabs){ const m=fab.mats.find(x=>x.name===name); if(m) return isMicroOnly(m); }
+      for(const fab of S.fabs){
+        const m=fab.mats.find(x=>x.name===name);
+        if(m) return !_MACRO.some(k=>(m[k]||0)>0);
+      }
       return false;
     }
     const mpNames=new Set();
