@@ -979,6 +979,14 @@ select.fi{
 }
 .restr-item:hover::before{opacity:1}
 .restr-item:hover::after{opacity:1}
+.restr-item--ativa{
+  border-color:var(--blue)!important;
+  background:linear-gradient(135deg,var(--surface2) 0%,rgba(91,140,255,0.09) 100%)!important;
+  box-shadow:0 0 0 1px rgba(91,140,255,0.18),var(--shadow);
+}
+.restr-item--ativa::before{opacity:1!important;background:linear-gradient(90deg,var(--blue),var(--purple))!important}
+.restr-item--ativa::after{opacity:1!important;background:radial-gradient(circle,rgba(91,140,255,0.1),transparent 70%)!important}
+.restr-item--ativa .restr-mat{color:var(--blue)}
 .restr-mat{
   font-weight:700;
   font-size:12.5px;
@@ -1858,7 +1866,27 @@ select:focus-visible{
   .rotas-bcrd{height:180px}
   .vessel-cargo{display:none}
   .rotas-zoom-ctrl{display:flex!important}
+  .prop-g2{grid-template-columns:1fr!important}
+  .charts-row{grid-template-columns:1fr!important;gap:.85rem}
+  .dash-hist-main{margin-top:.85rem}
 }
+/* ── Proposta 2-col grid ── */
+.prop-g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* ── Dashboard rings ── */
+.dash-kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.1rem}
+@media(min-width:600px){.dash-kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:900px){.dash-kpi-row{grid-template-columns:auto repeat(4,1fr) auto;align-items:stretch}}
+.mc-ring-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 10px;transition:all var(--t)}
+.mc-ring-card:hover{border-color:var(--border2);transform:translateY(-1px);box-shadow:var(--shadow)}
+.mc-ring-wrap{position:relative;width:76px;height:76px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.mc-ring-wrap::before{content:'';position:absolute;width:54px;height:54px;border-radius:50%;background:var(--surface);z-index:1}
+.mc-ring-inner{position:relative;z-index:2;text-align:center;line-height:1.1}
+.mc-ring-lbl{font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.dash-hist-main{margin-top:1rem}
+.dash-cost-card{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem;position:relative;overflow:hidden;transition:all var(--t)}
+.dash-cost-card:first-child::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad-blue);border-radius:var(--radius) var(--radius) 0 0}
+.dash-cost-card:last-child::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--grad-green);border-radius:var(--radius) var(--radius) 0 0}
+.dash-cost-card:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
 </style>
 </head>
 <body>
@@ -2010,16 +2038,24 @@ select:focus-visible{
     </div>
   </div>
 
-  <div class="metrics-row" id="dash-metrics">
+  <!-- KPI row: custo + nutrient rings + total -->
+  <div class="dash-kpi-row" id="dash-metrics">
     <div class="mc"><div class="mc-lbl">Última formulação</div><div class="mc-val" style="font-size:14px">—</div></div>
   </div>
-  <div class="charts-row">
-    <div class="chart-box"><div class="chart-title">Composição da formulação</div><div style="position:relative;height:clamp(180px,40vw,250px)"><canvas id="cPie" role="img" aria-label="Composição"></canvas></div></div>
-    <div class="chart-box"><div class="chart-title">Nutrientes obtidos vs. requisitos</div><div style="position:relative;height:clamp(180px,40vw,250px)"><canvas id="cBar" role="img" aria-label="Nutrientes"></canvas></div></div>
+  <!-- Histórico de custo — gráfico principal em destaque -->
+  <div class="chart-box dash-hist-main">
+    <div class="chart-title">Histórico de custo / ton</div>
+    <div style="position:relative;height:clamp(180px,40vw,260px)"><canvas id="cHist" role="img" aria-label="Histórico"></canvas></div>
   </div>
+  <!-- Composição + Nutrientes -->
   <div class="charts-row">
-    <div class="chart-box"><div class="chart-title">Custo por matéria prima</div><div style="position:relative;height:clamp(160px,35vw,200px)"><canvas id="cCost" role="img" aria-label="Custos"></canvas></div></div>
-    <div class="chart-box"><div class="chart-title">Histórico de custo/ton</div><div style="position:relative;height:clamp(160px,35vw,200px)"><canvas id="cHist" role="img" aria-label="Histórico"></canvas></div></div>
+    <div class="chart-box"><div class="chart-title">Composição da formulação</div><div style="position:relative;height:clamp(180px,38vw,240px)"><canvas id="cPie" role="img" aria-label="Composição"></canvas></div></div>
+    <div class="chart-box"><div class="chart-title">Nutrientes obtidos vs. requisitos</div><div style="position:relative;height:clamp(180px,38vw,240px)"><canvas id="cBar" role="img" aria-label="Nutrientes"></canvas></div></div>
+  </div>
+  <!-- Custo por MP — largura total -->
+  <div class="chart-box" style="margin-top:1rem">
+    <div class="chart-title">Custo por matéria-prima</div>
+    <div style="position:relative;height:clamp(160px,32vw,200px)"><canvas id="cCost" role="img" aria-label="Custos"></canvas></div>
   </div>
 
   <!-- HISTÓRICO DE PREÇOS POR FÁBRICA -->
@@ -2337,6 +2373,10 @@ select:focus-visible{
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
       </button>
+      <button class="btn btn-sm" style="border-color:rgba(248,181,62,0.3);color:var(--amber)" onclick="recalcCotacao()">
+        <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Forçar cálculo
+      </button>
       <button class="btn btn-sm btn-red" onclick="limparCotacao()">Limpar</button>
     </div>
   </div>
@@ -2496,6 +2536,10 @@ select:focus-visible{
       <button class="btn btn-sm" style="border-color:rgba(91,140,255,0.3);color:var(--blue)" onclick="exportPropJPEG()">
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
+      </button>
+      <button class="btn btn-sm" style="border-color:rgba(248,181,62,0.3);color:var(--amber)" onclick="recalcProposta()">
+        <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Forçar cálculo
       </button>
       <button class="btn btn-sm btn-red" onclick="limparProposta()">Limpar</button>
     </div>
@@ -3680,7 +3724,8 @@ function renderRestrGrid(){
   g._rnames=active.map(m=>m.name);
   g.innerHTML=active.map((m,idx)=>{
     const r=getRestr(m.name);
-    return '<div class="restr-item">'
+    const ativa=r.min>0||r.max<1000;
+    return '<div class="restr-item'+(ativa?' restr-item--ativa':'')+'">'
       +'<div class="restr-mat">'+m.name+'</div>'
       +'<div class="restr-inputs">'
       +'<span style="color:var(--green);font-size:10px;font-weight:700">MÍN</span>'
@@ -3695,7 +3740,12 @@ function renderRestrGrid(){
 function restrChange(el){
   const g=document.getElementById('restrGrid');
   const name=(g._rnames||[])[+el.dataset.ri];
-  if(name) setRestr(name,el.dataset.rf,+el.value);
+  if(name){
+    setRestr(name,el.dataset.rf,+el.value);
+    const r=getRestr(name);
+    const item=el.closest('.restr-item');
+    if(item) item.classList.toggle('restr-item--ativa',r.min>0||r.max<1000);
+  }
 }
 
 // ── MAT TABLE
@@ -6010,6 +6060,17 @@ function setItemPropParam(idx, key, value){
   recalcProposta();
 }
 
+function setItemPropParamLive(idx, key, value){
+  const ae=document.activeElement;
+  const savedKey=ae?ae.dataset.pkey:null;
+  const savedIdx=ae?ae.dataset.pidx:null;
+  const savedSel=ae?ae.selectionStart:null;
+  setItemPropParam(idx,key,value);
+  if(savedKey){
+    const el=document.querySelector('[data-pkey="'+savedKey+'"][data-pidx="'+savedIdx+'"]');
+    if(el){ el.focus(); try{el.setSelectionRange(savedSel,savedSel);}catch(e){} }
+  }
+}
 function recalcProposta(){
   const itens=S.propostas||[];
 
@@ -6092,6 +6153,8 @@ function recalcProposta(){
       return '<div style="display:flex;flex-direction:column;gap:2px">'
         +'<div style="display:flex;align-items:center;gap:5px">'
         +'<input type="number" value="'+value+'" step="'+step+'" min="'+min+'"'
+        +' data-pidx="'+i+'" data-pkey="'+key+'"'
+        +' oninput="setItemPropParamLive('+i+',\''+key+'\',this.value)"'
         +' onchange="setItemPropParam('+i+',\''+key+'\',this.value)"'
         +' style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none">'
         +(suffix?'<span style="font-size:10px;color:var(--text3);font-weight:600;flex-shrink:0">'+suffix+'</span>':'')
@@ -6102,11 +6165,15 @@ function recalcProposta(){
     // Input com seletor de moeda à esquerda
     const curInput = (key, valKey, val, valCurKey, valCur) => {
       return '<div style="display:flex;gap:0;align-items:stretch">'
-        +'<select onchange="setItemPropParam('+i+',\''+valCurKey+'\',this.value)" style="width:60px;background:var(--surface3);border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;color:var(--text);padding:6px;font-size:11px;font-weight:700;outline:none;cursor:pointer">'
+        +'<select onchange="setItemPropParam('+i+',\''+valCurKey+'\',this.value)" style="flex-shrink:0;width:54px;background:var(--surface3);border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;color:var(--text);padding:6px 4px;font-size:11px;font-weight:700;outline:none;cursor:pointer">'
         +'<option value="BRL"'+(valCur==='BRL'?' selected':'')+'>R$</option>'
         +'<option value="USD"'+(valCur==='USD'?' selected':'')+'>U$</option>'
         +'</select>'
-        +'<input type="number" value="'+val+'" min="0" step="10" onchange="setItemPropParam('+i+',\''+valKey+'\',this.value)" style="flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border);border-radius:0 6px 6px 0;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none">'
+        +'<input type="number" value="'+val+'" min="0" step="10"'
+        +' data-pidx="'+i+'" data-pkey="'+valKey+'"'
+        +' oninput="setItemPropParamLive('+i+',\''+valKey+'\',this.value)"'
+        +' onchange="setItemPropParam('+i+',\''+valKey+'\',this.value)"'
+        +' style="flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border);border-radius:0 6px 6px 0;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none">'
         +'</div>';
     };
 
@@ -6153,17 +6220,17 @@ function recalcProposta(){
       // ── DADOS DA PROPOSTA ─────────────────────────────
       +'<div style="margin-bottom:.85rem">'
       +'<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Dados da Proposta</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+      +'<div class="prop-g2" style="margin-bottom:10px">'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Quantidade</div>'+numInput('qty', P.qty, '0.1', 't', 0.1)+'</div>'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Vencimento</div>'
       +'<input type="date" value="'+(P.vcto||'')+'" onchange="setItemPropParam('+i+',\'vcto\',this.value)" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;font-weight:600;outline:none;width:100%">'
       +'</div>'
       +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+      +'<div class="prop-g2" style="margin-bottom:10px">'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Valor proposto (CIF)</div>'+curInput(i, 'valor', P.valor, 'valorCur', P.valorCur)+'</div>'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Frete</div>'+curInput(i, 'frete', P.frete, 'freteCur', P.freteCur)+'</div>'
       +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +'<div class="prop-g2">'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Taxa de juros</div>'+numInput('taxa', P.taxa, '0.01', '%/m')+'</div>'
       +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Comissão</div>'+numInput('comissao', P.comissao, '0.1', '%')+'</div>'
       +'</div>'
@@ -6566,9 +6633,13 @@ function renderPriceHistCharts(){
     const canvas=document.getElementById(canvasId);
     if(!canvas) return;
 
-    // Coleta MPs que apareceram nesta fábrica
+    // Coleta MPs macros que apareceram nesta fábrica (exclui micro elementos)
+    function isMicroByName(name){
+      for(const fab of S.fabs){ const m=fab.mats.find(x=>x.name===name); if(m) return isMicroOnly(m); }
+      return false;
+    }
     const mpNames=new Set();
-    hist.forEach(s=>{ if(s.fabs[fabName]) Object.keys(s.fabs[fabName]).forEach(k=>mpNames.add(k)); });
+    hist.forEach(s=>{ if(s.fabs[fabName]) Object.keys(s.fabs[fabName]).filter(k=>!isMicroByName(k)).forEach(k=>mpNames.add(k)); });
 
     const datasets=[...mpNames].map((mpName,idx)=>({
       label: mpName,
@@ -6652,13 +6723,33 @@ function renderDash(){
   const {res,qty}=S.lastRes;
   const N=res.nt;
   const onNuts=NUTS.filter((n,i)=>S.reqs[i]&&S.reqs[i].on).slice(0,4);
-  const metricsData=[
-    ...onNuts.map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0),unit:'%',acc:n.color})),
-    {lbl:'Custo/ton',val:fmt(res.cpt),unit:'',acc:'#5b8cff'},
-    {lbl:'Total',val:fmt(res.cpt*qty/1000),unit:'',acc:'#f8b53e'},
-  ];
   const mr=document.getElementById('dash-metrics');
-  if(mr) mr.innerHTML=metricsData.map(m=>`<div class="mc" style="--accent:${m.acc}"><div class="mc-lbl">${m.lbl}</div><div class="mc-val">${m.val}</div><div class="mc-unit">${m.unit}</div></div>`).join('');
+  if(mr){
+    const costCard=`<div class="dash-cost-card">
+      <div style="font-size:9.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">CUSTO / TON</div>
+      <div style="font-size:26px;font-weight:800;color:var(--blue);letter-spacing:-0.03em;line-height:1">${fmt(res.cpt)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">USD/tonelada</div>
+    </div>`;
+    const ringCards=onNuts.map(n=>{
+      const pct=fl2(N[n.k]||0);
+      const fill=Math.min(100,pct*4)+'%';
+      return `<div class="mc-ring-card">
+        <div class="mc-ring-wrap" style="background:conic-gradient(${n.color} ${fill},rgba(255,255,255,0.05) 0%)">
+          <div class="mc-ring-inner">
+            <div style="font-size:16px;font-weight:800;color:${n.color}">${pct}</div>
+            <div style="font-size:9px;color:var(--text3)">%</div>
+          </div>
+        </div>
+        <div class="mc-ring-lbl">${n.lbl}</div>
+      </div>`;
+    }).join('');
+    const totalCard=`<div class="dash-cost-card">
+      <div style="font-size:9.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">TOTAL</div>
+      <div style="font-size:26px;font-weight:800;color:var(--green);letter-spacing:-0.03em;line-height:1">${fmt(res.cpt*qty/1000)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">USD (${qty}t ÷ 1000)</div>
+    </div>`;
+    mr.innerHTML=costCard+ringCards+totalCard;
+  }
   dc(cPie); dc(cBar); dc(cCost); dc(cHist);
 
   // === PIE/DONUT — Composição com % nas fatias e labels mais claros ===
@@ -8347,8 +8438,8 @@ function recalcCotacao(){
   }
 
   // ── Itens individuais — layout em tabela de linhas ──
-  const INP_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none;text-align:right';
-  const SEL_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:4px 6px;font-size:11px;font-weight:600;outline:none;cursor:pointer;width:100%';
+  const INP_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:600;outline:none;text-align:right';
+  const SEL_STYLE = 'background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:600;outline:none;cursor:pointer;width:100%';
 
   const thead = '<thead><tr style="background:var(--surface2)">'
     +'<th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Produto</th>'
@@ -8385,6 +8476,8 @@ function recalcCotacao(){
 
       const numInp = (key, val, step, w) =>
         '<input type="number" value="'+val+'" step="'+step+'" min="0"'
+        +' data-cidx="'+i+'" data-ckey="'+key+'"'
+        +' oninput="setItemParamLive('+i+',\''+key+'\',this.value)"'
         +' onchange="setItemParam('+i+',\''+key+'\',this.value)"'
         +' onfocus="this.select()"'
         +' style="width:'+(w||60)+'px;'+INP_STYLE+'">';
@@ -8534,6 +8627,17 @@ function setItemParam(idx, key, value){
   }
   sched();
   recalcCotacao();
+}
+function setItemParamLive(idx, key, value){
+  const ae=document.activeElement;
+  const savedKey=ae?ae.dataset.ckey:null;
+  const savedIdx=ae?ae.dataset.cidx:null;
+  const savedSel=ae?ae.selectionStart:null;
+  setItemParam(idx,key,value);
+  if(savedKey){
+    const el=document.querySelector('[data-ckey="'+savedKey+'"][data-cidx="'+savedIdx+'"]');
+    if(el){ el.focus(); try{el.setSelectionRange(savedSel,savedSel);}catch(e){} }
+  }
 }
 function resetItemParam(idx, key){
   if(!S.cotacao[idx] || !S.cotacao[idx].params) return;
