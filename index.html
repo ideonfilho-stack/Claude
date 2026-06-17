@@ -11457,6 +11457,11 @@ const CRM_ETAPAS=[
   {key:'perdido',     lbl:'Perdido',          color:'#f87171'},
 ];
 const CRM_TIPOS_ACAO=['Ligar','Visitar','Enviar proposta','Enviar cotação','Follow-up e-mail','Reunião','Outro'];
+const CRM_CATEGORIAS=[
+  {key:'ferti30', lbl:'Ferti 30', color:'#f8b53e'},
+  {key:'spot',    lbl:'Spot',     color:'#5b8cff'},
+];
+const CRM_SUBCATEGORIAS=['Trade','Revenda','Usinas','Grupo de Compras','Consumidor Final PF','Consumidor Final PJ'];
 
 function crmId(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function crmNow(){return new Date().toISOString();}
@@ -11601,7 +11606,7 @@ function renderClientesGrid(q){
   const grid=document.getElementById('crmClienteGrid');
   const empty=document.getElementById('crmClienteEmpty');
   if(!grid) return;
-  const filtered=q?clientes.filter(c=>(c.nome+c.fazenda+c.municipio+c.estado+c.culturas).toLowerCase().includes(q)):clientes;
+  const filtered=q?clientes.filter(c=>(c.nome+c.fazenda+c.municipio+c.estado+c.culturas+(c.categoria||'')+(c.subcategoria||'')).toLowerCase().includes(q)):clientes;
   if(!filtered.length){
     grid.innerHTML='';
     if(empty) empty.style.display='';
@@ -11613,8 +11618,13 @@ function renderClientesGrid(q){
     const cLeads=leads.filter(l=>l.clienteId===c.id&&l.etapa!=='perdido');
     const totalVal=cLeads.reduce((a,l)=>a+(+l.valorUSD||0),0);
     const culturas=(c.culturas||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const catObj=CRM_CATEGORIAS.find(x=>x.key===c.categoria);
     return `<div class="crm-cli-card" onclick="abrirCliente('${c.id}')">
-      <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:3px">${c.nome}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:3px">
+        <div style="font-size:13px;font-weight:800;color:var(--text)">${c.nome}</div>
+        ${catObj?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${catObj.color}22;color:${catObj.color};border:1px solid ${catObj.color}55;white-space:nowrap;flex-shrink:0">${catObj.lbl}</span>`:''}
+      </div>
+      ${c.subcategoria?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${c.subcategoria}</div>`:''}
       ${c.fazenda?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${c.fazenda}</div>`:''}
       ${c.municipio?`<div style="font-size:11px;color:var(--text3)">${c.municipio}${c.estado?' / '+c.estado:''}</div>`:''}
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
@@ -12084,6 +12094,20 @@ function abrirNovoCliente(){
     <div style="font-size:16px;font-weight:800;margin-bottom:1rem">Novo Cliente</div>
     <div style="display:grid;gap:10px">
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Nome *</div><input id="cl-nome" type="text" placeholder="Nome do cliente / empresa" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Categoria</div>
+          <select id="cl-cat" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">
+            <option value="">— nenhuma —</option>
+            ${CRM_CATEGORIAS.map(x=>`<option value="${x.key}">${x.lbl}</option>`).join('')}
+          </select>
+        </div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Subcategoria</div>
+          <select id="cl-sub" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none">
+            <option value="">— nenhuma —</option>
+            ${CRM_SUBCATEGORIAS.map(s=>`<option value="${s}">${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Fazenda</div><input id="cl-faz" type="text" placeholder="Nome da propriedade" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
@@ -12116,6 +12140,8 @@ function salvarNovoCliente(){
   const cli={
     id:crmId(),
     nome,
+    categoria:document.getElementById('cl-cat').value||'',
+    subcategoria:document.getElementById('cl-sub').value||'',
     fazenda:document.getElementById('cl-faz').value||'',
     municipio:document.getElementById('cl-mun').value||'',
     estado:(document.getElementById('cl-uf').value||'').toUpperCase(),
@@ -12148,9 +12174,14 @@ function abrirCliente(id){
       </div>
     </div>`;
   }).join('');
+  const catObj2=CRM_CATEGORIAS.find(x=>x.key===cli.categoria);
   _showModal(`
     <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
-    <div style="font-size:16px;font-weight:800;margin-bottom:2px">${cli.nome}</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:2px">
+      <div style="font-size:16px;font-weight:800;color:var(--text)">${cli.nome}</div>
+      ${catObj2?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${catObj2.color}22;color:${catObj2.color};border:1px solid ${catObj2.color}55;white-space:nowrap;flex-shrink:0">${catObj2.lbl}</span>`:''}
+    </div>
+    ${cli.subcategoria?`<div style="font-size:11px;color:var(--text3);margin-bottom:4px">${cli.subcategoria}</div>`:''}
     ${cli.fazenda?`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${cli.fazenda}</div>`:''}
     ${cli.municipio?`<div style="font-size:11px;color:var(--text3);margin-bottom:1rem">${cli.municipio}${cli.estado?' / '+cli.estado:''}</div>`:'<div style="margin-bottom:1rem"></div>'}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem">
