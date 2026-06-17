@@ -2298,6 +2298,10 @@ select:focus-visible{
             onmouseover="this.style.background='rgba(240,165,0,.22)'" onmouseout="this.style.background='rgba(240,165,0,.12)'">
             Incluir na Cotação
           </button>
+          <button id="btnSalvarCRM" onclick="crmSalvarFormulacaoModal()" style="display:none;width:100%;margin-top:8px;padding:11px;font-size:13px;font-weight:700;border:2px solid rgba(167,139,250,0.4);border-radius:var(--radius-sm);background:rgba(167,139,250,0.08);color:#a78bfa;cursor:pointer;transition:.2s"
+            onmouseover="this.style.background='rgba(167,139,250,0.18)'" onmouseout="this.style.background='rgba(167,139,250,0.08)'">
+            Salvar formulação no CRM
+          </button>
 
         </div>
       </div>
@@ -2410,6 +2414,10 @@ select:focus-visible{
       <button class="btn btn-sm" style="border-color:rgba(91,140,255,0.3);color:var(--blue)" onclick="exportCotJPEG()">
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
+      </button>
+      <button class="btn btn-sm" style="border-color:rgba(167,139,250,0.3);color:#a78bfa" onclick="crmSalvarCotacaoModal()">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        → CRM
       </button>
       <button class="btn btn-sm btn-red" onclick="limparCotacao()">Limpar</button>
     </div>
@@ -2570,6 +2578,10 @@ select:focus-visible{
       <button class="btn btn-sm" style="border-color:rgba(91,140,255,0.3);color:var(--blue)" onclick="exportPropJPEG()">
         <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         JPEG
+      </button>
+      <button class="btn btn-sm" style="border-color:rgba(167,139,250,0.3);color:#a78bfa" onclick="crmSalvarPropostaModal()">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        → CRM
       </button>
       <button class="btn btn-sm btn-red" onclick="limparProposta()">Limpar</button>
     </div>
@@ -5562,6 +5574,7 @@ function _processResult(res, qty, lote){
     S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:_gradeFull});
     if(S.hist.length>30) S.hist.shift();
     dbAdd('formulacoes',{fabs:fab().name,grade:_gradeFull,formula:buildFormulaStr(res.nt,S.reqs,res.mats),custo:res.cpt,mats:res.mats,nt:res.nt});
+    window._crmLastFormulacao={grade:_gradeFull,fabs:fab().name,custo:res.cpt,qty,nt:NUTS.filter((_,i)=>S.reqs[i]&&S.reqs[i].on).map(n=>({lbl:n.lbl,val:fl2(res.nt[n.k]||0)})),mats:(()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})()};
     renderRes(res,qty,lote);
     sched();
   },150);
@@ -5761,6 +5774,8 @@ function renderRes(res,qty,lote){
   // Botão incluir na cotação
   const inc=document.getElementById('btnIncluirCot');
   if(inc) inc.style.display='';
+  const bcrm=document.getElementById('btnSalvarCRM');
+  if(bcrm) bcrm.style.display='';
   dc(cResPie); dc(cResBar);
   const kgsForPie=fracsToKg(res.fracs, qty);
 
@@ -11638,44 +11653,317 @@ function abrirLead(id){
   if(!lead) return;
   const cli=crmCliente(lead.clienteId);
   const etapa=CRM_ETAPAS.find(e=>e.key===lead.etapa)||CRM_ETAPAS[0];
-  const etapaOpts=CRM_ETAPAS.map(e=>`<option value="${e.key}"${e.key===lead.etapa?' selected':''}>${e.lbl}</option>`).join('');
-  const tipoOpts=CRM_TIPOS_ACAO.map(t=>`<option value="${t}"${t===(lead.proximaAcao&&lead.proximaAcao.tipo)?' selected':''}>${t}</option>`).join('');
-  const hist=(lead.historico||[]).slice().reverse().map(h=>`<div class="crm-hist-item"><div class="crm-hist-ts">${crmFmtDate(h.ts)}</div><div>${h.obs}</div></div>`).join('');
-  const overdue=crmIsOverdue(lead);
+  const nc=l=>l.cotacoes?l.cotacoes.length:0;
+  const np=l=>l.propostas?l.propostas.length:0;
+  const nf=l=>l.formulacoes?l.formulacoes.length:0;
   _showModal(`
     <button class="crm-modal-close" onclick="fecharCrmModal()">✕</button>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;flex-wrap:wrap">
       <div style="width:10px;height:10px;border-radius:50%;background:${etapa.color};flex-shrink:0"></div>
       <div style="font-size:15px;font-weight:800;flex:1">${lead.titulo}</div>
     </div>
-    ${cli?`<div style="font-size:12px;color:var(--text3);margin-bottom:1rem">${cli.nome}${cli.fazenda?' · '+cli.fazenda:''}${cli.municipio?' · '+cli.municipio:''}</div>`:'<div style="margin-bottom:1rem"></div>'}
+    ${cli?`<div style="font-size:11px;color:var(--text3);margin-bottom:.6rem">${cli.nome}${cli.fazenda?' · '+cli.fazenda:''}${cli.municipio?' · '+cli.municipio:''}</div>`:'<div style="margin-bottom:.6rem"></div>'}
+    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:.75rem">
+      <button class="crm-subtab-btn active" id="lt-det" onclick="crmLeadTab('${id}','det')" style="flex:1;font-size:11px">Detalhes</button>
+      <button class="crm-subtab-btn" id="lt-cot" onclick="crmLeadTab('${id}','cot')" style="flex:1;font-size:11px">Cotações${nc(lead)?` (${nc(lead)})`:''}</button>
+      <button class="crm-subtab-btn" id="lt-prop" onclick="crmLeadTab('${id}','prop')" style="flex:1;font-size:11px">Propostas${np(lead)?` (${np(lead)})`:''}</button>
+      <button class="crm-subtab-btn" id="lt-form" onclick="crmLeadTab('${id}','form')" style="flex:1;font-size:11px">Formulações${nf(lead)?` (${nf(lead)})`:''}</button>
+    </div>
+    <div id="lt-content"></div>
+  `);
+  crmLeadTab(id,'det');
+}
+
+function crmLeadTab(id,tab){
+  ['det','cot','prop','form'].forEach(t=>{
+    const b=document.getElementById('lt-'+t);
+    if(b) b.classList.toggle('active',t===tab);
+  });
+  const ct=document.getElementById('lt-content');
+  if(!ct) return;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===id);
+  if(!lead) return;
+  if(tab==='det') ct.innerHTML=_crmLeadDetHTML(id,lead);
+  else if(tab==='cot') ct.innerHTML=_crmLeadCotHTML(id,lead);
+  else if(tab==='prop') ct.innerHTML=_crmLeadPropHTML(id,lead);
+  else if(tab==='form') ct.innerHTML=_crmLeadFormHTML(id,lead);
+}
+
+function _crmLeadDetHTML(id,lead){
+  const overdue=crmIsOverdue(lead);
+  const etapaOpts=CRM_ETAPAS.map(e=>`<option value="${e.key}"${e.key===lead.etapa?' selected':''}>${e.lbl}</option>`).join('');
+  const tipoOpts=CRM_TIPOS_ACAO.map(t=>`<option value="${t}"${t===(lead.proximaAcao&&lead.proximaAcao.tipo)?' selected':''}>${t}</option>`).join('');
+  const hist=(lead.historico||[]).slice().reverse().map(h=>`<div class="crm-hist-item"><div class="crm-hist-ts">${crmFmtDate(h.ts)}</div><div>${h.obs}</div></div>`).join('');
+  const INP='width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none';
+  return `
     <div class="crm-section-title">Pipeline</div>
-    <select id="ed-etapa" onchange="crmMoverLead('${id}',this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none;margin-bottom:10px">${etapaOpts}</select>
+    <select id="ed-etapa" onchange="crmMoverLead('${id}',this.value)" style="${INP};margin-bottom:10px">${etapaOpts}</select>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Valor (USD)</div><input id="ed-val" type="number" value="${lead.valorUSD||''}" onchange="crmEditLeadField('${id}','valorUSD',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tonelagem</div><input id="ed-tons" type="number" value="${lead.qtdTons||''}" onchange="crmEditLeadField('${id}','qtdTons',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Prob. (%)</div><input id="ed-prob" type="number" min="0" max="100" value="${lead.probabilidade||50}" onchange="crmEditLeadField('${id}','probabilidade',+this.value)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:13px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Valor (USD)</div><input id="ed-val" type="number" value="${lead.valorUSD||''}" onchange="crmEditLeadField('${id}','valorUSD',+this.value)" style="${INP}"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tonelagem</div><input id="ed-tons" type="number" value="${lead.qtdTons||''}" onchange="crmEditLeadField('${id}','qtdTons',+this.value)" style="${INP}"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Prob. (%)</div><input id="ed-prob" type="number" min="0" max="100" value="${lead.probabilidade||50}" onchange="crmEditLeadField('${id}','probabilidade',+this.value)" style="${INP}"></div>
     </div>
     <div class="crm-section-title">Próxima ação ${overdue?'<span style="color:var(--red);font-weight:800">⚠ VENCIDA</span>':''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Tipo</div>
-        <select id="ed-atp" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"><option value="">—</option>${tipoOpts}</select>
+        <select id="ed-atp" onchange="crmEditProxAcao('${id}')" style="${INP}"><option value="">—</option>${tipoOpts}</select>
       </div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ed-atd" type="date" value="${(lead.proximaAcao&&lead.proximaAcao.data)||''}" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ed-ato" type="text" value="${(lead.proximaAcao&&lead.proximaAcao.obs)||''}" onchange="crmEditProxAcao('${id}')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Data</div><input id="ed-atd" type="date" value="${(lead.proximaAcao&&lead.proximaAcao.data)||''}" onchange="crmEditProxAcao('${id}')" style="${INP}"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Obs</div><input id="ed-ato" type="text" value="${(lead.proximaAcao&&lead.proximaAcao.obs)||''}" onchange="crmEditProxAcao('${id}')" style="${INP}"></div>
     </div>
-    ${lead.cotacao?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Ref. cotação: <strong style="color:var(--blue)">${lead.cotacao}</strong></div>`:''}
     <div class="crm-section-title">Registrar atividade</div>
     <div style="display:flex;gap:8px;margin-bottom:1rem">
-      <input id="ed-hist-obs" type="text" placeholder="Ex: Ligou, pediu prazo até sexta" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;outline:none">
+      <input id="ed-hist-obs" type="text" placeholder="Ex: Ligou, pediu prazo até sexta" style="flex:1;${INP}">
       <button class="btn btn-sm btn-green" onclick="crmAddHist('${id}')">Registrar</button>
     </div>
     <div class="crm-section-title">Histórico</div>
-    <div style="max-height:140px;overflow-y:auto" id="ed-hist-list">${hist||'<div style="color:var(--text3);font-size:11px">Sem registros.</div>'}</div>
+    <div style="max-height:160px;overflow-y:auto" id="ed-hist-list">${hist||'<div style="color:var(--text3);font-size:11px">Sem registros.</div>'}</div>
     <div style="display:flex;gap:8px;margin-top:1.25rem">
-      <button class="btn btn-sm btn-red" onclick="crmDeleteLead('${id}')">Excluir</button>
+      <button class="btn btn-sm btn-red" onclick="crmDeleteLead('${id}')">Excluir lead</button>
+    </div>`;
+}
+
+function _crmLeadCotHTML(id,lead){
+  const cotacoes=lead.cotacoes||[];
+  if(!cotacoes.length) return `<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px">Nenhuma cotação salva.<br><span style="font-size:11px">Use o botão "→ CRM" na aba Cotação.</span></div>`;
+  return cotacoes.slice().reverse().map((snap,si)=>{
+    const idx=cotacoes.length-1-si;
+    const totalUSD=snap.totalUSD||0;
+    const itensHtml=snap.itens.map(it=>{
+      const P=it.params||{};const c=it.calc||{};
+      const cur=P.cur||'USD';const fx=snap.fx||5.20;
+      const fmtV=v=>fmtMoney(v,cur==='BRL'?'BRL':'USD');
+      const toC=v=>cur==='BRL'?v*fx:v;
+      return `<div style="background:var(--surface3);border-radius:6px;padding:9px 11px;margin-top:7px">
+        <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px">${it.formula||it.grade}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:7px">${it.fabs}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:11px;margin-bottom:7px">
+          <div><span style="color:var(--text3)">Custo IMC:</span> <strong>${fmtMoney(it.custo,'USD')}/t</strong></div>
+          <div><span style="color:var(--text3)">Emb.:</span> ${P.embalagem==='granel'?'Granel':'Big Bag'}</div>
+          <div><span style="color:var(--text3)">Juros:</span> ${P.taxa||0}%/mês × ${P.prazo||0}m</div>
+          <div><span style="color:var(--text3)">Comissão:</span> ${P.com||0}%</div>
+          <div><span style="color:var(--text3)">Frete:</span> R$${P.frete||0}/t</div>
+          <div><span style="color:var(--text3)">Desconto:</span> $${P.desc||0}/t</div>
+        </div>
+        ${c.custoEff!=null?`<div style="font-size:10px;color:var(--text3);margin-bottom:6px;border-top:1px solid var(--border);padding-top:5px">
+          Custo efetivo: $${(c.custoEff||0).toFixed(2)} → +Juros $${(c.jurosVal||0).toFixed(2)} → +Comis. $${(c.comissaoVal||0).toFixed(2)} → +Frete $${(c.freteUSD||0).toFixed(2)}
+        </div>`:''}
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:6px">
+          <div style="font-size:12px;color:var(--text2)">Preço/t: <strong style="color:var(--green);font-size:14px">${fmtV(toC(c.venda||0))}</strong></div>
+          <div style="font-size:12px;color:var(--text2)">${P.qtd||1}t → <strong style="color:var(--blue)">${fmtV(c.total||0)}</strong></div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Cotação #${cotacoes.length-si} — ${crmFmtDate(snap.ts)}</div>
+        <div style="font-size:14px;font-weight:800;color:var(--blue)">${fmtMoney(totalUSD,'USD')}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Câmbio R$${(snap.fx||5.20).toFixed(4)} · ${snap.itens.length} item(s)</div>
+      ${itensHtml}
+      <div style="margin-top:8px;text-align:right"><button class="btn btn-sm btn-red" onclick="crmDeleteCotacao('${id}',${idx})">Remover</button></div>
+    </div>`;
+  }).join('');
+}
+
+function _crmLeadPropHTML(id,lead){
+  const propostas=lead.propostas||[];
+  if(!propostas.length) return `<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px">Nenhuma proposta salva.<br><span style="font-size:11px">Use o botão "→ CRM" na aba Proposta.</span></div>`;
+  return propostas.slice().reverse().map((snap,si)=>{
+    const idx=propostas.length-1-si;
+    const totalMargem=snap.itens.reduce((a,it)=>a+(it.calc?it.calc.margem*(it.params&&it.params.qty||1):0),0);
+    const itensHtml=snap.itens.map(it=>{
+      const P=it.params||{};const c=it.calc||{};
+      return `<div style="background:var(--surface3);border-radius:6px;padding:9px 11px;margin-top:7px">
+        <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px">${it.formula||it.grade}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:7px">${it.fabs}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 14px;font-size:11px;margin-bottom:7px">
+          <div><span style="color:var(--text3)">Valor CIF:</span> <strong>${P.valorCur==='BRL'?'R$':'$'}${P.valor||0}/t</strong></div>
+          <div><span style="color:var(--text3)">Frete:</span> ${P.freteCur==='BRL'?'R$':'$'}${P.frete||0}/t</div>
+          <div><span style="color:var(--text3)">Vcto:</span> ${P.vcto||'—'}</div>
+          <div><span style="color:var(--text3)">Taxa:</span> ${P.taxa||0}%/mês × ${c.meses||0}m</div>
+          <div><span style="color:var(--text3)">Comissão:</span> ${P.comissao||0}%</div>
+          <div><span style="color:var(--text3)">Emb.:</span> ${P.embalagem==='granel'?'Granel':'Big Bag'}</div>
+        </div>
+        ${c.valorUSD0!=null?`<div style="font-size:10px;color:var(--text3);margin-bottom:6px;border-top:1px solid var(--border);padding-top:5px">
+          Líq. R$: ${fmtMoney(c.valorLiqR||0,'BRL')}/t → ÷${(snap.fx||5.20).toFixed(4)} = $${(c.valorUSD0||0).toFixed(2)} → −Juros $${(c.jurosUSD||0).toFixed(2)} → −Com. $${(c.comissaoUSD||0).toFixed(2)}
+        </div>`:''}
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:6px">
+          <div style="font-size:12px">FOB líquido: <strong style="color:var(--blue)">${fmtMoney(c.precoFOB||0,'USD')}/t</strong></div>
+          <div style="font-size:13px;font-weight:800;color:${(c.margem||0)>=0?'var(--green)':'var(--red)'}">${(c.margem||0)>=0?'+ ':'− '}${fmtMoney(Math.abs(c.margem||0),'USD')}/t</div>
+        </div>
+        <div style="font-size:10px;color:var(--amber);font-weight:600;margin-top:3px">Margem total ${P.qty||1}t: ${(c.margem||0)>=0?'+ ':'− '}${fmtMoney(Math.abs((c.margem||0)*(P.qty||1)),'USD')}</div>
+      </div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Proposta #${propostas.length-si} — ${crmFmtDate(snap.ts)}</div>
+        <div style="font-size:14px;font-weight:800;color:${totalMargem>=0?'var(--green)':'var(--red)'}">${totalMargem>=0?'+':'−'}${fmtMoney(Math.abs(totalMargem),'USD')}</div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px">Câmbio R$${(snap.fx||5.20).toFixed(4)} · ${snap.itens.length} item(s)</div>
+      ${itensHtml}
+      <div style="margin-top:8px;text-align:right"><button class="btn btn-sm btn-red" onclick="crmDeleteProposta('${id}',${idx})">Remover</button></div>
+    </div>`;
+  }).join('');
+}
+
+function _crmLeadFormHTML(id,lead){
+  const formulacoes=lead.formulacoes||[];
+  if(!formulacoes.length) return `<div style="text-align:center;padding:2rem;color:var(--text3);font-size:13px">Nenhuma formulação salva.<br><span style="font-size:11px">Use "Salvar formulação no CRM" na aba Formulação.</span></div>`;
+  return formulacoes.slice().reverse().map((snap,si)=>{
+    const idx=formulacoes.length-1-si;
+    const matsHtml=(snap.mats||[]).map(m=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text)">${m.name}</span><span style="font-weight:700;color:var(--text2)">${m.pct}% · ${(m.kg||0).toLocaleString('pt-BR')} kg</span></div>`).join('');
+    const nutsHtml=(snap.nt||[]).filter(n=>n.val>0).map(n=>`<span class="crm-tag">${n.lbl} ${n.val}%</span>`).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:11px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--text)">${snap.grade||'—'}</div>
+          <div style="font-size:11px;color:var(--text3)">${snap.fabs} · ${crmFmtDate(snap.ts)}</div>
+        </div>
+        <div style="font-size:18px;font-weight:800;color:var(--blue)">${fmtMoney(snap.custo||0,'USD')}/t</div>
+      </div>
+      ${nutsHtml?`<div class="crm-tags" style="margin-bottom:8px">${nutsHtml}</div>`:''}
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Composição (${snap.qty||1} ton)</div>
+      ${matsHtml}
+      <div style="margin-top:8px;text-align:right"><button class="btn btn-sm btn-red" onclick="crmDeleteFormulacao('${id}',${idx})">Remover</button></div>
+    </div>`;
+  }).join('');
+}
+
+// ── SALVAR NO CRM — modais de seleção de lead ──────────────────────────────
+
+function _crmLeadSelectModal(title, subtitle, onConfirmFn){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const leads=S.crm.leads.filter(l=>l.etapa!=='perdido');
+  if(!leads.length){if(confirm('Nenhum lead ativo. Criar um novo lead?')){abrirNovoLead();}return;}
+  const opts=leads.map(l=>{
+    const cli=crmCliente(l.clienteId);
+    const et=CRM_ETAPAS.find(e=>e.key===l.etapa);
+    return `<option value="${l.id}">${l.titulo}${cli?' — '+cli.nome:''}${et?' ['+et.lbl+']':''}`;
+  }).join('');
+  const ov=document.createElement('div');
+  ov.id='crmSalvModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px">
+    <div style="font-size:15px;font-weight:800;margin-bottom:.5rem">${title}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:1rem">${subtitle}</div>
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Lead</div>
+    <select id="salmCrmLead" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;margin-bottom:1rem">${opts}</select>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-green" style="flex:1" onclick="(${onConfirmFn.toString()})(document.getElementById('salmCrmLead').value)">Salvar</button>
+      <button class="btn" onclick="document.getElementById('crmSalvModal').remove()">Cancelar</button>
     </div>
-  `);
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function crmSalvarCotacaoModal(){
+  const itens=S.cotacao||[];
+  if(!itens.length){alert('Cotação vazia.');return;}
+  _crmLeadSelectModal(
+    'Salvar Cotação no CRM',
+    `${itens.length} item(s) · Câmbio R$${(S.fx||5.20).toFixed(4)}`,
+    function(leadId){
+      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+      if(!lead) return;
+      const fx=S.fx||5.20;
+      const snap={ts:crmNow(),fx,itens:(S.cotacao||[]).map(item=>{
+        const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);
+        const TC=v=>P.cur==='BRL'?v*fx:v;
+        return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
+          params:{desc:P.desc,taxa:P.taxa,prazo:P.prazo,com:P.com,frete:P.frete,qtd:P.qtd,embalagem:P.embalagem,cur:P.cur,cliente:P.cliente},
+          calc:{custoEff:c.custoEff,jurosVal:c.jurosVal,comissaoVal:c.comissaoVal,freteUSD:c.freteUSD,venda:c.venda,total:TC(c.venda)*P.qtd}};
+      }),totalUSD:(S.cotacao||[]).reduce((s,item)=>{const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);return s+c.venda*P.qtd;},0)};
+      lead.cotacoes=lead.cotacoes||[];lead.cotacoes.push(snap);
+      lead.historico=lead.historico||[];
+      lead.historico.push({ts:crmNow(),obs:`Cotação salva: ${snap.itens.length} item(s) · Total ${fmtMoney(snap.totalUSD,'USD')}`});
+      sched();
+      document.getElementById('crmSalvModal').remove();
+      const n=document.createElement('div');
+      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+      n.textContent='✓ Cotação salva no lead "'+lead.titulo+'"';
+      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
+    }
+  );
+}
+
+function crmSalvarPropostaModal(){
+  const itens=S.propostas||[];
+  if(!itens.length){alert('Proposta vazia.');return;}
+  _crmLeadSelectModal(
+    'Salvar Proposta no CRM',
+    `${itens.length} item(s) · Câmbio R$${(S.fx||5.20).toFixed(4)}`,
+    function(leadId){
+      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+      if(!lead) return;
+      const fx=S.fx||5.20;
+      const snap={ts:crmNow(),fx,itens:(S.propostas||[]).map(item=>{
+        const P=_propP_of(item);const c=_propCalcFOB(item,P,fx);
+        const custoAdj=item.custo-(P.embalagem==='granel'?8:0);
+        return{grade:item.grade,formula:item.formula,fabs:item.fabs,custo:item.custo,
+          params:{qty:P.qty,vcto:P.vcto,valor:P.valor,valorCur:P.valorCur,frete:P.frete,freteCur:P.freteCur,taxa:P.taxa,comissao:P.comissao,embalagem:P.embalagem,cliente:P.cliente},
+          calc:{valorLiqR:c.valorLiqR,valorUSD0:c.valorUSD0,meses:c.meses,jurosUSD:c.jurosUSD,comissaoUSD:c.comissaoUSD,precoFOB:c.precoFOB,margem:c.precoFOB-custoAdj}};
+      })};
+      lead.propostas=lead.propostas||[];lead.propostas.push(snap);
+      lead.historico=lead.historico||[];
+      const totalMargem=snap.itens.reduce((a,it)=>a+(it.calc?it.calc.margem*(it.params&&it.params.qty||1):0),0);
+      lead.historico.push({ts:crmNow(),obs:`Proposta salva: ${snap.itens.length} item(s) · Margem ${totalMargem>=0?'+':'-'}${fmtMoney(Math.abs(totalMargem),'USD')}`});
+      sched();
+      document.getElementById('crmSalvModal').remove();
+      const n=document.createElement('div');
+      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+      n.textContent='✓ Proposta salva no lead "'+lead.titulo+'"';
+      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
+    }
+  );
+}
+
+function crmSalvarFormulacaoModal(){
+  const f=window._crmLastFormulacao;
+  if(!f){alert('Execute uma formulação primeiro.');return;}
+  _crmLeadSelectModal(
+    'Salvar Formulação no CRM',
+    `${f.grade} · ${f.fabs} · ${fmtMoney(f.custo,'USD')}/t`,
+    function(leadId){
+      const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+      if(!lead) return;
+      const snap={ts:crmNow(),grade:f.grade,fabs:f.fabs,custo:f.custo,qty:f.qty,nt:f.nt,mats:f.mats};
+      lead.formulacoes=lead.formulacoes||[];lead.formulacoes.push(snap);
+      lead.historico=lead.historico||[];
+      lead.historico.push({ts:crmNow(),obs:`Formulação salva: ${f.grade} · ${fmtMoney(f.custo,'USD')}/t`});
+      sched();
+      document.getElementById('crmSalvModal').remove();
+      const n=document.createElement('div');
+      n.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;z-index:400;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+      n.textContent='✓ Formulação salva no lead "'+lead.titulo+'"';
+      document.body.appendChild(n);setTimeout(()=>n.remove(),2800);
+    }
+  );
+}
+
+function crmDeleteCotacao(leadId,idx){
+  if(!confirm('Remover esta cotação do histórico?')) return;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead) return;
+  lead.cotacoes.splice(idx,1);
+  sched();
+  crmLeadTab(leadId,'cot');
+}
+function crmDeleteProposta(leadId,idx){
+  if(!confirm('Remover esta proposta do histórico?')) return;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead) return;
+  lead.propostas.splice(idx,1);
+  sched();
+  crmLeadTab(leadId,'prop');
+}
+function crmDeleteFormulacao(leadId,idx){
+  if(!confirm('Remover esta formulação do histórico?')) return;
+  const lead=(S.crm&&S.crm.leads||[]).find(l=>l.id===leadId);
+  if(!lead) return;
+  lead.formulacoes.splice(idx,1);
+  sched();
+  crmLeadTab(leadId,'form');
 }
 
 function crmMoverLead(id,etapa){
