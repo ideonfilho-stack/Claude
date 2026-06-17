@@ -12375,6 +12375,172 @@ function crmDeleteCliente(id){
   sched();
   fecharCrmModal();
 }
+
+function crmEditClienteField(id,key,value){
+  const cli=(S.crm&&S.crm.clientes||[]).find(c=>c.id===id);
+  if(!cli) return;
+  cli[key]=value;
+  sched();
+}
+
+window._crmDashCats=new Set();
+window._crmDashSubs=new Set();
+
+function crmDashToggleCat(key){
+  if(window._crmDashCats.has(key)) window._crmDashCats.delete(key);
+  else window._crmDashCats.add(key);
+  renderCrmDashboard();
+}
+function crmDashToggleSub(s){
+  if(window._crmDashSubs.has(s)) window._crmDashSubs.delete(s);
+  else window._crmDashSubs.add(s);
+  renderCrmDashboard();
+}
+
+function renderCrmDashboard(){
+  S.crm=S.crm||{clientes:[],leads:[]};
+  const allClients=S.crm.clientes||[];
+  const allLeads=S.crm.leads||[];
+
+  // Filter chips
+  const catChips=document.getElementById('crmDashCatChips');
+  const subChips=document.getElementById('crmDashSubChips');
+  if(catChips) catChips.innerHTML=CRM_CATEGORIAS.map(x=>{
+    const on=!window._crmDashCats.size||window._crmDashCats.has(x.key);
+    return `<span onclick="crmDashToggleCat('${x.key}')" style="cursor:pointer;font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid ${x.color};background:${on?x.color+'33':'transparent'};color:${on?x.color:'var(--text3)'};font-weight:700;margin-right:4px">${x.lbl}</span>`;
+  }).join('');
+  if(subChips) subChips.innerHTML=CRM_SUBCATEGORIAS.map(s=>{
+    const on=!window._crmDashSubs.size||window._crmDashSubs.has(s);
+    return `<span onclick="crmDashToggleSub('${s.replace(/'/g,'\\\'')}')" style="cursor:pointer;font-size:11px;padding:3px 9px;border-radius:10px;border:1px solid var(--border);background:${on?'var(--surface2)':'transparent'};color:${on?'var(--text)':'var(--text3)'};margin-right:3px">${s}</span>`;
+  }).join('');
+
+  // Apply filters
+  const clients=allClients.filter(c=>{
+    if(window._crmDashCats.size&&!window._crmDashCats.has(c.categoria)) return false;
+    if(window._crmDashSubs.size&&!window._crmDashSubs.has(c.subcategoria)) return false;
+    return true;
+  });
+  const clientIds=new Set(clients.map(c=>c.id));
+
+  // Aggregate potentials
+  const potVerao=clients.reduce((a,c)=>a+(+c.potencialVerao||0),0);
+  const potIrrigado=clients.reduce((a,c)=>a+(+c.potencialIrrigado||0),0);
+  const potSafrinha=clients.reduce((a,c)=>a+(+c.potencialSafrinha||0),0);
+  const potTotal=clients.reduce((a,c)=>a+(+c.potencialTotal||0),0)||potVerao+potIrrigado+potSafrinha;
+
+  const fechados=allLeads.filter(l=>l.etapa==='fechado'&&clientIds.has(l.clienteId));
+  const t=l=>(+l.volumeFechado||+l.qtdTons||0);
+  const volFG={verao:0,irrigado:0,safrinha:0};
+  const volCC={verao:0,irrigado:0,safrinha:0};
+  const competMap={};
+  fechados.forEach(l=>{
+    const tons=t(l);const safra=l.safra||'verao';
+    if(l.empresa==='fertigran'){volFG[safra]=(volFG[safra]||0)+tons;}
+    else if(l.empresa){
+      volCC[safra]=(volCC[safra]||0)+tons;
+      if(!competMap[l.empresa]) competMap[l.empresa]={total:0,verao:0,irrigado:0,safrinha:0};
+      competMap[l.empresa].total+=tons;competMap[l.empresa][safra]=(competMap[l.empresa][safra]||0)+tons;
+    }
+  });
+  const totalFG=volFG.verao+volFG.irrigado+volFG.safrinha;
+  const totalCC=volCC.verao+volCC.irrigado+volCC.safrinha;
+  const pct=(fg,pot)=>pot>0?Math.round(fg/pot*100):0;
+  const pc=p=>p>=50?'#4ade80':p>=25?'#f8b53e':'#f87171';
+
+  // KPI cards
+  const kpiEl=document.getElementById('crmDashKpis');
+  if(kpiEl){
+    const safraKpis=[
+      {lbl:'Verão',   fg:volFG.verao,   cc:volCC.verao,   pot:potVerao},
+      {lbl:'Irrigado',fg:volFG.irrigado,cc:volCC.irrigado,pot:potIrrigado},
+      {lbl:'Safrinha',fg:volFG.safrinha,cc:volCC.safrinha,pot:potSafrinha},
+      {lbl:'Total',   fg:totalFG,        cc:totalCC,        pot:potTotal},
+    ];
+    kpiEl.innerHTML=safraKpis.map(s=>{
+      const p=pct(s.fg,s.pot);
+      return `<div class="chart-box" style="padding:14px 16px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:5px">${s.lbl}</div>
+        <div style="font-size:22px;font-weight:800;color:#4ade80">${s.fg.toLocaleString('pt-BR')}t</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Fertigran · <span style="color:${pc(p)};font-weight:700">${p}% mercado</span></div>
+        <div style="height:4px;border-radius:2px;background:var(--surface2)"><div style="height:4px;border-radius:2px;background:#4ade80;width:${Math.min(p,100)}%"></div></div>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px">Pot: ${s.pot.toLocaleString('pt-BR')}t · Concorr: ${s.cc.toLocaleString('pt-BR')}t</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Bar chart
+  const barEl=document.getElementById('crmDashBar');
+  if(barEl){
+    if(barEl._chart){barEl._chart.destroy();barEl._chart=null;}
+    barEl._chart=new Chart(barEl,{
+      type:'bar',
+      data:{
+        labels:['Verão','Irrigado','Safrinha'],
+        datasets:[
+          {label:'Potencial',data:[potVerao,potIrrigado,potSafrinha],backgroundColor:'rgba(255,255,255,0.07)',borderColor:'rgba(255,255,255,0.18)',borderWidth:1},
+          {label:'Fertigran',data:[volFG.verao,volFG.irrigado,volFG.safrinha],backgroundColor:'rgba(74,222,128,0.65)',borderColor:'#4ade80',borderWidth:1},
+          {label:'Concorrentes',data:[volCC.verao,volCC.irrigado,volCC.safrinha],backgroundColor:'rgba(251,146,60,0.5)',borderColor:'#fb923c',borderWidth:1},
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11}}},title:{display:true,text:'Volume por Safra (t)',color:'rgba(255,255,255,0.65)',font:{size:12}}},
+        scales:{x:{ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}}}}
+    });
+  }
+
+  // Pie chart
+  const pieEl=document.getElementById('crmDashPie');
+  if(pieEl){
+    if(pieEl._chart){pieEl._chart.destroy();pieEl._chart=null;}
+    const competKeys=Object.keys(competMap);
+    const pieLabels=['Fertigran',...competKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.lbl||k)];
+    const pieData=[totalFG,...competKeys.map(k=>competMap[k].total)];
+    const pieColors=['#4ade80',...competKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.color||'#9ba2bd')];
+    if(pieData.some(v=>v>0)){
+      pieEl._chart=new Chart(pieEl,{
+        type:'doughnut',
+        data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:pieColors.map(c=>c+'aa'),borderColor:pieColors,borderWidth:1}]},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:12}},title:{display:true,text:'Market Share',color:'rgba(255,255,255,0.65)',font:{size:12}}}}
+      });
+    } else {
+      pieEl.getContext('2d').clearRect(0,0,pieEl.width,pieEl.height);
+    }
+  }
+
+  // Competitor table
+  const compEl=document.getElementById('crmDashCompetTable');
+  if(compEl){
+    const rows=Object.keys(competMap).sort((a,b)=>competMap[b].total-competMap[a].total);
+    if(!rows.length){
+      compEl.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:1rem">Nenhum fechamento com concorrente registrado.</div>';
+    } else {
+      compEl.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Concorrentes — Detalhamento</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
+          <th style="text-align:left;padding:4px 8px">Empresa</th>
+          <th style="text-align:right;padding:4px 8px">Verão</th>
+          <th style="text-align:right;padding:4px 8px">Irrigado</th>
+          <th style="text-align:right;padding:4px 8px">Safrinha</th>
+          <th style="text-align:right;padding:4px 8px">Total</th>
+          <th style="text-align:right;padding:4px 8px">% do Concorr.</th>
+        </tr></thead>
+        <tbody>${rows.map(k=>{
+          const d=competMap[k];const ent=CRM_EMPRESAS.find(e=>e.key===k);
+          const p=totalCC>0?Math.round(d.total/totalCC*100):0;
+          return `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:5px 8px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ent?.color||'#9ba2bd'};margin-right:5px"></span>${ent?.lbl||k}</td>
+            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.verao||0}</td>
+            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.irrigado||0}</td>
+            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.safrinha||0}</td>
+            <td style="text-align:right;padding:5px 8px;font-weight:700;color:var(--text)">${d.total}</td>
+            <td style="text-align:right;padding:5px 8px;color:var(--text3)">${p}%</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    }
+  }
+}
 </script>
 </body>
 </html>
