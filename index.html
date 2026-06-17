@@ -11495,6 +11495,8 @@ const CRM_EMPRESAS=[
   {key:'nutrien',lbl:'Nutrien',color:'#fca5a5'},
   {key:'rifertil',lbl:'Rifertil',color:'#67e8f9'},
   {key:'fertiman',lbl:'Fertiman',color:'#86efac'},
+  {key:'araguaia',lbl:'Araguaia',color:'#fb7185'},
+  {key:'equilibrio',lbl:'Equilíbrio',color:'#a3e635'},
   {key:'outras',lbl:'Outras',color:'#9ba2bd'},
 ];
 const CRM_PRODUTOS_FERTIGRAN=['Convencional','Fertigran P','Super N Pro','UHF','Mastergran'];
@@ -11516,6 +11518,7 @@ function renderCRM(){
   S.crm.clientes=S.crm.clientes||[];
   S.crm.leads=S.crm.leads||[];
   _seedCrmClientes();
+  _seedCrmLeads();
   const view=document.getElementById('crmPipelineView');
   const dashView=document.getElementById('crmDashView');
   if(view&&view.style.display!=='none') renderKanban();
@@ -11588,6 +11591,71 @@ function crmDoSearch(){
   const view=document.getElementById('crmPipelineView');
   if(view&&view.style.display!=='none') renderKanban(q);
   else renderClientesGrid(q);
+}
+
+function _seedCrmLeads(){
+  if(window._authEmail!=='ideondw@gmail.com') return;
+  if(S.crm._leadsSeedV1) return;
+  const now=crmNow();
+  const cli=nome=>(S.crm.clientes||[]).find(c=>c.nome===nome);
+  const ent=key=>CRM_EMPRESAS.find(e=>e.key===key);
+  // [clienteNome, titulo, safra, empresa, produto, volume, etapa]
+  const D=[
+    ['ADAIR BOLDRIN',                                  'Soja 26/27','verao','eurochem',       null,          1500,'perdido'],
+    ['ADAIR BOLDRIN',                                  'Soja 26/27','verao','outras',          null,          3200,'perdido'],
+    ['CARGILL BIOENERGIA',                             'Soja 26/27','verao','gen',             null,          5037,'perdido'],
+    ['CARGILL BIOENERGIA',                             'Soja 26/27','verao','outras',          null,          9400,'perdido'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'Convencional',5459,'fechado'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'Super N Pro', 230, 'fechado'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'UHF',         150, 'fechado'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','mosaic',          null,          3000,'perdido'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','eurochem',        null,          3000,'perdido'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','cibra',           null,          1000,'perdido'],
+    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','outras',          null,          1200,'perdido'],
+    ['CEREAL OURO',                                    'Soja 26/27','verao','outras',          null,          7420,'perdido'],
+    ['DIEGO LOBON',                                    'Soja 26/27','verao','fertigran',       'Super N Pro', 235, 'fechado'],
+    ['DIEGO LOBON',                                    'Soja 26/27','verao','fertigran',       'Convencional',25,  'fechado'],
+    ['DIEGO LOBON',                                    'Soja 26/27','verao','outras',          null,          7165,'perdido'],
+    ['FAMÍLIA CESCA',                                  'Soja 26/27','verao','outras',          null,          1200,'perdido'],
+    ['FAZENDA REUNIDAS BAUMGART',                      'Soja 26/27','verao','outras',          null,          2100,'perdido'],
+    ['GRUPO CASSOL',                                   'Soja 26/27','verao','fertigran',       'Convencional',4000,'fechado'],
+    ['GRUPO CASSOL',                                   'Soja 26/27','verao','outras',          null,          6200,'perdido'],
+    ['GRUPO CBAGRO',                                   'Soja 26/27','verao','fertigran',       'Convencional',1560,'fechado'],
+    ['GRUPO CBAGRO',                                   'Soja 26/27','verao','outras',          null,          2500,'perdido'],
+    ['GRUPO G5',                                       'Soja 26/27','verao','outras',          null,          6000,'perdido'],
+    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Convencional',11744,'fechado'],
+    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Super N Pro', 416, 'fechado'],
+    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Fertigran P', 10028,'fechado'],
+    ['GRUPO GAPES',                                    'Soja 26/27','verao','outras',          null,          550, 'perdido'],
+    ['GRUPO SOMA',                                     'Soja 26/27','verao','fertigran',       'Super N Pro', 36,  'fechado'],
+    ['GRUPO SOMA',                                     'Soja 26/27','verao','outras',          null,          5560,'perdido'],
+    ['JOAO DOS SANTOS CANCIANO',                       'Soja 26/27','verao','outras',          null,          1300,'perdido'],
+    ['JUNIOR RIZZI',                                   'Soja 26/27','verao','eurochem',        null,          4200,'perdido'],
+    ['SEMENTES VITORIA',                               'Soja 26/27','verao','outras',          null,          450, 'perdido'],
+    ['WALTER DELFINO MUNIZ',                           'Soja 26/27','verao','outras',          null,          1900,'perdido'],
+  ];
+  D.forEach((r,i)=>{
+    const c=cli(r[0]);
+    const empresa=r[3];
+    const produto=r[4]||'';
+    const vol=r[5];
+    const etapa=r[6];
+    const empLbl=(ent(empresa)||{lbl:empresa}).lbl;
+    const titulo=`${r[1]} — ${empLbl}${produto?' ('+produto+')':''}`;
+    S.crm.leads.push({
+      id:'seedl'+i,
+      clienteId:c?c.id:'',
+      titulo,etapa,empresa,produto,
+      safra:r[2],volumeFechado:vol,qtdTons:vol,valorUSD:0,
+      probabilidade:etapa==='fechado'?100:0,
+      proximaAcao:{tipo:'',data:'',obs:''},
+      cotacao:'',
+      historico:[{ts:now,obs:'Importado da planilha Soja 26/27.'}],
+      criadoEm:now,fechadoEm:etapa==='fechado'?now:null
+    });
+  });
+  S.crm._leadsSeedV1=true;
+  sched();
 }
 
 function renderKanban(q){
