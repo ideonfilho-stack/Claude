@@ -12532,7 +12532,7 @@ function renderCrmDashboard(){
     return `<span onclick="crmDashToggleSub('${s.replace(/'/g,'\\\'')}')" style="cursor:pointer;font-size:11px;padding:3px 9px;border-radius:10px;border:1px solid var(--border);background:${on?'var(--surface2)':'transparent'};color:${on?'var(--text)':'var(--text3)'};margin-right:3px">${s}</span>`;
   }).join('');
 
-  // Apply filters
+  // Apply client filters
   const clients=allClients.filter(c=>{
     if(window._crmDashCats.size&&!window._crmDashCats.has(c.categoria)) return false;
     if(window._crmDashSubs.size&&!window._crmDashSubs.has(c.subcategoria)) return false;
@@ -12540,123 +12540,190 @@ function renderCrmDashboard(){
   });
   const clientIds=new Set(clients.map(c=>c.id));
 
-  // Aggregate potentials
-  const potVerao=clients.reduce((a,c)=>a+(+c.potencialVerao||0),0);
+  // Potentials per safra
+  const potVerao   =clients.reduce((a,c)=>a+(+c.potencialVerao||0),0);
   const potIrrigado=clients.reduce((a,c)=>a+(+c.potencialIrrigado||0),0);
   const potSafrinha=clients.reduce((a,c)=>a+(+c.potencialSafrinha||0),0);
-  const potTotal=clients.reduce((a,c)=>a+(+c.potencialTotal||0),0)||potVerao+potIrrigado+potSafrinha;
+  const potTotal   =clients.reduce((a,c)=>a+(+c.potencialTotal||0),0)||potVerao+potIrrigado+potSafrinha;
+  const potBySafra ={verao:potVerao,irrigado:potIrrigado,safrinha:potSafrinha};
 
-  const fechados=allLeads.filter(l=>l.etapa==='fechado'&&clientIds.has(l.clienteId));
-  const t=l=>(+l.volumeFechado||+l.qtdTons||0);
-  const volFG={verao:0,irrigado:0,safrinha:0};
-  const volCC={verao:0,irrigado:0,safrinha:0};
-  const competMap={};
-  fechados.forEach(l=>{
-    const tons=t(l);const safra=l.safra||'verao';
-    if(l.empresa==='fertigran'){volFG[safra]=(volFG[safra]||0)+tons;}
-    else if(l.empresa){
-      volCC[safra]=(volCC[safra]||0)+tons;
-      if(!competMap[l.empresa]) competMap[l.empresa]={total:0,verao:0,irrigado:0,safrinha:0};
-      competMap[l.empresa].total+=tons;competMap[l.empresa][safra]=(competMap[l.empresa][safra]||0)+tons;
-    }
+  // Aggregate ALL companies from ALL leads with empresa + volume (fechado=FG, perdido=concorrentes)
+  const empMap={};
+  allLeads.filter(l=>clientIds.has(l.clienteId)&&l.empresa&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
+    const tons=+l.volumeFechado||+l.qtdTons||0;
+    const safra=l.safra||'verao';
+    if(!empMap[l.empresa]) empMap[l.empresa]={verao:0,irrigado:0,safrinha:0,total:0};
+    empMap[l.empresa][safra]+=tons;
+    empMap[l.empresa].total+=tons;
   });
-  const totalFG=volFG.verao+volFG.irrigado+volFG.safrinha;
-  const totalCC=volCC.verao+volCC.irrigado+volCC.safrinha;
-  const pct=(fg,pot)=>pot>0?Math.round(fg/pot*100):0;
+
+  // Rodado (total of all companies) per safra
+  const rodado={
+    verao:   Object.values(empMap).reduce((a,d)=>a+d.verao,0),
+    irrigado:Object.values(empMap).reduce((a,d)=>a+d.irrigado,0),
+    safrinha:Object.values(empMap).reduce((a,d)=>a+d.safrinha,0),
+  };
+  rodado.total=rodado.verao+rodado.irrigado+rodado.safrinha;
+
+  const fgD=empMap['fertigran']||{verao:0,irrigado:0,safrinha:0,total:0};
+  const pctOf=(tons,pot)=>pot>0?parseFloat((tons/pot*100).toFixed(1)):0;
   const pc=p=>p>=50?'#4ade80':p>=25?'#f8b53e':'#f87171';
 
-  // KPI cards
+  // ── KPI cards ──────────────────────────────────────────────────────────────
   const kpiEl=document.getElementById('crmDashKpis');
   if(kpiEl){
-    const safraKpis=[
-      {lbl:'Verão',   fg:volFG.verao,   cc:volCC.verao,   pot:potVerao},
-      {lbl:'Irrigado',fg:volFG.irrigado,cc:volCC.irrigado,pot:potIrrigado},
-      {lbl:'Safrinha',fg:volFG.safrinha,cc:volCC.safrinha,pot:potSafrinha},
-      {lbl:'Total',   fg:totalFG,        cc:totalCC,        pot:potTotal},
+    const cards=[
+      {lbl:'Verão',   safra:'verao',   pot:potVerao},
+      {lbl:'Irrigado',safra:'irrigado',pot:potIrrigado},
+      {lbl:'Safrinha',safra:'safrinha',pot:potSafrinha},
+      {lbl:'Total',   safra:null,      pot:potTotal},
     ];
-    kpiEl.innerHTML=safraKpis.map(s=>{
-      const p=pct(s.fg,s.pot);
+    kpiEl.innerHTML=cards.map(card=>{
+      const fg  =card.safra?fgD[card.safra]:fgD.total;
+      const rod =card.safra?rodado[card.safra]:rodado.total;
+      const cc  =rod-fg;
+      const ar  =Math.max(card.pot-rod,0);
+      const pFg =pctOf(fg,card.pot);
+      const pCc =pctOf(cc,card.pot);
+      const pAr =pctOf(ar,card.pot);
+      const wFg =Math.min(pFg,100);
+      const wCc =Math.min(pCc,100-wFg);
       return `<div class="chart-box" style="padding:14px 16px">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:5px">${s.lbl}</div>
-        <div style="font-size:22px;font-weight:800;color:#4ade80">${s.fg.toLocaleString('pt-BR')}t</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Fertigran · <span style="color:${pc(p)};font-weight:700">${p}% mercado</span></div>
-        <div style="height:4px;border-radius:2px;background:var(--surface2)"><div style="height:4px;border-radius:2px;background:#4ade80;width:${Math.min(p,100)}%"></div></div>
-        <div style="font-size:10px;color:var(--text3);margin-top:5px">Pot: ${s.pot.toLocaleString('pt-BR')}t · Concorr: ${s.cc.toLocaleString('pt-BR')}t</div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px">${card.lbl}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Pot: <span style="color:var(--text);font-weight:700">${card.pot.toLocaleString('pt-BR')}t</span></div>
+        <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,0.07);margin-bottom:8px">
+          <div style="width:${wFg}%;background:#4ade80"></div>
+          <div style="width:${wCc}%;background:#fb923c"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:#4ade80;font-weight:700">Fertigran</span>
+            <span style="color:#4ade80;font-weight:700">${fg.toLocaleString('pt-BR')}t &nbsp;<span style="opacity:.8">${pFg}%</span></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:#fb923c">Concorrentes</span>
+            <span style="color:#fb923c">${cc.toLocaleString('pt-BR')}t &nbsp;<span style="opacity:.8">${pCc}%</span></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10px">
+            <span style="color:var(--text3)">A rodar</span>
+            <span style="color:var(--text3)">${ar.toLocaleString('pt-BR')}t &nbsp;${pAr}%</span>
+          </div>
+        </div>
       </div>`;
     }).join('');
   }
 
-  // Bar chart
+  // ── Bar chart: 100% stacked market share por safra ─────────────────────────
   const barEl=document.getElementById('crmDashBar');
   if(barEl){
     if(barEl._chart){barEl._chart.destroy();barEl._chart=null;}
+    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
+    const safraKeys=['verao','irrigado','safrinha'];
+    const pots=[potVerao,potIrrigado,potSafrinha];
+    const datasets=sortedKeys.map(k=>{
+      const ent=CRM_EMPRESAS.find(e=>e.key===k);
+      const col=ent?.color||'#9ba2bd';
+      return {
+        label:ent?.lbl||k,
+        data:safraKeys.map((s,i)=>pctOf(empMap[k][s],pots[i])),
+        backgroundColor:col+'bb',borderColor:col,borderWidth:1,
+      };
+    });
+    datasets.push({
+      label:'A Rodar',
+      data:safraKeys.map((s,i)=>pctOf(Math.max(pots[i]-rodado[s],0),pots[i])),
+      backgroundColor:'rgba(255,255,255,0.07)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,
+    });
     barEl._chart=new Chart(barEl,{
       type:'bar',
-      data:{
-        labels:['Verão','Irrigado','Safrinha'],
-        datasets:[
-          {label:'Potencial',data:[potVerao,potIrrigado,potSafrinha],backgroundColor:'rgba(255,255,255,0.07)',borderColor:'rgba(255,255,255,0.18)',borderWidth:1},
-          {label:'Fertigran',data:[volFG.verao,volFG.irrigado,volFG.safrinha],backgroundColor:'rgba(74,222,128,0.65)',borderColor:'#4ade80',borderWidth:1},
-          {label:'Concorrentes',data:[volCC.verao,volCC.irrigado,volCC.safrinha],backgroundColor:'rgba(251,146,60,0.5)',borderColor:'#fb923c',borderWidth:1},
-        ]
+      data:{labels:['Verão','Irrigado','Safrinha'],datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:10}},
+          title:{display:true,text:'Market Share por Safra (%)',color:'rgba(255,255,255,0.65)',font:{size:12}},
+          tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`}},
+        },
+        scales:{
+          x:{stacked:true,ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}},
+          y:{stacked:true,max:100,ticks:{color:'rgba(255,255,255,0.45)',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'}},
+        },
       },
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11}}},title:{display:true,text:'Volume por Safra (t)',color:'rgba(255,255,255,0.65)',font:{size:12}}},
-        scales:{x:{ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}},y:{ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}}}}
     });
   }
 
-  // Pie chart
+  // ── Doughnut: market share total (todas safras) ────────────────────────────
   const pieEl=document.getElementById('crmDashPie');
   if(pieEl){
     if(pieEl._chart){pieEl._chart.destroy();pieEl._chart=null;}
-    const competKeys=Object.keys(competMap);
-    const pieLabels=['Fertigran',...competKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.lbl||k)];
-    const pieData=[totalFG,...competKeys.map(k=>competMap[k].total)];
-    const pieColors=['#4ade80',...competKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.color||'#9ba2bd')];
+    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
+    const aRodarTot=Math.max(potTotal-rodado.total,0);
+    const pieLabels=[...sortedKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.lbl||k),'A Rodar'];
+    const pieData=[...sortedKeys.map(k=>empMap[k].total),aRodarTot];
+    const pieColors=[...sortedKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.color||'#9ba2bd'),'#334155'];
     if(pieData.some(v=>v>0)){
       pieEl._chart=new Chart(pieEl,{
         type:'doughnut',
-        data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:pieColors.map(c=>c+'aa'),borderColor:pieColors,borderWidth:1}]},
-        options:{responsive:true,maintainAspectRatio:false,
-          plugins:{legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:12}},title:{display:true,text:'Market Share',color:'rgba(255,255,255,0.65)',font:{size:12}}}}
+        data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:pieColors.map(c=>c+'bb'),borderColor:pieColors,borderWidth:1}]},
+        options:{
+          responsive:true,maintainAspectRatio:false,
+          plugins:{
+            legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10}},
+            title:{display:true,text:'Market Share Total',color:'rgba(255,255,255,0.65)',font:{size:12}},
+            tooltip:{callbacks:{label:ctx=>{
+              const tot=ctx.dataset.data.reduce((a,b)=>a+b,0);
+              return `${ctx.label}: ${(+ctx.parsed).toLocaleString('pt-BR')}t (${tot>0?pctOf(ctx.parsed,tot)+'%':'—'})`;
+            }}},
+          },
+        },
       });
-    } else {
-      pieEl.getContext('2d').clearRect(0,0,pieEl.width,pieEl.height);
     }
   }
 
-  // Competitor table
+  // ── Tabela: todas empresas vs potencial total ──────────────────────────────
   const compEl=document.getElementById('crmDashCompetTable');
   if(compEl){
-    const rows=Object.keys(competMap).sort((a,b)=>competMap[b].total-competMap[a].total);
-    if(!rows.length){
-      compEl.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:1rem">Nenhum fechamento com concorrente registrado.</div>';
-    } else {
-      compEl.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Concorrentes — Detalhamento</div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
-          <th style="text-align:left;padding:4px 8px">Empresa</th>
-          <th style="text-align:right;padding:4px 8px">Verão</th>
-          <th style="text-align:right;padding:4px 8px">Irrigado</th>
-          <th style="text-align:right;padding:4px 8px">Safrinha</th>
-          <th style="text-align:right;padding:4px 8px">Total</th>
-          <th style="text-align:right;padding:4px 8px">% do Concorr.</th>
-        </tr></thead>
-        <tbody>${rows.map(k=>{
-          const d=competMap[k];const ent=CRM_EMPRESAS.find(e=>e.key===k);
-          const p=totalCC>0?Math.round(d.total/totalCC*100):0;
-          return `<tr style="border-top:1px solid var(--border)">
-            <td style="padding:5px 8px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ent?.color||'#9ba2bd'};margin-right:5px"></span>${ent?.lbl||k}</td>
-            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.verao||0}</td>
-            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.irrigado||0}</td>
-            <td style="text-align:right;padding:5px 8px;color:var(--text2)">${d.safrinha||0}</td>
-            <td style="text-align:right;padding:5px 8px;font-weight:700;color:var(--text)">${d.total}</td>
-            <td style="text-align:right;padding:5px 8px;color:var(--text3)">${p}%</td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>`;
-    }
+    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
+    const arV=Math.max(potVerao-rodado.verao,0);
+    const arI=Math.max(potIrrigado-rodado.irrigado,0);
+    const arS=Math.max(potSafrinha-rodado.safrinha,0);
+    const arT=arV+arI+arS;
+    const mkCell=(v,pot,bold,col)=>{
+      const p=pctOf(v,pot);
+      const c=col||(bold?'var(--text)':'var(--text2)');
+      return `<td style="text-align:right;padding:5px 6px;color:${c};font-weight:${bold?700:400}">${v.toLocaleString('pt-BR')}</td>
+              <td style="text-align:right;padding:5px 2px;color:var(--text3);font-size:10px">${p}%</td>`;
+    };
+    const mkRow=(k,d)=>{
+      const ent=CRM_EMPRESAS.find(e=>e.key===k);
+      const col=ent?.color||'#9ba2bd';
+      const isFG=k==='fertigran';
+      return `<tr style="border-top:1px solid var(--border)${isFG?';background:rgba(74,222,128,0.05)':''}">
+        <td style="padding:5px 8px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:5px;flex-shrink:0"></span><span style="font-weight:${isFG?800:400};color:${isFG?'#4ade80':'var(--text)'}">${ent?.lbl||k}</span></td>
+        ${mkCell(d.verao,potVerao,false,isFG?'#4ade80':null)}
+        ${mkCell(d.irrigado,potIrrigado,false,isFG?'#4ade80':null)}
+        ${mkCell(d.safrinha,potSafrinha,false,isFG?'#4ade80':null)}
+        ${mkCell(d.total,potTotal,true,isFG?'#4ade80':null)}
+      </tr>`;
+    };
+    const arRow=`<tr style="border-top:2px solid var(--border);font-style:italic">
+      <td style="padding:5px 8px;color:var(--text3)">A Rodar</td>
+      ${mkCell(arV,potVerao,false,'var(--text3)')}
+      ${mkCell(arI,potIrrigado,false,'var(--text3)')}
+      ${mkCell(arS,potSafrinha,false,'var(--text3)')}
+      ${mkCell(arT,potTotal,true,'var(--text3)')}
+    </tr>`;
+    compEl.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Market Share por Empresa — % do Potencial Total</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">
+      <thead><tr style="color:var(--text3);font-size:9px;text-transform:uppercase">
+        <th style="text-align:left;padding:4px 8px">Empresa</th>
+        <th style="text-align:right;padding:4px 6px" colspan="2">Verão</th>
+        <th style="text-align:right;padding:4px 6px" colspan="2">Irrigado</th>
+        <th style="text-align:right;padding:4px 6px" colspan="2">Safrinha</th>
+        <th style="text-align:right;padding:4px 6px" colspan="2">Total</th>
+      </tr></thead>
+      <tbody>${sortedKeys.map(k=>mkRow(k,empMap[k])).join('')}${arRow}</tbody>
+    </table></div>`;
   }
 }
 </script>
