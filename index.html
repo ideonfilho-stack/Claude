@@ -1923,6 +1923,46 @@ select:focus-visible{
 .crm-subtab-btn{padding:6px 16px;font-size:11.5px;font-weight:600;background:none;border:none;color:var(--text2);cursor:pointer;transition:background .15s,color .15s}
 .crm-subtab-btn.active{background:var(--blue);color:#fff}
 @media(max-width:768px){.crm-col{width:200px}.crm-kanban{min-height:50vh}}
+
+/* ── CRM Dashboard · finance-app look ────────────────────────────────────── */
+.fin-filterbar{display:flex;flex-wrap:wrap;gap:20px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px}
+.fin-filter-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fin-filter-lbl{font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+.fin-pill{cursor:pointer;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;transition:all .15s;user-select:none}
+.fin-hero{background:linear-gradient(135deg,#1a2138 0%,#131826 65%);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:22px 26px;margin-bottom:18px;position:relative;overflow:hidden}
+.fin-hero::before{content:'';position:absolute;top:-45%;right:-6%;width:340px;height:340px;background:radial-gradient(circle,rgba(16,213,156,0.16),transparent 70%);pointer-events:none}
+.fin-hero-inner{position:relative;display:flex;flex-wrap:wrap;gap:32px;align-items:flex-end;justify-content:space-between}
+.fin-hero-label{font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.09em}
+.fin-hero-val{font-size:36px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1.05;margin-top:6px}
+.fin-hero-sub{font-size:12.5px;color:var(--text2);margin-top:8px}
+.fin-hero-share{display:flex;gap:24px;flex-wrap:wrap}
+.fin-hero-share-item{text-align:right}
+.fin-hero-share-val{font-size:22px;font-weight:800;letter-spacing:-.01em}
+.fin-hero-share-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.fin-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.fin-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;position:relative;overflow:hidden;transition:border-color .15s,transform .15s}
+.fin-tile:hover{border-color:var(--border-strong);transform:translateY(-2px)}
+.fin-tile-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.fin-tile-lbl{font-size:10.5px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.fin-tile-pot{font-size:11px;color:var(--text3)}
+.fin-tile-pot b{color:var(--text);font-weight:700}
+.fin-bar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:rgba(255,255,255,0.05);margin:12px 0 11px}
+.fin-bar>div{transition:width .4s ease}
+.fin-legend{display:flex;flex-direction:column;gap:6px}
+.fin-legend-row{display:flex;align-items:center;justify-content:space-between;font-size:11px}
+.fin-legend-row .l{display:flex;align-items:center}
+.fin-dot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:7px;flex-shrink:0}
+.fin-charts{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+.fin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.fin-card-title{font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.fin-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:580px}
+.fin-tbl thead th{color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.05em;font-weight:800;padding:6px 6px}
+.fin-tbl tbody td{padding:7px 6px}
+.fin-tbl tbody tr{border-top:1px solid var(--border)}
+.fin-tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.fin-tbl .pct{text-align:right;color:var(--text3);font-size:10px;font-variant-numeric:tabular-nums}
+@media(max-width:900px){.fin-kpis{grid-template-columns:repeat(2,1fr)}.fin-charts{grid-template-columns:1fr}}
+@media(max-width:560px){.fin-kpis{grid-template-columns:1fr}.fin-hero-val{font-size:30px}}
 </style>
 </head>
 <body>
@@ -3111,18 +3151,17 @@ select:focus-visible{
     <div id="crmClienteEmpty" style="text-align:center;padding:3rem;color:var(--text3);font-size:13px;display:none">Nenhum cliente cadastrado ainda.</div>
   </div>
   <div id="crmDashView" style="display:none">
-    <div id="crmDashFilters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
-      <span style="font-size:11px;color:var(--text3)">Categoria:</span>
-      <span id="crmDashCatChips"></span>
-      <span style="font-size:11px;color:var(--text3);margin-left:8px">Subcategoria:</span>
-      <span id="crmDashSubChips"></span>
+    <div id="crmDashFilters" class="fin-filterbar">
+      <div class="fin-filter-group"><span class="fin-filter-lbl">Categoria</span><span id="crmDashCatChips"></span></div>
+      <div class="fin-filter-group"><span class="fin-filter-lbl">Subcategoria</span><span id="crmDashSubChips"></span></div>
     </div>
-    <div id="crmDashKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:1rem">
-      <div class="chart-box" style="padding:16px"><canvas id="crmDashBar" height="220"></canvas></div>
-      <div class="chart-box" style="padding:16px"><canvas id="crmDashPie" height="220"></canvas></div>
+    <div id="crmDashHero"></div>
+    <div id="crmDashKpis" class="fin-kpis"></div>
+    <div class="fin-charts">
+      <div class="fin-card"><div class="fin-card-title">Market Share por Safra</div><div style="height:240px"><canvas id="crmDashBar"></canvas></div></div>
+      <div class="fin-card"><div class="fin-card-title">Market Share Total</div><div style="height:240px"><canvas id="crmDashPie"></canvas></div></div>
     </div>
-    <div class="chart-box" style="padding:16px;margin-bottom:1rem" id="crmDashCompetTable"></div>
+    <div class="fin-card" id="crmDashCompetTable" style="margin-top:16px"></div>
   </div>
   <!-- Detail modal (shared for lead and client) -->
   <div id="crmModalOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)fecharCrmModal()">
@@ -12525,11 +12564,11 @@ function renderCrmDashboard(){
   const subChips=document.getElementById('crmDashSubChips');
   if(catChips) catChips.innerHTML=CRM_CATEGORIAS.map(x=>{
     const on=!window._crmDashCats.size||window._crmDashCats.has(x.key);
-    return `<span onclick="crmDashToggleCat('${x.key}')" style="cursor:pointer;font-size:11px;padding:3px 10px;border-radius:10px;border:1px solid ${x.color};background:${on?x.color+'33':'transparent'};color:${on?x.color:'var(--text3)'};font-weight:700;margin-right:4px">${x.lbl}</span>`;
+    return `<span class="fin-pill" onclick="crmDashToggleCat('${x.key}')" style="border:1px solid ${x.color};background:${on?x.color+'2e':'transparent'};color:${on?x.color:'var(--text3)'}">${x.lbl}</span>`;
   }).join('');
   if(subChips) subChips.innerHTML=CRM_SUBCATEGORIAS.map(s=>{
     const on=!window._crmDashSubs.size||window._crmDashSubs.has(s);
-    return `<span onclick="crmDashToggleSub('${s.replace(/'/g,'\\\'')}')" style="cursor:pointer;font-size:11px;padding:3px 9px;border-radius:10px;border:1px solid var(--border);background:${on?'var(--surface2)':'transparent'};color:${on?'var(--text)':'var(--text3)'};margin-right:3px">${s}</span>`;
+    return `<span class="fin-pill" onclick="crmDashToggleSub('${s.replace(/'/g,'\\\'')}')" style="border:1px solid ${on?'var(--blue)':'var(--border2)'};background:${on?'var(--blue-soft)':'transparent'};color:${on?'var(--blue)':'var(--text3)'}">${s}</span>`;
   }).join('');
 
   // Apply client filters
@@ -12569,7 +12608,30 @@ function renderCrmDashboard(){
   const pctOf=(tons,pot)=>pot>0?parseFloat((tons/pot*100).toFixed(1)):0;
   const pc=p=>p>=50?'#4ade80':p>=25?'#f8b53e':'#f87171';
 
-  // ── KPI cards ──────────────────────────────────────────────────────────────
+  const FG_COL='#4ade80', CC_COL='#fb923c', AR_COL='#5c6485';
+
+  // ── Hero ─────────────────────────────────────────────────────────────────
+  const heroEl=document.getElementById('crmDashHero');
+  if(heroEl){
+    const shareFg=pctOf(fgD.total,potTotal);
+    const shareCc=pctOf(rodado.total-fgD.total,potTotal);
+    const shareAr=pctOf(Math.max(potTotal-rodado.total,0),potTotal);
+    heroEl.className='fin-hero';
+    heroEl.innerHTML=`<div class="fin-hero-inner">
+      <div>
+        <div class="fin-hero-label">Potencial total de mercado</div>
+        <div class="fin-hero-val">${potTotal.toLocaleString('pt-BR')} <span style="font-size:18px;color:var(--text3);font-weight:700">t</span></div>
+        <div class="fin-hero-sub">${clients.length} cliente${clients.length!==1?'s':''} · ${rodado.total.toLocaleString('pt-BR')}t já rodados (${pctOf(rodado.total,potTotal)}%)</div>
+      </div>
+      <div class="fin-hero-share">
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${FG_COL}">${shareFg}%</div><div class="fin-hero-share-lbl">Fertigran</div></div>
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${CC_COL}">${shareCc}%</div><div class="fin-hero-share-lbl">Concorrentes</div></div>
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--text2)">${shareAr}%</div><div class="fin-hero-share-lbl">A rodar</div></div>
+      </div>
+    </div>`;
+  }
+
+  // ── KPI tiles ────────────────────────────────────────────────────────────
   const kpiEl=document.getElementById('crmDashKpis');
   if(kpiEl){
     const cards=[
@@ -12588,26 +12650,22 @@ function renderCrmDashboard(){
       const pAr =pctOf(ar,card.pot);
       const wFg =Math.min(pFg,100);
       const wCc =Math.min(pCc,100-wFg);
-      return `<div class="chart-box" style="padding:14px 16px">
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700;margin-bottom:4px">${card.lbl}</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Pot: <span style="color:var(--text);font-weight:700">${card.pot.toLocaleString('pt-BR')}t</span></div>
-        <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:rgba(255,255,255,0.07);margin-bottom:8px">
-          <div style="width:${wFg}%;background:#4ade80"></div>
-          <div style="width:${wCc}%;background:#fb923c"></div>
+      const wAr =Math.max(100-wFg-wCc,0);
+      const isTotal=card.safra===null;
+      return `<div class="fin-tile"${isTotal?' style="border-color:var(--border2);box-shadow:inset 0 0 0 1px rgba(74,222,128,0.10)"':''}>
+        <div class="fin-tile-top">
+          <span class="fin-tile-lbl">${card.lbl}</span>
+          <span class="fin-tile-pot">Pot. <b>${card.pot.toLocaleString('pt-BR')}t</b></span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:3px">
-          <div style="display:flex;justify-content:space-between;font-size:10px">
-            <span style="color:#4ade80;font-weight:700">Fertigran</span>
-            <span style="color:#4ade80;font-weight:700">${fg.toLocaleString('pt-BR')}t &nbsp;<span style="opacity:.8">${pFg}%</span></span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:10px">
-            <span style="color:#fb923c">Concorrentes</span>
-            <span style="color:#fb923c">${cc.toLocaleString('pt-BR')}t &nbsp;<span style="opacity:.8">${pCc}%</span></span>
-          </div>
-          <div style="display:flex;justify-content:space-between;font-size:10px">
-            <span style="color:var(--text3)">A rodar</span>
-            <span style="color:var(--text3)">${ar.toLocaleString('pt-BR')}t &nbsp;${pAr}%</span>
-          </div>
+        <div class="fin-bar">
+          <div style="width:${wFg}%;background:${FG_COL}"></div>
+          <div style="width:${wCc}%;background:${CC_COL}"></div>
+          <div style="width:${wAr}%;background:rgba(255,255,255,0.06)"></div>
+        </div>
+        <div class="fin-legend">
+          <div class="fin-legend-row"><span class="l" style="color:${FG_COL};font-weight:700"><i class="fin-dot" style="background:${FG_COL}"></i>Fertigran</span><span style="color:${FG_COL};font-weight:800">${pFg}% <span style="color:var(--text3);font-weight:600">· ${fg.toLocaleString('pt-BR')}t</span></span></div>
+          <div class="fin-legend-row"><span class="l" style="color:var(--text2)"><i class="fin-dot" style="background:${CC_COL}"></i>Concorrentes</span><span style="color:var(--text2);font-weight:700">${pCc}% <span style="color:var(--text3);font-weight:600">· ${cc.toLocaleString('pt-BR')}t</span></span></div>
+          <div class="fin-legend-row"><span class="l" style="color:var(--text3)"><i class="fin-dot" style="background:${AR_COL}"></i>A rodar</span><span style="color:var(--text3);font-weight:700">${pAr}% <span style="font-weight:600">· ${ar.toLocaleString('pt-BR')}t</span></span></div>
         </div>
       </div>`;
     }).join('');
@@ -12640,8 +12698,7 @@ function renderCrmDashboard(){
       options:{
         responsive:true,maintainAspectRatio:false,
         plugins:{
-          legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:10}},
-          title:{display:true,text:'Market Share por Safra (%)',color:'rgba(255,255,255,0.65)',font:{size:12}},
+          legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:10,padding:12,usePointStyle:true,pointStyle:'rectRounded'}},
           tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`}},
         },
         scales:{
@@ -12667,9 +12724,9 @@ function renderCrmDashboard(){
         data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:pieColors.map(c=>c+'bb'),borderColor:pieColors,borderWidth:1}]},
         options:{
           responsive:true,maintainAspectRatio:false,
+          cutout:'62%',
           plugins:{
-            legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10}},
-            title:{display:true,text:'Market Share Total',color:'rgba(255,255,255,0.65)',font:{size:12}},
+            legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10,padding:9,usePointStyle:true,pointStyle:'circle'}},
             tooltip:{callbacks:{label:ctx=>{
               const tot=ctx.dataset.data.reduce((a,b)=>a+b,0);
               return `${ctx.label}: ${(+ctx.parsed).toLocaleString('pt-BR')}t (${tot>0?pctOf(ctx.parsed,tot)+'%':'—'})`;
@@ -12691,36 +12748,36 @@ function renderCrmDashboard(){
     const mkCell=(v,pot,bold,col)=>{
       const p=pctOf(v,pot);
       const c=col||(bold?'var(--text)':'var(--text2)');
-      return `<td style="text-align:right;padding:5px 6px;color:${c};font-weight:${bold?700:400}">${v.toLocaleString('pt-BR')}</td>
-              <td style="text-align:right;padding:5px 2px;color:var(--text3);font-size:10px">${p}%</td>`;
+      return `<td class="num" style="color:${c};font-weight:${bold?700:400}">${v.toLocaleString('pt-BR')}</td>
+              <td class="pct">${p}%</td>`;
     };
     const mkRow=(k,d)=>{
       const ent=CRM_EMPRESAS.find(e=>e.key===k);
       const col=ent?.color||'#9ba2bd';
       const isFG=k==='fertigran';
-      return `<tr style="border-top:1px solid var(--border)${isFG?';background:rgba(74,222,128,0.05)':''}">
-        <td style="padding:5px 8px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:5px;flex-shrink:0"></span><span style="font-weight:${isFG?800:400};color:${isFG?'#4ade80':'var(--text)'}">${ent?.lbl||k}</span></td>
+      return `<tr style="${isFG?'background:rgba(74,222,128,0.05)':''}">
+        <td style="padding:7px 8px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${col};margin-right:8px"></span><span style="font-weight:${isFG?800:500};color:${isFG?'#4ade80':'var(--text)'}">${ent?.lbl||k}</span></td>
         ${mkCell(d.verao,potVerao,false,isFG?'#4ade80':null)}
         ${mkCell(d.irrigado,potIrrigado,false,isFG?'#4ade80':null)}
         ${mkCell(d.safrinha,potSafrinha,false,isFG?'#4ade80':null)}
         ${mkCell(d.total,potTotal,true,isFG?'#4ade80':null)}
       </tr>`;
     };
-    const arRow=`<tr style="border-top:2px solid var(--border);font-style:italic">
-      <td style="padding:5px 8px;color:var(--text3)">A Rodar</td>
+    const arRow=`<tr style="border-top:2px solid var(--border2)">
+      <td style="padding:7px 8px;color:var(--text3)"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${AR_COL};margin-right:8px"></span>A Rodar</td>
       ${mkCell(arV,potVerao,false,'var(--text3)')}
       ${mkCell(arI,potIrrigado,false,'var(--text3)')}
       ${mkCell(arS,potSafrinha,false,'var(--text3)')}
       ${mkCell(arT,potTotal,true,'var(--text3)')}
     </tr>`;
-    compEl.innerHTML=`<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;margin-bottom:10px">Market Share por Empresa — % do Potencial Total</div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">
-      <thead><tr style="color:var(--text3);font-size:9px;text-transform:uppercase">
-        <th style="text-align:left;padding:4px 8px">Empresa</th>
-        <th style="text-align:right;padding:4px 6px" colspan="2">Verão</th>
-        <th style="text-align:right;padding:4px 6px" colspan="2">Irrigado</th>
-        <th style="text-align:right;padding:4px 6px" colspan="2">Safrinha</th>
-        <th style="text-align:right;padding:4px 6px" colspan="2">Total</th>
+    compEl.innerHTML=`<div class="fin-card-title">Market Share por Empresa · % do Potencial</div>
+    <div style="overflow-x:auto"><table class="fin-tbl">
+      <thead><tr>
+        <th style="text-align:left">Empresa</th>
+        <th style="text-align:right" colspan="2">Verão</th>
+        <th style="text-align:right" colspan="2">Irrigado</th>
+        <th style="text-align:right" colspan="2">Safrinha</th>
+        <th style="text-align:right" colspan="2">Total</th>
       </tr></thead>
       <tbody>${sortedKeys.map(k=>mkRow(k,empMap[k])).join('')}${arRow}</tbody>
     </table></div>`;
