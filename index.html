@@ -3421,7 +3421,7 @@ async function dbClear(store){
 async function loadS(){
   try{
     const { data, error } = await _sb().from('user_state').select('state').maybeSingle();
-    if(error){ console.warn('loadS state', error); initFabs(); return; }
+    if(error){ console.warn('loadS state', error); initFabs(); window._stateLoaded=true; return; }
     if(data?.state && Object.keys(data.state).length){
       Object.assign(S, data.state);
       if(!S.fabs?.length) initFabs();
@@ -3433,15 +3433,18 @@ async function loadS(){
     // Settings (substitui 'imc_apikey')
     const { data: cfg } = await _sb().from('user_settings').select('settings').maybeSingle();
     if(cfg?.settings?.apikey){ S._apikey = cfg.settings.apikey; }
+    window._stateLoaded=true;
     _sbOk();
   }catch(e){
     console.error('loadS', e);
     document.getElementById('offlineBanner')?.classList.add('show');
     initFabs();
+    window._stateLoaded=true;
   }
 }
 async function saveS(){
   if(!S.fabs?.length) return;
+  if(!window._stateLoaded) return; // não sobrescrever antes do load inicial concluir
   const d=document.getElementById('saveDot'), l=document.getElementById('saveLbl');
   try{
     const u = (await _sb().auth.getUser()).data.user;
@@ -3451,6 +3454,7 @@ async function saveS(){
       { onConflict:'user_id' }
     );
     if(error) throw error;
+    _dirty=false;
     if(d) d.classList.remove('saving');
     if(l) l.textContent='Salvo '+String(new Date().getHours()).padStart(2,'0')+':'+String(new Date().getMinutes()).padStart(2,'0');
     _sbOk();
@@ -3474,12 +3478,23 @@ async function saveSettings(patch){
     _sbOk();
   }catch(e){ console.error('saveSettings', e); }
 }
-let _st=null;
+let _st=null, _dirty=false;
 function sched(){
+  _dirty=true;
   clearTimeout(_st); _st=setTimeout(saveS,1000);
   document.getElementById('saveDot').classList.add('saving');
   document.getElementById('saveLbl').textContent='Salvando…';
 }
+// Flush imediato ao ocultar/fechar a página (evita perder o save com debounce
+// quando troca de app / bloqueia a tela no celular ou tablet).
+async function flushSave(){
+  if(!_dirty) return;
+  clearTimeout(_st);
+  await saveS();
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flushSave(); });
+window.addEventListener('pagehide', flushSave);
+window.addEventListener('beforeunload', ()=>{ if(_dirty){ clearTimeout(_st); saveS(); } });
 
 // ── HELPERS
 function fab(){ return S.fabs[S.fac]; }
