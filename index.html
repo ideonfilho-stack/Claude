@@ -3314,19 +3314,19 @@ select:focus-visible{
 <div class="content" id="pg-rent" style="display:none">
   <div class="pg-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
     <div>
-      <div class="pg-title">Análise de Rentabilidade</div>
-      <div class="pg-sub">Compare custo e retorno por hectare entre produtos</div>
+      <div class="pg-title">Comparativo de Custos</div>
+      <div class="pg-sub">Custo por hectare e por kg de nutriente · auxílio de cotação</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="rentImportMat()">+ Importar matéria-prima</button>
-      <button class="btn btn-sm btn-green" onclick="rentAddManual()">+ Item manual</button>
+      <button class="btn btn-sm" onclick="rentAddCotacao()">+ Da Cotação</button>
+      <button class="btn btn-sm" onclick="rentAddFormulacao()">+ Da Formulação</button>
+      <button class="btn btn-sm btn-green" onclick="rentAddManual()">+ Manual</button>
     </div>
   </div>
-  <div id="rentGlobals"></div>
   <div id="rentHero"></div>
   <div class="crm-subtab" style="margin-top:2px">
-    <button class="crm-subtab-btn active" id="rentTabRent" onclick="rentShowTab('rent')">Rentabilidade</button>
-    <button class="crm-subtab-btn" id="rentTabNut" onclick="rentShowTab('nut')">Custo por nutriente</button>
+    <button class="crm-subtab-btn active" id="rentTabCusto" onclick="rentShowTab('custo')">Custo/ha</button>
+    <button class="crm-subtab-btn" id="rentTabNut" onclick="rentShowTab('nut')">Por Nutriente</button>
   </div>
   <div id="rentBody"></div>
   <div id="rentImportOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)rentCloseImport()">
@@ -3817,7 +3817,7 @@ function goPage(p){
     const b=document.getElementById('nb-'+pg); if(b) b.classList.toggle('active',pg===p);
     const mb=document.getElementById('mnb-'+pg); if(mb) mb.classList.toggle('active',pg===p);
   });
-  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM',rent:'Análise de Rentabilidade'}[p]||p;
+  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM',rent:'Comparativo de Custos'}[p]||p;
   if(p==='mats'){_expandedMat=null;renderMatCards();renderPDFHistPanel();}
   if(p==='prop'){initPropPage();}
   if(p==='rel'){initRelPage();}
@@ -12968,224 +12968,298 @@ function renderCrmDashboard(){
   }
 }
 
-// ══════════ ANÁLISE DE RENTABILIDADE ══════════════════════════════════════
-function _rentInit(){ if(!S.rent) S.rent={itens:[],precoSacaUSD:0,cultura:'Soja'}; S.rent.itens=S.rent.itens||[]; }
+// ══════════ COMPARATIVO DE CUSTOS ══════════════════════════════════════════
+function _rentInit(){ if(!S.rent) S.rent={itens:[]}; S.rent.itens=S.rent.itens||[]; }
 function rentId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function rentFx(){ return S.fx||5.20; }
-function rentMul(){ return S.cur==='BRL'? rentFx() : 1; }              // USD canônico → moeda exibida
-function rentToUSD(v){ return S.cur==='BRL'? ((+v||0)/rentFx()) : (+v||0); }  // entrada → USD
 function rentSym(){ return S.cur==='BRL'?'R$':'U$'; }
-function rentMoney(usd,dec){ dec=dec==null?2:dec; const v=(usd||0)*rentMul(); return rentSym()+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+function rentMul(){ return S.cur==='BRL'? rentFx() : 1; }
+function rentToUSD(v){ return S.cur==='BRL'? ((+v||0)/rentFx()) : (+v||0); }
+function rentMoney(usd,dec){ dec=dec==null?2:dec; const v=(usd||0)*rentMul(); return rentSym()+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
 function rentNum(v,dec){ dec=dec==null?0:dec; return (+v||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+
 function _rentCalc(it){
   const tonHa=(+it.doseKgHa||0)/1000;
   const custoHa=(+it.custoUSD||0)*tonHa;
-  const receita=(+it.prodSc||0)*(+S.rent.precoSacaUSD||0);
-  const margem=receita-custoHa;
-  const roi=custoHa>0? margem/custoHa*100 : null;
-  return {tonHa,custoHa,receita,margem,roi};
+  const nuts={};
+  ['N','P','K','S'].forEach(k=>{
+    const teor=+it[k]||0;
+    const kgNut=(+it.doseKgHa||0)*teor/100;
+    nuts[k]={teor,kgNut,custoKg:kgNut>0?custoHa/kgNut:null};
+  });
+  return {tonHa,custoHa,nuts};
 }
 
 function renderRent(){
   _rentInit();
-  rentRenderGlobals();
   rentRenderHero();
-  const tab=window._rentTab||'rent';
-  const tr=document.getElementById('rentTabRent'), tn=document.getElementById('rentTabNut');
-  if(tr) tr.classList.toggle('active',tab==='rent');
+  const tab=window._rentTab||'custo';
+  const tc=document.getElementById('rentTabCusto'), tn=document.getElementById('rentTabNut');
+  if(tc) tc.classList.toggle('active',tab==='custo');
   if(tn) tn.classList.toggle('active',tab==='nut');
-  if(tab==='rent') rentRenderRentTab(); else rentRenderNutTab();
+  if(tab==='custo') rentRenderCustoTab(); else rentRenderNutTab();
 }
 function rentShowTab(t){ window._rentTab=t; renderRent(); }
 
-function rentRenderGlobals(){
-  const el=document.getElementById('rentGlobals'); if(!el) return;
-  const INP='background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 11px;font-size:13px;outline:none';
-  const saca=S.rent.precoSacaUSD? (S.rent.precoSacaUSD*rentMul()).toFixed(2):'';
-  el.innerHTML=`<div class="fin-card" style="margin-bottom:14px">
-    <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end">
-      <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:800;letter-spacing:.06em;margin-bottom:5px">Cultura</div>
-        <input type="text" value="${(S.rent.cultura||'').replace(/"/g,'&quot;')}" oninput="S.rent.cultura=this.value;sched()" style="${INP};width:170px"></div>
-      <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:800;letter-spacing:.06em;margin-bottom:5px">Preço da saca (${rentSym()})</div>
-        <input type="number" min="0" step="0.01" value="${saca}" oninput="rentSetSaca(this.value)" style="${INP};width:150px;text-align:right"></div>
-      <div style="font-size:11px;color:var(--text3);padding-bottom:9px">Câmbio <b style="color:var(--text2)">R$ ${rentFx().toFixed(2)}</b> · valores em <b style="color:var(--text2)">${S.cur==='BRL'?'Reais':'Dólar'}</b> <span style="opacity:.7">(troque no topo)</span></div>
-    </div>
-  </div>`;
-}
-function rentSetSaca(v){ S.rent.precoSacaUSD=rentToUSD(v); sched(); S.rent.itens.forEach(it=>rentRecalcRentRow(it.id)); rentRenderHero(); }
-
 function rentRenderHero(){
   const el=document.getElementById('rentHero'); if(!el) return;
-  const its=S.rent.itens;
-  if(!its.length){ el.innerHTML=''; return; }
-  const calcs=its.map(it=>({it,c:_rentCalc(it)})).filter(x=>(+x.it.doseKgHa||0)>0);
+  _rentInit();
+  const calcs=(S.rent.itens||[]).map(it=>({it,c:_rentCalc(it)})).filter(x=>(+x.it.doseKgHa||0)>0);
   if(!calcs.length){ el.innerHTML=''; return; }
-  const best=calcs.slice().sort((a,b)=>b.c.margem-a.c.margem)[0];
-  const cheap=calcs.slice().sort((a,b)=>a.c.custoHa-b.c.custoHa)[0];
-  const avgCusto=calcs.reduce((a,x)=>a+x.c.custoHa,0)/calcs.length;
+  const sorted=calcs.slice().sort((a,b)=>a.c.custoHa-b.c.custoHa);
+  const best=sorted[0];
+  const worst=sorted[sorted.length-1];
+  const savings=worst.c.custoHa-best.c.custoHa;
+  const nutBest={};
+  ['N','P','K','S'].forEach(k=>{
+    const opts=calcs.filter(x=>x.c.nuts[k].custoKg!=null).sort((a,b)=>a.c.nuts[k].custoKg-b.c.nuts[k].custoKg);
+    if(opts.length) nutBest[k]={it:opts[0].it,val:opts[0].c.nuts[k].custoKg};
+  });
+  const nutTiles=Object.entries(nutBest).map(([k,{it,val}])=>`
+    <div class=”fin-hero-share-item”>
+      <div class=”fin-hero-share-val” style=”color:var(--green)”>${rentMoney(val)}/kg</div>
+      <div class=”fin-hero-share-lbl”>Menor /kg ${k} · ${it.nome||'?'}</div>
+    </div>`).join('');
   el.className='fin-hero';
-  el.innerHTML=`<div class="fin-hero-inner">
+  el.innerHTML=`<div class=”fin-hero-inner”>
     <div>
-      <div class="fin-hero-label">Melhor margem por hectare${S.rent.cultura?' · '+S.rent.cultura:''}</div>
-      <div class="fin-hero-val">${best.it.nome||'—'}</div>
-      <div class="fin-hero-sub">Margem ${rentMoney(best.c.margem)}/ha · custo ${rentMoney(best.c.custoHa)}/ha · ROI ${best.c.roi==null?'—':best.c.roi.toFixed(0)+'%'}</div>
+      <div class=”fin-hero-label”>Opção mais barata por hectare</div>
+      <div class=”fin-hero-val”>${best.it.nome||'—'}</div>
+      <div class=”fin-hero-sub”>${rentMoney(best.c.custoHa)}/ha · ${rentNum(best.it.doseKgHa)} kg/ha${calcs.length>1?' · economia de '+rentMoney(savings,0)+'/ha vs mais caro':''}</div>
     </div>
-    <div class="fin-hero-share">
-      <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--green)">${rentMoney(best.c.margem,0)}</div><div class="fin-hero-share-lbl">Maior margem/ha</div></div>
-      <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--amber)">${rentMoney(cheap.c.custoHa,0)}</div><div class="fin-hero-share-lbl">Menor custo/ha</div></div>
-      <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--text2)">${rentMoney(avgCusto,0)}</div><div class="fin-hero-share-lbl">Custo médio/ha</div></div>
+    <div class=”fin-hero-share”>
+      <div class=”fin-hero-share-item”>
+        <div class=”fin-hero-share-val” style=”color:var(--green)”>${rentMoney(best.c.custoHa,0)}</div>
+        <div class=”fin-hero-share-lbl”>Menor custo/ha</div>
+      </div>
+      ${nutTiles}
     </div>
   </div>`;
 }
 
-function rentRenderRentTab(){
+function rentRenderCustoTab(){
   const el=document.getElementById('rentBody'); if(!el) return;
+  _rentInit();
   const its=S.rent.itens;
-  if(!its.length){ el.innerHTML=`<div class="fin-card" style="text-align:center;color:var(--text3);font-size:13px;padding:2.4rem">Nenhum item ainda.<br><span style="font-size:11px">Use “+ Item manual” ou “+ Importar matéria-prima” acima.</span></div>`; return; }
+  if(!its.length){
+    el.innerHTML=`<div class=”fin-card” style=”text-align:center;color:var(--text3);font-size:13px;padding:2.4rem”>Nenhum item ainda.<br><span style=”font-size:11px”>Use os botões acima para adicionar itens da cotação, formulação ou manualmente.</span></div>`;
+    return;
+  }
   const INP='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;outline:none';
-  const rows=its.map(it=>{
-    const c=_rentCalc(it);
-    const price=it.custoUSD? (it.custoUSD*rentMul()).toFixed(2):'';
-    return `<tr style="border-top:1px solid var(--border)">
-      <td style="padding:6px"><input type="text" value="${(it.nome||'').replace(/"/g,'&quot;')}" placeholder="Produto" oninput="rentEdit('${it.id}','nome',this.value)" style="${INP};width:100%;min-width:140px"></td>
-      <td style="padding:6px"><input type="number" min="0" step="0.01" value="${price}" oninput="rentEditPrice('${it.id}',this.value)" style="${INP};width:108px;text-align:right"></td>
-      <td style="padding:6px"><input type="number" min="0" value="${it.doseKgHa||''}" oninput="rentEdit('${it.id}','doseKgHa',+this.value);rentRecalcRentRow('${it.id}')" style="${INP};width:88px;text-align:right"></td>
-      <td class="num" id="rt-custo-${it.id}" style="text-align:right;padding:6px;font-weight:700;color:var(--amber)">${rentMoney(c.custoHa)}</td>
-      <td style="padding:6px"><input type="number" min="0" step="0.1" value="${it.prodSc||''}" oninput="rentEdit('${it.id}','prodSc',+this.value);rentRecalcRentRow('${it.id}')" style="${INP};width:84px;text-align:right"></td>
-      <td class="num" id="rt-rec-${it.id}" style="text-align:right;padding:6px;color:var(--text2)">${rentMoney(c.receita)}</td>
-      <td class="num" id="rt-marg-${it.id}" style="text-align:right;padding:6px;font-weight:800;color:${c.margem>=0?'var(--green)':'var(--red)'}">${rentMoney(c.margem)}</td>
-      <td class="num" id="rt-roi-${it.id}" style="text-align:right;padding:6px;font-weight:700;color:${(c.roi||0)>=0?'var(--green)':'var(--red)'}">${c.roi==null?'—':c.roi.toFixed(0)+'%'}</td>
-      <td style="padding:6px;text-align:center"><button onclick="rentRemove('${it.id}')" title="Remover" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button></td>
+  const calcs=its.map((it,i)=>({it,c:_rentCalc(it),i}));
+  const withDose=calcs.filter(x=>+x.it.doseKgHa>0).sort((a,b)=>a.c.custoHa-b.c.custoHa);
+  const noDose=calcs.filter(x=>!(+x.it.doseKgHa>0));
+  const sorted=[...withDose,...noDose];
+  const minCusto=withDose.length>0?withDose[0].c.custoHa:null;
+  const rows=sorted.map(({it,c},rank)=>{
+    const isBest=rank===0&&+it.doseKgHa>0;
+    const hasData=+it.doseKgHa>0;
+    const price=it.custoUSD?(it.custoUSD*rentMul()).toFixed(2):'';
+    const diff=hasData&&minCusto!=null&&rank>0?'+'+rentMoney(c.custoHa-minCusto,0):'';
+    const srcTag=it.source==='cotacao'?'<span style=”font-size:9px;background:rgba(91,140,255,.18);color:#7fabff;padding:1px 5px;border-radius:3px;margin-left:5px”>cotação</span>':it.source==='form'?'<span style=”font-size:9px;background:rgba(16,213,156,.15);color:var(--green);padding:1px 5px;border-radius:3px;margin-left:5px”>formulação</span>':'';
+    const rowBg=isBest?'background:rgba(16,213,156,0.06);border-left:3px solid var(--green)':'';
+    return `<tr style=”border-top:1px solid var(--border);${rowBg}”>
+      <td style=”padding:8px 6px;white-space:nowrap”>
+        ${isBest?'<span style=”background:var(--green);color:#0a0a0a;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;margin-right:5px;vertical-align:middle”>MELHOR</span>':''}
+        <input type=”text” value=”${(it.nome||'').replace(/”/g,'&quot;')}” placeholder=”Nome do produto”
+          oninput=”rentEdit('${it.id}','nome',this.value)” style=”${INP};width:160px”>${srcTag}
+      </td>
+      <td style=”padding:8px 6px”><input type=”number” min=”0” step=”0.01” value=”${price}” placeholder=”0.00”
+        oninput=”rentEditPrice('${it.id}',this.value)” style=”${INP};width:104px;text-align:right”></td>
+      <td style=”padding:8px 6px”><input type=”number” min=”0” value=”${it.doseKgHa||''}” placeholder=”0”
+        oninput=”rentEdit('${it.id}','doseKgHa',+this.value);rentRecalcRow('${it.id}')” style=”${INP};width:84px;text-align:right”></td>
+      <td id=”rc-custo-${it.id}” style=”text-align:right;padding:8px 6px;font-weight:700;color:${isBest?'var(--green)':'var(--amber)'}”>${hasData?rentMoney(c.custoHa):'—'}</td>
+      <td id=”rc-diff-${it.id}” style=”text-align:right;padding:8px 6px;font-size:12px;color:var(--text3)”>${diff}</td>
+      <td style=”padding:8px 6px;text-align:center”>
+        <button onclick=”rentRemove('${it.id}')” title=”Remover” style=”background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px”>✕</button>
+      </td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="fin-card">
-    <div style="overflow-x:auto"><table class="fin-tbl" style="min-width:820px">
+  el.innerHTML=`<div class=”fin-card”>
+    <div style=”font-size:11px;color:var(--text3);margin-bottom:10px”>Ordenado por menor custo/ha · configure a dose (kg/ha) e preço para ativar o comparativo</div>
+    <div style=”overflow-x:auto”><table class=”fin-tbl” style=”min-width:580px”>
       <thead><tr>
-        <th style="text-align:left">Item</th>
-        <th style="text-align:right">Preço /ton (${rentSym()})</th>
-        <th style="text-align:right">Dose kg/ha</th>
-        <th style="text-align:right">Custo/ha</th>
-        <th style="text-align:right">Prod. sc/ha</th>
-        <th style="text-align:right">Receita/ha</th>
-        <th style="text-align:right">Margem/ha</th>
-        <th style="text-align:right">ROI</th>
-        <th></th>
+        <th style=”text-align:left”>Item</th>
+        <th style=”text-align:right”>Preço /ton (${rentSym()})</th>
+        <th style=”text-align:right”>Dose kg/ha</th>
+        <th style=”text-align:right”>Custo/ha</th>
+        <th style=”text-align:right”>Vs melhor</th>
+        <th style=”width:32px”></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>
-  <div class="fin-card" style="margin-top:14px"><div class="fin-card-title">Comparativo · Custo vs Margem por hectare</div><div style="height:260px"><canvas id="rentChart"></canvas></div></div>`;
-  rentChart();
-}
-function rentRecalcRentRow(id){
-  const it=S.rent.itens.find(x=>x.id===id); if(!it) return;
-  const c=_rentCalc(it);
-  const set=(eid,html,col)=>{const e=document.getElementById(eid); if(e){e.innerHTML=html; if(col)e.style.color=col;}};
-  set('rt-custo-'+id,rentMoney(c.custoHa));
-  set('rt-rec-'+id,rentMoney(c.receita));
-  set('rt-marg-'+id,rentMoney(c.margem),c.margem>=0?'var(--green)':'var(--red)');
-  set('rt-roi-'+id,c.roi==null?'—':c.roi.toFixed(0)+'%',(c.roi||0)>=0?'var(--green)':'var(--red)');
-  rentChart(); rentRenderHero();
-}
-function rentEdit(id,key,val){ const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it[key]=val; sched(); }
-function rentEditPrice(id,val){ const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it.custoUSD=rentToUSD(val); sched(); rentRecalcRentRow(id); }
-
-function rentChart(){
-  const el=document.getElementById('rentChart'); if(!el||typeof Chart==='undefined') return;
-  if(el._chart){ el._chart.destroy(); el._chart=null; }
-  const its=S.rent.itens.filter(it=>(+it.doseKgHa||0)>0);
-  if(!its.length) return;
-  const labels=its.map(it=>it.nome||'(sem nome)');
-  const custo=its.map(it=>_rentCalc(it).custoHa*rentMul());
-  const margem=its.map(it=>_rentCalc(it).margem*rentMul());
-  el._chart=new Chart(el,{
-    type:'bar',
-    data:{labels,datasets:[
-      {label:'Custo/ha',data:custo,backgroundColor:'rgba(248,181,62,0.6)',borderColor:'#f8b53e',borderWidth:1,borderRadius:4},
-      {label:'Margem/ha',data:margem,backgroundColor:margem.map(m=>m>=0?'rgba(16,213,156,0.6)':'rgba(239,94,94,0.55)'),borderColor:margem.map(m=>m>=0?'#10d59c':'#ef5e5e'),borderWidth:1,borderRadius:4},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11},usePointStyle:true,pointStyle:'rectRounded'}},
-        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+rentSym()+' '+(+ctx.parsed.y).toLocaleString('pt-BR',{maximumFractionDigits:2})}}},
-      scales:{x:{ticks:{color:'rgba(255,255,255,0.5)',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
-        y:{ticks:{color:'rgba(255,255,255,0.5)',callback:v=>rentSym()+' '+(+v).toLocaleString('pt-BR',{maximumFractionDigits:0})},grid:{color:'rgba(255,255,255,0.04)'}}}}
-  });
+  ${withDose.length>=2?`<div class=”fin-card” style=”margin-top:14px”><div class=”fin-card-title”>Custo por hectare — comparativo</div><div style=”height:260px”><canvas id=”rentChartCusto”></canvas></div></div>`:''}`;
+  if(withDose.length>=2) rentDrawChart('rentChartCusto',sorted.filter(x=>+x.it.doseKgHa>0));
 }
 
-const _RENT_NUTS=[['N','N'],['P','P'],['K','K'],['S','S']];
 function rentRenderNutTab(){
   const el=document.getElementById('rentBody'); if(!el) return;
+  _rentInit();
   const its=S.rent.itens;
-  if(!its.length){ el.innerHTML=`<div class="fin-card" style="text-align:center;color:var(--text3);font-size:13px;padding:2.4rem">Nenhum item ainda.</div>`; return; }
-  const INP='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;outline:none;width:62px;text-align:right';
-  const rows=its.map(it=>{
-    const c=_rentCalc(it);
-    const nutIn=_RENT_NUTS.map(([k])=>`<td style="padding:5px 4px"><input type="number" min="0" step="0.1" value="${it[k]||''}" oninput="rentEdit('${it.id}','${k}',+this.value);rentRecalcNutRow('${it.id}')" style="${INP}"></td>`).join('');
-    const cost=_RENT_NUTS.map(([k])=>{
-      const kg=(+it.doseKgHa||0)*(+it[k]||0)/100, cpk=kg>0? c.custoHa/kg:null;
-      return `<td class="num" id="nt-c${k}-${it.id}" style="text-align:right;padding:5px 6px;color:var(--text2);font-weight:600">${cpk==null?'—':rentMoney(cpk)}</td>`;
+  if(!its.length){
+    el.innerHTML=`<div class=”fin-card” style=”text-align:center;color:var(--text3);font-size:13px;padding:2.4rem”>Nenhum item ainda.</div>`;
+    return;
+  }
+  const INP='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;outline:none;text-align:right';
+  const NUTS=['N','P','K','S'];
+  const calcs=its.map(it=>({it,c:_rentCalc(it)}));
+  const nutMin={};
+  NUTS.forEach(k=>{
+    const vals=calcs.map(x=>x.c.nuts[k].custoKg).filter(v=>v!=null);
+    nutMin[k]=vals.length?Math.min(...vals):null;
+  });
+  const rows=calcs.map(({it,c})=>{
+    const hasData=+it.doseKgHa>0;
+    const nutInputs=NUTS.map(k=>`<td style=”padding:4px 5px”><input type=”number” min=”0” step=”0.1” value=”${it[k]||''}” placeholder=”0”
+      oninput=”rentEdit('${it.id}','${k}',+this.value);rentRecalcNutRow('${it.id}')” style=”${INP};width:54px”></td>`).join('');
+    const nutCells=NUTS.map(k=>{
+      const cpk=c.nuts[k].custoKg;
+      const isBest=cpk!=null&&nutMin[k]!=null&&Math.abs(cpk-nutMin[k])<0.0001;
+      return `<td id=”rn-${k}-${it.id}” style=”text-align:right;padding:6px 8px;font-weight:600;${isBest?'color:var(--green);background:rgba(16,213,156,0.08)':'color:var(--text2)'}”>${cpk!=null?rentMoney(cpk):'—'}</td>`;
     }).join('');
-    return `<tr style="border-top:1px solid var(--border)">
-      <td style="padding:6px;min-width:140px;font-weight:600;color:var(--text)">${it.nome||'(sem nome)'}</td>
-      <td class="num" style="text-align:right;padding:6px;color:var(--text3)">${rentNum(it.doseKgHa)}</td>
-      ${nutIn}
-      <td class="num" id="nt-custo-${it.id}" style="text-align:right;padding:6px;font-weight:700;color:var(--amber)">${rentMoney(c.custoHa)}</td>
-      ${cost}
+    return `<tr style=”border-top:1px solid var(--border)”>
+      <td style=”padding:6px 8px;font-weight:600;color:var(--text);min-width:130px”>${it.nome||'(sem nome)'}</td>
+      <td style=”padding:6px 8px;text-align:right;color:var(--text3)”>${rentNum(it.doseKgHa)}</td>
+      <td id=”rn-custo-${it.id}” style=”text-align:right;padding:6px 8px;font-weight:700;color:var(--amber)”>${hasData?rentMoney(c.custoHa):'—'}</td>
+      ${nutInputs}
+      ${nutCells}
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class="fin-card">
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Informe os teores (%) de cada nutriente para ver o <b style="color:var(--text2)">custo por kg de nutriente entregue</b> por hectare. Importando matérias-primas, os teores já vêm preenchidos.</div>
-    <div style="overflow-x:auto"><table class="fin-tbl" style="min-width:760px">
-      <thead><tr>
-        <th style="text-align:left">Item</th><th style="text-align:right">Dose kg/ha</th>
-        <th style="text-align:right">N %</th><th style="text-align:right">P %</th><th style="text-align:right">K %</th><th style="text-align:right">S %</th>
-        <th style="text-align:right">Custo/ha</th>
-        <th style="text-align:right">/kg N</th><th style="text-align:right">/kg P</th><th style="text-align:right">/kg K</th><th style="text-align:right">/kg S</th>
-      </tr></thead>
+  el.innerHTML=`<div class=”fin-card”>
+    <div style=”font-size:11px;color:var(--text3);margin-bottom:10px”>Custo por kg de nutriente entregue/ha · verde = mais barato na categoria · ajuste os teores conforme necessário</div>
+    <div style=”overflow-x:auto”><table class=”fin-tbl” style=”min-width:860px”>
+      <thead>
+        <tr>
+          <th rowspan=”2” style=”text-align:left;vertical-align:bottom”>Item</th>
+          <th rowspan=”2” style=”text-align:right;vertical-align:bottom”>Dose<br>kg/ha</th>
+          <th rowspan=”2” style=”text-align:right;vertical-align:bottom”>Custo/ha</th>
+          <th colspan=”4” style=”text-align:center;padding-bottom:4px;border-bottom:1px solid var(--border)”>Teor % (editar)</th>
+          <th colspan=”4” style=”text-align:center;padding-bottom:4px;border-bottom:1px solid var(--border)”>Custo por kg de nutriente</th>
+        </tr>
+        <tr>
+          <th style=”text-align:right”>%N</th><th style=”text-align:right”>%P</th><th style=”text-align:right”>%K</th><th style=”text-align:right”>%S</th>
+          <th style=”text-align:right”>/kg N</th><th style=”text-align:right”>/kg P</th><th style=”text-align:right”>/kg K</th><th style=”text-align:right”>/kg S</th>
+        </tr>
+      </thead>
       <tbody>${rows}</tbody>
     </table></div>
+    <div style=”font-size:10px;color:var(--text3);margin-top:8px”>* Itens importados da cotação/formulação já trazem teores preenchidos.</div>
   </div>`;
 }
-function rentRecalcNutRow(id){
-  const it=S.rent.itens.find(x=>x.id===id); if(!it)return;
+
+function rentRecalcRow(id){
+  _rentInit();
+  const it=S.rent.itens.find(x=>x.id===id); if(!it) return;
   const c=_rentCalc(it);
-  const set=(eid,html)=>{const e=document.getElementById(eid); if(e)e.innerHTML=html;};
-  set('nt-custo-'+id,rentMoney(c.custoHa));
-  _RENT_NUTS.forEach(([k])=>{
-    const kg=(+it.doseKgHa||0)*(+it[k]||0)/100, cpk=kg>0? c.custoHa/kg:null;
-    set('nt-c'+k+'-'+id, cpk==null?'—':rentMoney(cpk));
+  const hasData=+it.doseKgHa>0;
+  const elC=document.getElementById('rc-custo-'+id);
+  if(elC) elC.innerHTML=hasData?rentMoney(c.custoHa):'—';
+  rentRenderHero();
+}
+function rentRecalcNutRow(id){
+  _rentInit();
+  const it=S.rent.itens.find(x=>x.id===id); if(!it) return;
+  const c=_rentCalc(it);
+  const hasData=+it.doseKgHa>0;
+  const elC=document.getElementById('rn-custo-'+id);
+  if(elC) elC.innerHTML=hasData?rentMoney(c.custoHa):'—';
+  ['N','P','K','S'].forEach(k=>{
+    const el=document.getElementById('rn-'+k+'-'+id);
+    if(el) el.innerHTML=c.nuts[k].custoKg!=null?rentMoney(c.nuts[k].custoKg):'—';
+  });
+  rentRenderHero();
+}
+function rentEdit(id,key,val){ _rentInit(); const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it[key]=val; sched(); }
+function rentEditPrice(id,val){ _rentInit(); const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it.custoUSD=rentToUSD(val); sched(); rentRecalcRow(id); }
+
+function rentDrawChart(canvasId,sorted){
+  const el=document.getElementById(canvasId); if(!el||typeof Chart==='undefined') return;
+  if(el._chart){ el._chart.destroy(); el._chart=null; }
+  const labels=sorted.map(x=>x.it.nome||'(sem nome)');
+  const data=sorted.map(x=>x.c.custoHa*rentMul());
+  const colors=sorted.map((_,i)=>i===0?'rgba(16,213,156,0.72)':'rgba(248,181,62,0.52)');
+  const borders=sorted.map((_,i)=>i===0?'#10d59c':'#f8b53e');
+  el._chart=new Chart(el,{
+    type:'bar',
+    data:{labels,datasets:[{label:'Custo/ha',data,backgroundColor:colors,borderColor:borders,borderWidth:1,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>rentSym()+' '+(+ctx.parsed.y).toLocaleString('pt-BR',{maximumFractionDigits:2})+'/ha'}}},
+      scales:{x:{ticks:{color:'rgba(255,255,255,0.5)',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{ticks:{color:'rgba(255,255,255,0.5)',callback:v=>rentSym()+' '+(+v).toLocaleString('pt-BR',{maximumFractionDigits:0})},grid:{color:'rgba(255,255,255,0.04)'}}}}
   });
 }
 
-function rentAddManual(){ _rentInit(); S.rent.itens.push({id:rentId(),nome:'',custoUSD:0,doseKgHa:0,prodSc:0,N:0,P:0,K:0,S:0}); sched(); renderRent(); }
-function rentRemove(id){ if(!confirm('Remover este item?'))return; S.rent.itens=S.rent.itens.filter(x=>x.id!==id); sched(); renderRent(); }
-
-function rentImportMat(){
+function rentAddManual(){
   _rentInit();
-  const f=(S.fabs&&S.fabs[S.fac])||(S.fabs&&S.fabs[0]);
-  if(!f||!(f.mats||[]).length){ alert('Nenhuma matéria-prima cadastrada.'); return; }
-  window._rentImpFab=f;
-  const rows=(f.mats||[]).map((m,i)=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer">
-    <input type="checkbox" value="${i}" style="width:16px;height:16px;accent-color:var(--green)">
-    <span style="flex:1;font-size:13px;color:var(--text);font-weight:600">${m.name}</span>
-    <span style="font-size:11px;color:var(--text3)">${fmtMoney(cost(m),S.cur)}/ton · N${m.N||0} P${m.P||0} K${m.K||0} S${m.S||0}</span>
-  </label>`).join('');
-  document.getElementById('rentImportContent').innerHTML=`<button class="crm-modal-close" onclick="rentCloseImport()">✕</button>
-    <div style="font-size:16px;font-weight:800;margin-bottom:3px">Importar matérias-primas</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">Fábrica: ${f.name} · selecione os itens (preços e teores são copiados; informe a dose depois)</div>
-    <div style="max-height:52vh;overflow-y:auto">${rows}</div>
-    <button class="btn btn-green" style="width:100%;margin-top:14px" onclick="rentConfirmImport()">Adicionar selecionados</button>`;
+  S.rent.itens.push({id:rentId(),nome:'',custoUSD:0,doseKgHa:0,N:0,P:0,K:0,S:0,source:'manual'});
+  sched(); renderRent();
+}
+function rentRemove(id){
+  if(!confirm('Remover este item?'))return;
+  _rentInit();
+  S.rent.itens=S.rent.itens.filter(x=>x.id!==id);
+  sched(); renderRent();
+}
+
+function rentAddCotacao(){
+  _rentInit();
+  const itens=S.cotacao||[];
+  if(!itens.length){ alert('Cotação vazia. Adicione itens na aba Cotação primeiro.'); return; }
+  const rows=itens.map((item,i)=>{
+    const p=_cotP_of(item);
+    const cv=_cotCalcVenda(item.custo,p);
+    const label=item.grade||(item.type==='mp'&&item.mats&&item.mats[0]?item.mats[0].name:'')||('Item '+(i+1));
+    const nuts=(item.nt||[]).map(n=>n.lbl+'='+n.val+'%').join(' ');
+    return `<label style=”display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer”>
+      <input type=”checkbox” value=”${i}” style=”width:16px;height:16px;accent-color:var(--green);margin-top:3px” checked>
+      <div style=”flex:1”>
+        <div style=”font-size:13px;font-weight:700;color:var(--text)”>${label}</div>
+        <div style=”font-size:11px;color:var(--text3);margin-top:2px”>${item.fabs||''} · custo ${fmtMoney(item.custo,'USD')}/t · venda ${fmtMoney(cv.venda,'USD')}/t</div>
+        ${nuts?`<div style=”font-size:10px;color:var(--text3);margin-top:2px”>${nuts}</div>`:''}
+      </div>
+      <select id=”rent-src-price-${i}” style=”background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:3px 7px;margin-top:3px;flex-shrink:0”>
+        <option value=”custo”>Custo ${fmtMoney(item.custo,'USD')}/t</option>
+        <option value=”venda”>Venda ${fmtMoney(cv.venda,'USD')}/t</option>
+      </select>
+    </label>`;
+  }).join('');
+  window._rentCotItens=itens;
+  document.getElementById('rentImportContent').innerHTML=`
+    <button class=”crm-modal-close” onclick=”rentCloseImport()”>✕</button>
+    <div style=”font-size:16px;font-weight:800;margin-bottom:4px”>Adicionar da Cotação</div>
+    <div style=”font-size:11px;color:var(--text3);margin-bottom:12px”>${itens.length} item(ns) · selecione e escolha o preço de referência</div>
+    <div style=”max-height:55vh;overflow-y:auto”>${rows}</div>
+    <button class=”btn btn-green” style=”width:100%;margin-top:14px” onclick=”rentConfirmCotacao()”>Adicionar selecionados</button>`;
   document.getElementById('rentImportOverlay').style.display='flex';
 }
-function rentCloseImport(){ const ov=document.getElementById('rentImportOverlay'); if(ov) ov.style.display='none'; }
-function rentConfirmImport(){
-  const f=window._rentImpFab; if(!f) return;
+function rentConfirmCotacao(){
+  _rentInit();
+  const itens=window._rentCotItens||[];
   document.querySelectorAll('#rentImportContent input[type=checkbox]:checked').forEach(ch=>{
-    const m=f.mats[+ch.value]; if(!m) return;
-    S.rent.itens.push({id:rentId(),nome:m.name,custoUSD:+m.costUSD||0,doseKgHa:0,prodSc:0,N:+m.N||0,P:+m.P||0,K:+m.K||0,S:+m.S||0});
+    const i=+ch.value;
+    const item=itens[i]; if(!item) return;
+    const sel=document.getElementById('rent-src-price-'+i);
+    let priceUSD=item.custo;
+    if(sel&&sel.value==='venda'){ const p=_cotP_of(item); priceUSD=_cotCalcVenda(item.custo,p).venda; }
+    const label=item.grade||(item.type==='mp'&&item.mats&&item.mats[0]?item.mats[0].name:'')||('Item '+(i+1));
+    const nutObj={N:0,P:0,K:0,S:0};
+    (item.nt||[]).forEach(n=>{ if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl)) nutObj[n.lbl]=+n.val||0; });
+    S.rent.itens.push({id:rentId(),nome:label,custoUSD:priceUSD,doseKgHa:0,...nutObj,source:'cotacao'});
   });
   sched(); rentCloseImport(); renderRent();
 }
+
+function rentAddFormulacao(){
+  _rentInit();
+  const f=window._crmLastFormulacao;
+  if(!f){ alert('Nenhuma formulação calculada. Vá à aba Formulação, calcule e clique “Incluir na Cotação”.'); return; }
+  const nutObj={N:0,P:0,K:0,S:0};
+  (f.nt||[]).forEach(n=>{ if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl)) nutObj[n.lbl]=+n.val||0; });
+  S.rent.itens.push({id:rentId(),nome:f.grade||'Formulação',custoUSD:f.custo||0,doseKgHa:0,...nutObj,source:'form'});
+  sched(); renderRent();
+}
+function rentCloseImport(){ const ov=document.getElementById('rentImportOverlay'); if(ov) ov.style.display='none'; }
 </script>
 </body>
 </html>
