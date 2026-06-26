@@ -160,6 +160,35 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
 #authGate.loading .ag-spinner{ display:block; }
 @keyframes ag-spin{ to{ transform:rotate(360deg); } }
 
+/* ─── Login: partículas de fertilizante + card em vidro ──────────────── */
+#authGate{ overflow:hidden; }
+#ag-particles{
+  position:absolute; inset:0; width:100%; height:100%;
+  z-index:0; display:block; pointer-events:none;
+}
+#authGate .ag-card{
+  position:relative; z-index:2;
+  background:rgba(18,24,38,0.66);
+  backdrop-filter:blur(16px) saturate(140%);
+  -webkit-backdrop-filter:blur(16px) saturate(140%);
+  border:1px solid rgba(224,160,32,0.22);
+  border-top:3px solid #e0a020;
+  border-radius:14px;
+  box-shadow:0 24px 70px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,0.03), 0 0 50px rgba(224,160,32,0.07);
+  animation:ag-card-in .75s cubic-bezier(.2,.85,.25,1) both;
+}
+@keyframes ag-card-in{ from{ opacity:0; transform:translateY(20px) scale(.97); } to{ opacity:1; transform:none; } }
+#authGate #ag-logo{ animation:ag-float 5.5s ease-in-out infinite; will-change:transform; }
+@keyframes ag-float{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-8px); } }
+#authGate input{ transition:border-color .2s, box-shadow .2s, background .2s; }
+#authGate input:focus{ border-color:#e0a020; box-shadow:0 0 0 3px rgba(224,160,32,0.16); background:#0c1120; }
+#authGate button{ transition:background .2s, transform .1s, box-shadow .2s; box-shadow:0 6px 18px rgba(224,160,32,0.28); }
+#authGate button:hover:not(:disabled){ background:#f5b428; transform:translateY(-1px); box-shadow:0 10px 26px rgba(224,160,32,0.42); }
+#authGate button:active:not(:disabled){ transform:translateY(0); box-shadow:0 4px 14px rgba(224,160,32,0.3); }
+@media(prefers-reduced-motion:reduce){
+  #authGate .ag-card,#authGate #ag-logo{ animation:none; }
+}
+
 /* ─── Banner offline ─────────────────────────────────────────────────── */
 #offlineBanner{
   position:fixed; top:0; left:0; right:0; z-index:9998;
@@ -1969,6 +1998,7 @@ select:focus-visible{
 
 <!-- ═══════ AUTH GATE (login overlay v12) ═══════ -->
 <div id="authGate">
+  <canvas id="ag-particles"></canvas>
   <form class="ag-card" id="loginForm" autocomplete="on">
     <img id="ag-logo" src="" alt="FSI" style="width:100px;height:100px;border-radius:18px;display:block;margin:0 auto 20px;object-fit:cover;box-shadow:0 6px 24px rgba(0,0,0,.45)">
     <h2>Fertilizer Sphere Intelli — Login</h2>
@@ -1980,6 +2010,116 @@ select:focus-visible{
     <div class="ag-spinner"></div>
   </form>
 </div>
+
+<script>
+/* ── Login · partículas de fertilizante fluidas + interação do cursor ── */
+(function(){
+  const canvas=document.getElementById('ag-particles');
+  const gate=document.getElementById('authGate');
+  if(!canvas||!gate) return;
+  const ctx=canvas.getContext('2d');
+  let W=0,H=0,DPR=1,parts=[],raf=null;
+  const mouse={x:-9999,y:-9999,active:false};
+  const PAL=[
+    {r:16,g:213,b:156},   // verde
+    {r:248,g:181,b:62},   // âmbar
+    {r:91,g:140,b:255},   // azul
+    {r:62,g:221,b:199},   // teal
+    {r:241,g:243,b:249},  // branco
+  ];
+  function resize(){
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=canvas.clientWidth||window.innerWidth;
+    H=canvas.clientHeight||window.innerHeight;
+    canvas.width=W*DPR; canvas.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    spawn();
+  }
+  function spawn(){
+    const n=Math.round(Math.min(120,Math.max(36,(W*H)/14000)));
+    parts=[];
+    for(let i=0;i<n;i++){
+      const depth=Math.random();
+      parts.push({
+        x:Math.random()*W, y:Math.random()*H,
+        vx:(Math.random()-0.5)*0.25, vy:(Math.random()-0.5)*0.25,
+        r:0.6+depth*2.6, depth,
+        col:PAL[(Math.random()*PAL.length)|0],
+        a:0.16+depth*0.5,
+      });
+    }
+  }
+  const R=155, R2=R*R, LINK=120, LINK2=LINK*LINK;
+  function step(){
+    if(gate.classList.contains('hidden')){ raf=null; return; }
+    ctx.clearRect(0,0,W,H);
+    // física
+    for(const p of parts){
+      p.x+=p.vx*(0.4+p.depth); p.y+=p.vy*(0.4+p.depth);
+      if(p.x<-12)p.x=W+12; else if(p.x>W+12)p.x=-12;
+      if(p.y<-12)p.y=H+12; else if(p.y>H+12)p.y=-12;
+      if(mouse.active){
+        const dx=p.x-mouse.x, dy=p.y-mouse.y, d2=dx*dx+dy*dy;
+        if(d2<R2 && d2>0.5){
+          const d=Math.sqrt(d2), f=(1-d/R), nx=dx/d, ny=dy/d;
+          p.vx+=nx*f*0.9*(0.5+p.depth);  p.vy+=ny*f*0.9*(0.5+p.depth);   // repulsão
+          p.vx+=-ny*f*0.32;               p.vy+= nx*f*0.32;               // redemoinho
+        }
+      }
+      p.vx*=0.94; p.vy*=0.94;
+      const sp=Math.hypot(p.vx,p.vy);
+      if(sp<0.05){ p.vx+=(Math.random()-0.5)*0.05; p.vy+=(Math.random()-0.5)*0.05; }
+      else if(sp>2.2){ p.vx=p.vx/sp*2.2; p.vy=p.vy/sp*2.2; }
+    }
+    // linhas (constelação + cursor)
+    for(let i=0;i<parts.length;i++){
+      const a=parts[i];
+      for(let j=i+1;j<parts.length;j++){
+        const b=parts[j], dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy;
+        if(d2<LINK2){
+          const al=(1-Math.sqrt(d2)/LINK)*0.13*Math.min(a.depth+b.depth,1);
+          if(al>0.012){
+            ctx.strokeStyle='rgba(125,150,175,'+al.toFixed(3)+')';
+            ctx.lineWidth=0.6;
+            ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+          }
+        }
+      }
+      if(mouse.active){
+        const dx=a.x-mouse.x, dy=a.y-mouse.y, d2=dx*dx+dy*dy;
+        if(d2<R2){
+          const al=(1-Math.sqrt(d2)/R)*0.28;
+          ctx.strokeStyle='rgba('+a.col.r+','+a.col.g+','+a.col.b+','+al.toFixed(3)+')';
+          ctx.lineWidth=0.7;
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(mouse.x,mouse.y); ctx.stroke();
+        }
+      }
+    }
+    // grânulos com glow
+    for(const p of parts){
+      const glow=p.r*3.5;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,glow);
+      g.addColorStop(0,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+p.a.toFixed(3)+')');
+      g.addColorStop(0.4,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+(p.a*0.35).toFixed(3)+')');
+      g.addColorStop(1,'rgba('+p.col.r+','+p.col.g+','+p.col.b+',0)');
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(p.x,p.y,glow,0,6.2832); ctx.fill();
+      ctx.fillStyle='rgba('+p.col.r+','+p.col.g+','+p.col.b+','+Math.min(p.a*1.7,0.9).toFixed(3)+')';
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.2832); ctx.fill();
+    }
+    raf=requestAnimationFrame(step);
+  }
+  function start(){ if(!raf && !gate.classList.contains('hidden')) raf=requestAnimationFrame(step); }
+  function setM(x,y){ const r=canvas.getBoundingClientRect(); mouse.x=x-r.left; mouse.y=y-r.top; mouse.active=true; }
+  window.addEventListener('mousemove',e=>setM(e.clientX,e.clientY),{passive:true});
+  window.addEventListener('mouseout',()=>{ mouse.active=false; });
+  window.addEventListener('touchmove',e=>{ if(e.touches[0]) setM(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
+  window.addEventListener('touchend',()=>{ mouse.active=false; });
+  window.addEventListener('resize',resize);
+  new MutationObserver(()=>{ if(!gate.classList.contains('hidden')) start(); }).observe(gate,{attributes:true,attributeFilter:['class']});
+  resize(); start();
+})();
+</script>
 
 <!-- ═══════ BANNER OFFLINE ═══════ -->
 <div id="offlineBanner">⚠ Sem conexão — alterações podem não estar sendo salvas</div>
