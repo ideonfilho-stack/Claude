@@ -3916,7 +3916,7 @@ function _fabGridHTML(){
       const cellBg=act?'rgba(168,255,83,.03)':'rgba(242,114,91,.03)';
       h+=`<td style="padding:9px 12px;border-bottom:1px solid var(--border);box-shadow:${cellShadow};background:${cellBg};transition:box-shadow .2s,background .2s">
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-<label class="sw"><input type="checkbox" ${act?'checked':''} onchange="toggleMatFab(${fi},${jmp})"><span class="sw-track"><span class="sw-knob"></span></span></label>
+<label class="sw" onclick="toggleMatFab(${fi},${jmp})"><input type="checkbox" ${act?'checked':''} style="pointer-events:none"><span class="sw-track"><span class="sw-knob"></span></span></label>
 <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:${lc};letter-spacing:.03em">
 <span style="width:5px;height:5px;border-radius:50%;background:${lc};flex-shrink:0"></span>${act?'Ativo':'Inativo'}</span>
 </div>
@@ -4164,7 +4164,7 @@ function renderMatCards_UNUSED(){
       <!-- HEADER ROW -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleExpand(${i})">
         <div style="width:4px;height:36px;background:${m.active?col:'var(--border2)'};border-radius:2px;flex-shrink:0"></div>
-        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" ${m.active?'checked':''} onchange="mats()[${i}].active=this.checked;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()"><span class="sw-track"><span class="sw-knob"></span></span></label>
+        <label class="sw" onclick="event.stopPropagation();mats()[${i}].active=!mats()[${i}].active;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()"><input type="checkbox" ${m.active?'checked':''} style="pointer-events:none"><span class="sw-track"><span class="sw-knob"></span></span></label>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:${m.active?'var(--text)':'var(--text3)'}">${m.name}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${activeNuts}</div>
