@@ -123,16 +123,16 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
 #authGate{
   position:fixed; inset:0; z-index:99999;
   display:flex; align-items:center; justify-content:center;
-  background:radial-gradient(ellipse at top,#0f1729 0%,#0a0e1a 60%);
+  background:var(--bg);
   font-family:'Inter',system-ui,sans-serif;
 }
 #authGate.hidden{ display:none; }
 #authGate .ag-card{
-  background:#121826; padding:32px 28px;
+  background:var(--surface); padding:32px 28px;
   border-top:3px solid #e0a020;
   width:min(360px, 92vw);
   box-shadow:0 12px 40px rgba(0,0,0,.5);
-  border-radius:6px;
+  border-radius:var(--radius-sm);
 }
 #authGate h2{
   color:#e0a020; font-family:var(--mono);
@@ -143,8 +143,8 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
 #authGate input{
   width:100%; box-sizing:border-box;
   margin:6px 0; padding:10px 12px;
-  background:#0a0e1a; color:#e8eaed;
-  border:1px solid #2a3145; border-radius:4px;
+  background:var(--bg); color:var(--text);
+  border:1px solid var(--border2); border-radius:4px;
   font-size:14px; outline:none;
 }
 #authGate input:focus{ border-color:#e0a020; }
@@ -238,7 +238,6 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
   height:100vh;
   overflow-y:auto;
   z-index:50;
-  backdrop-filter:blur(12px);
   width:240px;
   transition:width var(--t);
   overflow-x:hidden;
@@ -542,9 +541,7 @@ body:not(.authed) > *:not(#authGate):not(#offlineBanner){ display:none !importan
   bottom:0;
   left:0;
   right:0;
-  background:var(--surface-glass);
-  backdrop-filter:blur(20px);
-  -webkit-backdrop-filter:blur(20px);
+  background:var(--surface);
   border-top:1px solid var(--border);
   z-index:100;
   padding:0;
