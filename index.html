@@ -2188,7 +2188,7 @@ select:focus-visible{
     <button class="mnav-btn" id="mnb-dash" onclick="goPage('dash')"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dash</button>
     <button class="mnav-btn" id="mnb-rotas" onclick="goPage('rotas')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Rotas</button>
     <button class="mnav-btn" id="mnb-crm" onclick="goPage('crm')"><svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>CRM</button>
-    <button class="mnav-btn" id="mnb-rent" onclick="goPage('rent')"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>Rentab.</button>
+    <button class="mnav-btn" id="mnb-rent" onclick="goPage('rent')"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>Compar.</button>
   </div>
 </nav>
 
@@ -2235,7 +2235,7 @@ select:focus-visible{
   <div class="nav-section">
     <div class="nav-label">CRM</div>
     <button class="nav-btn" id="nb-crm" onclick="goPage('crm')"><svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="nav-lbl">CRM</span></button>
-    <button class="nav-btn" id="nb-rent" onclick="goPage('rent')"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg><span class="nav-lbl">Rentabilidade</span></button>
+    <button class="nav-btn" id="nb-rent" onclick="goPage('rent')"><svg class="icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg><span class="nav-lbl">Comparativo</span></button>
   </div>
   <div class="save-ind">
     <div class="save-dot" id="saveDot"></div>
@@ -3322,25 +3322,19 @@ select:focus-visible{
 </div>
 <!-- RENTABILIDADE -->
 <div class="content" id="pg-rent" style="display:none">
-  <div class="pg-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
+  <div class="pg-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1.5rem">
     <div>
-      <div class="pg-title">Comparativo de Custos</div>
-      <div class="pg-sub">Custo por hectare e por kg de nutriente · auxílio de cotação</div>
+      <div class="pg-title">Comparativo</div>
+      <div class="pg-sub">Custo/ha · Nutrientes/ha · Eficiência de produto</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="rentAddCotacao()">+ Da Cotação</button>
-      <button class="btn btn-sm" onclick="rentAddFormulacao()">+ Da Formulação</button>
-      <button class="btn btn-sm btn-green" onclick="rentAddManual()">+ Manual</button>
+      <button class="btn btn-sm" onclick="cmpAdd()">+ Da Cotação</button>
+      <button class="btn btn-sm btn-green" onclick="cmpManual()">+ Manual</button>
     </div>
   </div>
-  <div id="rentHero"></div>
-  <div class="crm-subtab" style="margin-top:2px">
-    <button class="crm-subtab-btn active" id="rentTabCusto" onclick="rentShowTab('custo')">Custo/ha</button>
-    <button class="crm-subtab-btn" id="rentTabNut" onclick="rentShowTab('nut')">Por Nutriente</button>
-  </div>
-  <div id="rentBody"></div>
-  <div id="rentImportOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)rentCloseImport()">
-    <div class="crm-modal" id="rentImportContent"></div>
+  <div id="cmpWrap"></div>
+  <div id="cmpOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)cmpCloseModal()">
+    <div class="crm-modal" id="cmpModal" style="max-width:620px;max-height:82vh;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -3827,7 +3821,7 @@ function goPage(p){
     const b=document.getElementById('nb-'+pg); if(b) b.classList.toggle('active',pg===p);
     const mb=document.getElementById('mnb-'+pg); if(mb) mb.classList.toggle('active',pg===p);
   });
-  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM',rent:'Comparativo de Custos'}[p]||p;
+  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM',rent:'Comparativo'}[p]||p;
   if(p==='mats'){_expandedMat=null;renderMatCards();renderPDFHistPanel();}
   if(p==='prop'){initPropPage();}
   if(p==='rel'){initRelPage();}
@@ -3839,7 +3833,7 @@ function goPage(p){
   if(p==='dash'){renderDash();renderPriceHistCharts();renderArquivo();checkBackupAviso();}
   if(p==='rotas'){initRotasPage();}
   if(p==='crm'){renderCRM();}
-  if(p==='rent'){renderRent();}
+  if(p==='rent'){renderComp();}
   // Scroll to top on mobile page change
   window.scrollTo(0,0);
 }
@@ -13017,315 +13011,359 @@ function renderCrmDashboard(){
 }
 
 // ══════════ COMPARATIVO DE CUSTOS ══════════════════════════════════════════
-function _rentInit(){ if(!S.rent) S.rent={itens:[]}; S.rent.itens=S.rent.itens||[]; }
-function rentId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function rentFx(){ return S.fx||5.20; }
-function rentSym(){ return S.cur==='BRL'?'R$':'U$'; }
-function rentMul(){ return S.cur==='BRL'? rentFx() : 1; }
-function rentToUSD(v){ return S.cur==='BRL'? ((+v||0)/rentFx()) : (+v||0); }
-function rentMoney(usd,dec){ dec=dec==null?2:dec; const v=(usd||0)*rentMul(); return rentSym()+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
-function rentNum(v,dec){ dec=dec==null?0:dec; return (+v||0).toLocaleString('pt-BR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+// ── COMPARATIVO ──────────────────────────────────────────────────────────────
 
-function _rentCalc(it){
-  const tonHa=(+it.doseKgHa||0)/1000;
-  const custoHa=(+it.custoUSD||0)*tonHa;
+const _CMP_PAL=['#A8FF53','#5b8cff','#f8b53e','#f87171','#2dd4bf','#b48dff','#fb923c','#22d3ee','#34d399','#e879f9'];
+const _CMP_NUTS=['N','P','K','S','Ca','Mg'];
+let _cmpCharts={};
+
+function _cmpInit(){if(!S.comparativo)S.comparativo={itens:[]};}
+function _cmpId(){return 'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+function _cmpCol(i){return _CMP_PAL[i%_CMP_PAL.length];}
+
+function _cmpCalc(it){
+  const dose=+it.doseKgHa||0, ton=dose/1000;
+  const custoHa=(+it.custoUSD||0)*ton;
   const nuts={};
-  ['N','P','K','S'].forEach(k=>{
-    const teor=+it[k]||0;
-    const kgNut=(+it.doseKgHa||0)*teor/100;
-    nuts[k]={teor,kgNut,custoKg:kgNut>0?custoHa/kgNut:null};
+  _CMP_NUTS.forEach(k=>{
+    const teor=+it[k]||0, kgHa=dose*teor/100;
+    nuts[k]={teor,kgHa,custoKg:kgHa>0?custoHa/kgHa:null};
   });
-  return {tonHa,custoHa,nuts};
+  const totalNPKHa=_CMP_NUTS.slice(0,4).reduce((s,k)=>s+(nuts[k]?.kgHa||0),0);
+  return {ton,custoHa,nuts,totalNPKHa};
 }
 
-function renderRent(){
-  _rentInit();
-  rentRenderHero();
-  const tab=window._rentTab||'custo';
-  const tc=document.getElementById('rentTabCusto'), tn=document.getElementById('rentTabNut');
-  if(tc) tc.classList.toggle('active',tab==='custo');
-  if(tn) tn.classList.toggle('active',tab==='nut');
-  if(tab==='custo') rentRenderCustoTab(); else rentRenderNutTab();
-}
-function rentShowTab(t){ window._rentTab=t; renderRent(); }
-
-function rentRenderHero(){
-  const el=document.getElementById('rentHero'); if(!el) return;
-  _rentInit();
-  const calcs=(S.rent.itens||[]).map(it=>({it,c:_rentCalc(it)})).filter(x=>(+x.it.doseKgHa||0)>0);
-  if(!calcs.length){ el.className=''; el.innerHTML=''; return; }
-  const sorted=calcs.slice().sort((a,b)=>a.c.custoHa-b.c.custoHa);
-  const best=sorted[0];
-  const worst=sorted[sorted.length-1];
-  const savings=worst.c.custoHa-best.c.custoHa;
-  const nutBest={};
-  ['N','P','K','S'].forEach(k=>{
-    const opts=calcs.filter(x=>x.c.nuts[k].custoKg!=null).sort((a,b)=>a.c.nuts[k].custoKg-b.c.nuts[k].custoKg);
-    if(opts.length) nutBest[k]={it:opts[0].it,val:opts[0].c.nuts[k].custoKg};
-  });
-  const nutTiles=Object.entries(nutBest).map(([k,{it,val}])=>`
-    <div class=”fin-hero-share-item”>
-      <div class=”fin-hero-share-val” style=”color:var(--green)”>${rentMoney(val)}/kg</div>
-      <div class=”fin-hero-share-lbl”>Menor /kg ${k} · ${it.nome||'?'}</div>
-    </div>`).join('');
-  el.className='fin-hero';
-  el.innerHTML=`<div class=”fin-hero-inner”>
-    <div>
-      <div class=”fin-hero-label”>Opção mais barata por hectare</div>
-      <div class=”fin-hero-val”>${best.it.nome||'—'}</div>
-      <div class=”fin-hero-sub”>${rentMoney(best.c.custoHa)}/ha · ${rentNum(best.it.doseKgHa)} kg/ha${calcs.length>1?' · economia de '+rentMoney(savings,0)+'/ha vs mais caro':''}</div>
-    </div>
-    <div class=”fin-hero-share”>
-      <div class=”fin-hero-share-item”>
-        <div class=”fin-hero-share-val” style=”color:var(--green)”>${rentMoney(best.c.custoHa,0)}</div>
-        <div class=”fin-hero-share-lbl”>Menor custo/ha</div>
-      </div>
-      ${nutTiles}
-    </div>
-  </div>`;
-}
-
-function rentRenderCustoTab(){
-  const el=document.getElementById('rentBody'); if(!el) return;
-  _rentInit();
-  const its=S.rent.itens;
-  if(!its.length){
-    el.innerHTML=`<div class=”fin-card” style=”text-align:center;color:var(--text3);font-size:13px;padding:2.4rem”>Nenhum item ainda.<br><span style=”font-size:11px”>Use os botões acima para adicionar itens da cotação, formulação ou manualmente.</span></div>`;
+function renderComp(){
+  _cmpInit();
+  const el=document.getElementById('cmpWrap'); if(!el) return;
+  const itens=S.comparativo.itens||[];
+  if(!itens.length){
+    el.innerHTML=`<div style="text-align:center;padding:5rem 1rem;color:var(--text3)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:56px;height:56px;opacity:.25;margin-bottom:1.25rem;display:block;margin-left:auto;margin-right:auto"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>
+      <div style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:.5rem">Nenhum produto para comparar</div>
+      <div style="font-size:13px;margin-bottom:1.5rem">Adicione itens da cotação ou insira manualmente</div>
+      <button class="btn btn-green" onclick="cmpAdd()" style="margin-right:8px">+ Da Cotação</button>
+      <button class="btn" onclick="cmpManual()">+ Manual</button>
+    </div>`;
     return;
   }
-  const INP='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;outline:none';
-  const calcs=its.map((it,i)=>({it,c:_rentCalc(it),i}));
-  const withDose=calcs.filter(x=>+x.it.doseKgHa>0).sort((a,b)=>a.c.custoHa-b.c.custoHa);
-  const noDose=calcs.filter(x=>!(+x.it.doseKgHa>0));
-  const sorted=[...withDose,...noDose];
-  const minCusto=withDose.length>0?withDose[0].c.custoHa:null;
-  const rows=sorted.map(({it,c},rank)=>{
-    const isBest=rank===0&&+it.doseKgHa>0;
-    const hasData=+it.doseKgHa>0;
-    const price=it.custoUSD?(it.custoUSD*rentMul()).toFixed(2):'';
-    const diff=hasData&&minCusto!=null&&rank>0?'+'+rentMoney(c.custoHa-minCusto,0):'';
-    const srcTag=it.source==='cotacao'?'<span style=”font-size:9px;background:rgba(91,140,255,.18);color:#7fabff;padding:1px 5px;border-radius:3px;margin-left:5px”>cotação</span>':it.source==='form'?'<span style=”font-size:9px;background:rgba(16,213,156,.15);color:var(--green);padding:1px 5px;border-radius:3px;margin-left:5px”>formulação</span>':'';
-    const rowBg=isBest?'background:rgba(16,213,156,0.06);border-left:3px solid var(--green)':'';
-    return `<tr style=”border-top:1px solid var(--border);${rowBg}”>
-      <td style=”padding:8px 6px”>
-        <span id=”rc-best-${it.id}” style=”display:${isBest?'inline-block':'none'};background:var(--green);color:#0a0a0a;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;margin-right:5px;vertical-align:middle”>MELHOR</span>
-        <input type=”text” value=”${(it.nome||'').replace(/”/g,'&quot;')}” placeholder=”Nome do produto”
-          oninput=”rentEdit('${it.id}','nome',this.value)” style=”${INP};width:150px”>${srcTag}
+  const calcs=itens.map((it,i)=>({it,c:_cmpCalc(it),col:_cmpCol(i)}));
+  const withDose=calcs.filter(x=>(+x.it.doseKgHa||0)>0);
+  const bestCusto=[...withDose].sort((a,b)=>a.c.custoHa-b.c.custoHa)[0]||null;
+  el.innerHTML=_cmpHeroHTML(calcs,bestCusto)+_cmpItemsHTML(calcs,bestCusto)+_cmpChartsHTML(withDose)+_cmpNutHTML(calcs);
+  Object.values(_cmpCharts).forEach(c=>{try{c.destroy();}catch(_){}});
+  _cmpCharts={};
+  if(withDose.length) requestAnimationFrame(()=>{_cmpChartCusto(withDose,bestCusto);_cmpChartNut(withDose);_cmpChartRadar(calcs);});
+}
+
+function _cmpHeroHTML(calcs,best){
+  if(!best) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px 20px;text-align:center;color:var(--text3);font-size:13px;margin-bottom:1.5rem">Insira a dose (kg/ha) abaixo para ver a comparação</div>`;
+  const fx=S.fx||5.20;
+  const {it:bit,c:bc,col:bcol}=best;
+  const others=calcs.filter(x=>x.it.id!==bit.id&&(+x.it.doseKgHa||0)>0);
+  const maxDiff=others.length?Math.max(...others.map(x=>x.c.custoHa-bc.custoHa)):0;
+  const nutBests={};
+  _CMP_NUTS.slice(0,4).forEach(k=>{
+    const v=calcs.filter(x=>x.c.nuts[k].custoKg!=null).sort((a,b)=>a.c.nuts[k].custoKg-b.c.nuts[k].custoKg);
+    if(v.length) nutBests[k]=v[0];
+  });
+  const kpis=[
+    {t:'Melhor Custo/ha',v:'U$ '+bc.custoHa.toFixed(2),sub:bit.label,sub2:'R$ '+(bc.custoHa*fx).toFixed(2)+'/ha',col:bcol},
+    {t:'Economia Máxima',v:maxDiff>0?'U$ '+maxDiff.toFixed(2):'—',sub:maxDiff>0?'vs mais caro':'único item',sub2:maxDiff>0?'R$ '+(maxDiff*fx).toFixed(2):'',col:'var(--green)'},
+    nutBests.N?{t:'Menor Custo N/kg',v:'U$ '+nutBests.N.c.nuts.N.custoKg.toFixed(3),sub:nutBests.N.it.label,sub2:nutBests.N.c.nuts.N.kgHa.toFixed(1)+' kg N/ha',col:nutBests.N.col}:{t:'N/ha',v:'—',sub:'sem dose',sub2:'',col:'var(--text3)'},
+    nutBests.P?{t:'Menor Custo P/kg',v:'U$ '+nutBests.P.c.nuts.P.custoKg.toFixed(3),sub:nutBests.P.it.label,sub2:nutBests.P.c.nuts.P.kgHa.toFixed(1)+' kg P/ha',col:nutBests.P.col}:{t:'P/ha',v:'—',sub:'sem dose',sub2:'',col:'var(--text3)'},
+  ];
+  return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem">${kpis.map(k=>`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;border-top:3px solid ${k.col};overflow:hidden">
+      <div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">${k.t}</div>
+      <div style="font-size:20px;font-weight:800;color:var(--text);font-family:var(--mono);line-height:1.2">${k.v}</div>
+      <div style="font-size:11px;color:${k.col};font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k.sub}</div>
+      ${k.sub2?`<div style="font-size:10px;color:var(--text3);margin-top:2px">${k.sub2}</div>`:''}
+    </div>`).join('')}</div>`;
+}
+
+function _cmpItemsHTML(calcs,best){
+  const fx=S.fx||5.20;
+  const rows=calcs.map(({it,c,col})=>{
+    const has=(+it.doseKgHa||0)>0;
+    const isBest=best&&it.id===best.it.id;
+    const diff=best&&has&&!isBest?c.custoHa-best.c.custoHa:null;
+    return `<tr onmouseover="this.style.background='rgba(255,255,255,.03)'" onmouseout="this.style.background=''">
+      <td style="padding:10px 4px 10px 12px"><div style="width:3px;height:36px;background:${col};border-radius:2px"></div></td>
+      <td style="padding:10px 14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${it.label}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--mono)">${it.fab||it.source||'—'}</div>
       </td>
-      <td style=”padding:8px 6px”><input type=”number” min=”0” step=”0.01” value=”${price}” placeholder=”0.00”
-        oninput=”rentEditPrice('${it.id}',this.value)” style=”${INP};width:104px;text-align:right”></td>
-      <td style=”padding:8px 6px”><input type=”number” min=”0” value=”${it.doseKgHa||''}” placeholder=”0”
-        oninput=”rentEdit('${it.id}','doseKgHa',+this.value);rentRecalcRow('${it.id}')” style=”${INP};width:84px;text-align:right”></td>
-      <td id=”rc-custo-${it.id}” style=”text-align:right;padding:8px 6px;font-weight:700;color:${isBest?'var(--green)':'var(--amber)'}”>${hasData?rentMoney(c.custoHa):'—'}</td>
-      <td id=”rc-diff-${it.id}” style=”text-align:right;padding:8px 6px;font-size:12px;color:var(--text3)”>${diff}</td>
-      <td style=”padding:8px 6px;text-align:center”>
-        <button onclick=”rentRemove('${it.id}')” title=”Remover” style=”background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px”>✕</button>
+      <td style="padding:10px 12px;text-align:right">
+        <div style="font-size:13px;font-weight:700;color:var(--text);font-family:var(--mono)">U$ ${(+it.custoUSD||0).toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--text3)">R$ ${((+it.custoUSD||0)*fx).toFixed(2)}/t</div>
+      </td>
+      <td style="padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" value="${it.doseKgHa||''}" min="0" step="10" placeholder="0"
+            style="width:80px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px;outline:none;font-family:var(--mono);text-align:right;transition:border-color .15s;box-sizing:border-box"
+            onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'"
+            oninput="cmpDose('${it.id}',+this.value)">
+          <span style="font-size:10px;color:var(--text3)">kg/ha</span>
+        </div>
+      </td>
+      <td style="padding:10px 12px;text-align:right">
+        ${has?`<div style="font-size:14px;font-weight:800;color:${isBest?'var(--green)':'var(--amber)'}">${isBest?'<span style="font-size:9px;background:var(--green);color:#08090A;padding:2px 5px;border-radius:4px;font-weight:900;margin-right:4px;vertical-align:middle">MELHOR</span>':''}U$ ${c.custoHa.toFixed(2)}</div><div style="font-size:10px;color:var(--text3)">R$ ${(c.custoHa*fx).toFixed(2)}/ha</div>`:'<span style="color:var(--text3);font-size:12px">—</span>'}
+      </td>
+      <td style="padding:10px 12px;text-align:right">
+        ${diff!=null?`<span style="font-size:12px;font-weight:700;color:var(--red)">+U$ ${diff.toFixed(2)}</span>`:''}
+      </td>
+      <td style="padding:10px 12px 10px 4px;text-align:center">
+        <button onclick="cmpRemove('${it.id}')" title="Remover" style="background:var(--red-soft);border:1px solid rgba(242,114,91,.3);color:var(--red);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:700">✕</button>
       </td>
     </tr>`;
   }).join('');
-  el.innerHTML=`<div class=”fin-card”>
-    <div style=”font-size:11px;color:var(--text3);margin-bottom:10px”>Ordenado por menor custo/ha · configure a dose (kg/ha) e preço para ativar o comparativo</div>
-    <div style=”overflow-x:auto”><table class=”fin-tbl” style=”min-width:580px”>
-      <thead><tr>
-        <th style=”text-align:left”>Item</th>
-        <th style=”text-align:right”>Preço /ton (${rentSym()})</th>
-        <th style=”text-align:right”>Dose kg/ha</th>
-        <th style=”text-align:right”>Custo/ha</th>
-        <th style=”text-align:right”>Vs melhor</th>
-        <th style=”width:32px”></th>
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:1.5rem">
+    <div style="background:var(--surface2);padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em">Produtos</span>
+      <span style="font-size:10px;color:var(--text3)">${calcs.length} item${calcs.length!==1?'s':''} · dose em kg/ha</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <colgroup><col style="width:6px"><col><col style="width:120px"><col style="width:130px"><col style="width:130px"><col style="width:100px"><col style="width:44px"></colgroup>
+      <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+        <th></th>
+        <th style="padding:8px 14px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;text-align:left">Produto</th>
+        <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right">Custo/t</th>
+        <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:left">Dose</th>
+        <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right">Custo/ha</th>
+        <th style="padding:8px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;text-align:right">Δ Melhor</th>
+        <th></th>
+      </tr></thead>
+      <tbody style="border-bottom:1px solid var(--border)">${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function _cmpChartsHTML(withDose){
+  if(!withDose.length) return '';
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Custo / Hectare (U$)</div>
+      <div style="position:relative;height:${Math.max(140,withDose.length*44)}px"><canvas id="cmpChartCusto"></canvas></div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Nutrientes / Hectare (kg N·P·K·S)</div>
+      <div style="position:relative;height:${Math.max(140,withDose.length*44)}px"><canvas id="cmpChartNut"></canvas></div>
+    </div>
+  </div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:1.5rem">
+    <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Perfil Nutricional — Teores (%)</div>
+    <div style="position:relative;height:300px"><canvas id="cmpChartRadar"></canvas></div>
+  </div>`;
+}
+
+function _cmpNutHTML(calcs){
+  const withDose=calcs.filter(x=>(+x.it.doseKgHa||0)>0);
+  if(!withDose.length) return '';
+  const activeNuts=_CMP_NUTS.filter(k=>withDose.some(x=>x.c.nuts[k].kgHa>0));
+  if(!activeNuts.length) return '';
+  const nutMin={};
+  activeNuts.forEach(k=>{const vs=withDose.map(x=>x.c.nuts[k].custoKg).filter(v=>v!=null);nutMin[k]=vs.length?Math.min(...vs):null;});
+  const rows=withDose.map(({it,c,col})=>{
+    const cells=activeNuts.map(k=>{
+      const {kgHa,custoKg}=c.nuts[k];
+      const best2=custoKg!=null&&nutMin[k]!=null&&Math.abs(custoKg-nutMin[k])<0.0001;
+      if(!kgHa) return `<td style="padding:9px 12px;text-align:right;color:var(--text3);font-size:12px">—</td>`;
+      return `<td style="padding:9px 12px;text-align:right;background:${best2?'rgba(168,255,83,.07)':''}">
+        <div style="font-size:12px;font-weight:700;color:${best2?'var(--green)':'var(--text)'}">${kgHa.toFixed(1)} kg</div>
+        ${custoKg!=null?`<div style="font-size:10px;color:${best2?'var(--green)':'var(--text3)'}">U$ ${custoKg.toFixed(3)}/kg</div>`:''}
+      </td>`;
+    }).join('');
+    return `<tr style="border-bottom:1px solid var(--border)" onmouseover="this.style.background='rgba(255,255,255,.02)'" onmouseout="this.style.background=''">
+      <td style="padding:9px 4px 9px 12px"><div style="width:3px;height:28px;background:${col};border-radius:2px"></div></td>
+      <td style="padding:9px 14px;font-size:12px;font-weight:700;color:var(--text)">${it.label}</td>
+      ${cells}
+      <td style="padding:9px 12px;text-align:right">
+        <div style="font-size:13px;font-weight:800;color:var(--amber)">${c.totalNPKHa.toFixed(1)}</div>
+        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">kg NPKS/ha</div>
+      </td>
+    </tr>`;
+  }).join('');
+  const hds=activeNuts.map(k=>`<th style="padding:9px 12px;font-size:10px;font-weight:700;color:var(--text3);text-align:right;text-transform:uppercase">${k} kg/ha<br><span style="font-weight:400;font-size:9px;opacity:.7">U$/kg</span></th>`).join('');
+  return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:1.5rem">
+    <div style="background:var(--surface2);padding:12px 16px;border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em">Nutrientes por Hectare</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+        <th style="width:4px"></th>
+        <th style="padding:9px 14px;font-size:10px;font-weight:700;color:var(--text3);text-align:left;text-transform:uppercase">Produto</th>
+        ${hds}
+        <th style="padding:9px 12px;font-size:10px;font-weight:700;color:var(--amber);text-align:right;text-transform:uppercase">Total NPKS</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-  </div>
-  ${withDose.length>=2?`<div class=”fin-card” style=”margin-top:14px”><div class=”fin-card-title”>Custo por hectare — comparativo</div><div style=”height:260px”><canvas id=”rentChartCusto”></canvas></div></div>`:''}`;
-  if(withDose.length>=2) rentDrawChart('rentChartCusto',sorted.filter(x=>+x.it.doseKgHa>0));
-}
-
-function rentRenderNutTab(){
-  const el=document.getElementById('rentBody'); if(!el) return;
-  _rentInit();
-  const its=S.rent.itens;
-  if(!its.length){
-    el.innerHTML=`<div class=”fin-card” style=”text-align:center;color:var(--text3);font-size:13px;padding:2.4rem”>Nenhum item ainda.</div>`;
-    return;
-  }
-  const INP='background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;outline:none;text-align:right';
-  const NUTS=['N','P','K','S'];
-  const calcs=its.map(it=>({it,c:_rentCalc(it)}));
-  const nutMin={};
-  NUTS.forEach(k=>{
-    const vals=calcs.map(x=>x.c.nuts[k].custoKg).filter(v=>v!=null);
-    nutMin[k]=vals.length?Math.min(...vals):null;
-  });
-  const rows=calcs.map(({it,c})=>{
-    const hasData=+it.doseKgHa>0;
-    const nutInputs=NUTS.map(k=>`<td style=”padding:4px 5px”><input type=”number” min=”0” step=”0.1” value=”${it[k]||''}” placeholder=”0”
-      oninput=”rentEdit('${it.id}','${k}',+this.value);rentRecalcNutRow('${it.id}')” style=”${INP};width:54px”></td>`).join('');
-    const nutCells=NUTS.map(k=>{
-      const cpk=c.nuts[k].custoKg;
-      const isBest=cpk!=null&&nutMin[k]!=null&&Math.abs(cpk-nutMin[k])<0.0001;
-      return `<td id=”rn-${k}-${it.id}” style=”text-align:right;padding:6px 8px;font-weight:600;${isBest?'color:var(--green);background:rgba(16,213,156,0.08)':'color:var(--text2)'}”>${cpk!=null?rentMoney(cpk):'—'}</td>`;
-    }).join('');
-    return `<tr style=”border-top:1px solid var(--border)”>
-      <td style=”padding:6px 8px;font-weight:600;color:var(--text);min-width:130px”>${it.nome||'(sem nome)'}</td>
-      <td style=”padding:6px 8px;text-align:right;color:var(--text3)”>${rentNum(it.doseKgHa)}</td>
-      <td id=”rn-custo-${it.id}” style=”text-align:right;padding:6px 8px;font-weight:700;color:var(--amber)”>${hasData?rentMoney(c.custoHa):'—'}</td>
-      ${nutInputs}
-      ${nutCells}
-    </tr>`;
-  }).join('');
-  el.innerHTML=`<div class=”fin-card”>
-    <div style=”font-size:11px;color:var(--text3);margin-bottom:10px”>Custo por kg de nutriente entregue/ha · verde = mais barato na categoria · ajuste os teores conforme necessário</div>
-    <div style=”overflow-x:auto”><table class=”fin-tbl” style=”min-width:860px”>
-      <thead>
-        <tr>
-          <th rowspan=”2” style=”text-align:left;vertical-align:bottom”>Item</th>
-          <th rowspan=”2” style=”text-align:right;vertical-align:bottom”>Dose<br>kg/ha</th>
-          <th rowspan=”2” style=”text-align:right;vertical-align:bottom”>Custo/ha</th>
-          <th colspan=”4” style=”text-align:center;padding-bottom:4px;border-bottom:1px solid var(--border)”>Teor % (editar)</th>
-          <th colspan=”4” style=”text-align:center;padding-bottom:4px;border-bottom:1px solid var(--border)”>Custo por kg de nutriente</th>
-        </tr>
-        <tr>
-          <th style=”text-align:right”>%N</th><th style=”text-align:right”>%P</th><th style=”text-align:right”>%K</th><th style=”text-align:right”>%S</th>
-          <th style=”text-align:right”>/kg N</th><th style=”text-align:right”>/kg P</th><th style=”text-align:right”>/kg K</th><th style=”text-align:right”>/kg S</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-    <div style=”font-size:10px;color:var(--text3);margin-top:8px”>* Itens importados da cotação/formulação já trazem teores preenchidos.</div>
   </div>`;
 }
 
-function rentRecalcRow(_id){
-  _rentInit();
-  const its=S.rent.itens;
-  const calcs=its.map(it=>({it,c:_rentCalc(it)}));
-  const withDose=calcs.filter(x=>+x.it.doseKgHa>0).sort((a,b)=>a.c.custoHa-b.c.custoHa);
-  const minCusto=withDose.length?withDose[0].c.custoHa:null;
-  const bestId=withDose.length?withDose[0].it.id:null;
-  calcs.forEach(({it,c})=>{
-    const hasData=+it.doseKgHa>0;
-    const isBest=it.id===bestId;
-    const elC=document.getElementById('rc-custo-'+it.id);
-    const elD=document.getElementById('rc-diff-'+it.id);
-    const elB=document.getElementById('rc-best-'+it.id);
-    if(elC){ elC.innerHTML=hasData?rentMoney(c.custoHa):'—'; elC.style.color=isBest?'var(--green)':'var(--amber)'; }
-    if(elD) elD.innerHTML=hasData&&minCusto!=null&&!isBest?'+'+rentMoney(c.custoHa-minCusto,0):'';
-    if(elB) elB.style.display=isBest?'inline-block':'none';
-  });
-  rentRenderHero();
-}
-function rentRecalcNutRow(_id){
-  _rentInit();
-  const NUTS=['N','P','K','S'];
-  const calcs=S.rent.itens.map(it=>({it,c:_rentCalc(it)}));
-  const nutMin={};
-  NUTS.forEach(k=>{ const vs=calcs.map(x=>x.c.nuts[k].custoKg).filter(v=>v!=null); nutMin[k]=vs.length?Math.min(...vs):null; });
-  calcs.forEach(({it,c})=>{
-    const hasData=+it.doseKgHa>0;
-    const elCost=document.getElementById('rn-custo-'+it.id);
-    if(elCost) elCost.innerHTML=hasData?rentMoney(c.custoHa):'—';
-    NUTS.forEach(k=>{
-      const el=document.getElementById('rn-'+k+'-'+it.id); if(!el) return;
-      const cpk=c.nuts[k].custoKg;
-      const isBest=cpk!=null&&nutMin[k]!=null&&Math.abs(cpk-nutMin[k])<0.0001;
-      el.innerHTML=cpk!=null?rentMoney(cpk):'—';
-      el.style.color=isBest?'var(--green)':'var(--text2)';
-      el.style.background=isBest?'rgba(16,213,156,0.08)':'';
-    });
-  });
-  rentRenderHero();
-}
-function rentEdit(id,key,val){ _rentInit(); const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it[key]=val; sched(); }
-function rentEditPrice(id,val){ _rentInit(); const it=S.rent.itens.find(x=>x.id===id); if(!it)return; it.custoUSD=rentToUSD(val); sched(); rentRecalcRow(id); }
-
-function rentDrawChart(canvasId,sorted){
-  const el=document.getElementById(canvasId); if(!el||typeof Chart==='undefined') return;
-  if(el._chart){ el._chart.destroy(); el._chart=null; }
-  const labels=sorted.map(x=>x.it.nome||'(sem nome)');
-  const data=sorted.map(x=>x.c.custoHa*rentMul());
-  const colors=sorted.map((_,i)=>i===0?'rgba(16,213,156,0.72)':'rgba(248,181,62,0.52)');
-  const borders=sorted.map((_,i)=>i===0?'#10d59c':'#f8b53e');
-  el._chart=new Chart(el,{
-    type:'bar',
-    data:{labels,datasets:[{label:'Custo/ha',data,backgroundColor:colors,borderColor:borders,borderWidth:1,borderRadius:6}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>rentSym()+' '+(+ctx.parsed.y).toLocaleString('pt-BR',{maximumFractionDigits:2})+'/ha'}}},
-      scales:{x:{ticks:{color:'rgba(255,255,255,0.5)',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}},
-        y:{ticks:{color:'rgba(255,255,255,0.5)',callback:v=>rentSym()+' '+(+v).toLocaleString('pt-BR',{maximumFractionDigits:0})},grid:{color:'rgba(255,255,255,0.04)'}}}}
-  });
+const _C={gridColor:'rgba(255,255,255,.07)',tickColor:'#8A9290',labelColor:'#F2F4F3'};
+function _cmpChartOpts(extra){
+  return {responsive:true,maintainAspectRatio:false,animation:{duration:600,easing:'easeOutQuart'},plugins:{legend:{display:false}},scales:{...extra}};
 }
 
-function rentAddManual(){
-  _rentInit();
-  S.rent.itens.push({id:rentId(),nome:'',custoUSD:0,doseKgHa:0,N:0,P:0,K:0,S:0,source:'manual'});
-  sched(); renderRent();
-}
-function rentRemove(id){
-  if(!confirm('Remover este item?'))return;
-  _rentInit();
-  S.rent.itens=S.rent.itens.filter(x=>x.id!==id);
-  sched(); renderRent();
+function _cmpChartCusto(withDose,best){
+  const ctx=document.getElementById('cmpChartCusto'); if(!ctx) return;
+  const sorted=[...withDose].sort((a,b)=>a.c.custoHa-b.c.custoHa);
+  _cmpCharts.custo=new Chart(ctx,{type:'bar',data:{
+    labels:sorted.map(x=>x.it.label),
+    datasets:[{
+      data:sorted.map(x=>+x.c.custoHa.toFixed(2)),
+      backgroundColor:sorted.map(x=>best&&x.it.id===best.it.id?'rgba(168,255,83,.85)':x.col+'88'),
+      borderColor:sorted.map(x=>x.col),
+      borderWidth:1.5,borderRadius:6,borderSkipped:false
+    }]
+  },options:{..._cmpChartOpts({
+    x:{grid:{color:_C.gridColor},ticks:{color:_C.tickColor,font:{size:10}},border:{color:'transparent'}},
+    y:{grid:{display:false},ticks:{color:_C.labelColor,font:{size:11,weight:'700'}},border:{color:'transparent'}}
+  }),indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'U$ '+c.parsed.x.toFixed(2)+'/ha'}}}}});
 }
 
-function rentAddCotacao(){
-  _rentInit();
-  const itens=S.cotacao||[];
-  if(!itens.length){ alert('Cotação vazia. Adicione itens na aba Cotação primeiro.'); return; }
-  const rows=itens.map((item,i)=>{
-    const p=_cotP_of(item);
-    const cv=_cotCalcVenda(item.custo,p);
-    const label=item.grade||(item.type==='mp'&&item.mats&&item.mats[0]?item.mats[0].name:'')||('Item '+(i+1));
-    const nuts=(item.nt||[]).map(n=>n.lbl+'='+n.val+'%').join(' ');
-    return `<label style=”display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer”>
-      <input type=”checkbox” value=”${i}” style=”width:16px;height:16px;accent-color:var(--green);margin-top:3px” checked>
-      <div style=”flex:1”>
-        <div style=”font-size:13px;font-weight:700;color:var(--text)”>${label}</div>
-        <div style=”font-size:11px;color:var(--text3);margin-top:2px”>${item.fabs||''} · custo ${fmtMoney(item.custo,'USD')}/t · venda ${fmtMoney(cv.venda,'USD')}/t</div>
-        ${nuts?`<div style=”font-size:10px;color:var(--text3);margin-top:2px”>${nuts}</div>`:''}
+function _cmpChartNut(withDose){
+  const ctx=document.getElementById('cmpChartNut'); if(!ctx) return;
+  const nutCols={'N':'rgba(168,255,83,.85)','P':'rgba(91,140,255,.85)','K':'rgba(248,181,62,.85)','S':'rgba(242,114,91,.85)'};
+  const activeNuts=_CMP_NUTS.slice(0,4).filter(k=>withDose.some(x=>x.c.nuts[k].kgHa>0));
+  _cmpCharts.nut=new Chart(ctx,{type:'bar',data:{
+    labels:withDose.map(x=>x.it.label),
+    datasets:activeNuts.map(k=>({
+      label:k,
+      data:withDose.map(x=>+x.c.nuts[k].kgHa.toFixed(2)),
+      backgroundColor:nutCols[k]||'rgba(180,141,255,.85)',
+      borderRadius:4,borderSkipped:false
+    }))
+  },options:{..._cmpChartOpts({
+    x:{grid:{display:false},ticks:{color:_C.labelColor,font:{size:10}},border:{color:'transparent'},stacked:false},
+    y:{grid:{color:_C.gridColor},ticks:{color:_C.tickColor,font:{size:10}},border:{color:'transparent'}}
+  }),plugins:{legend:{display:true,position:'bottom',labels:{color:_C.tickColor,font:{size:10},boxWidth:10,padding:10}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+c.parsed.y.toFixed(1)+' kg/ha'}}}}});
+}
+
+function _cmpChartRadar(calcs){
+  const ctx=document.getElementById('cmpChartRadar'); if(!ctx) return;
+  const activeNuts=_CMP_NUTS.filter(k=>calcs.some(x=>(+x.it[k]||0)>0));
+  if(activeNuts.length<3) return;
+  _cmpCharts.radar=new Chart(ctx,{type:'radar',data:{
+    labels:activeNuts,
+    datasets:calcs.map(({it,col})=>({
+      label:it.label,
+      data:activeNuts.map(k=>+(+it[k]||0).toFixed(1)),
+      borderColor:col,backgroundColor:col+'20',
+      pointBackgroundColor:col,pointRadius:4,borderWidth:2,fill:true
+    }))
+  },options:{responsive:true,maintainAspectRatio:false,animation:{duration:700,easing:'easeOutQuart'},
+    plugins:{legend:{position:'bottom',labels:{color:_C.tickColor,font:{size:10},boxWidth:10,padding:10}}},
+    scales:{r:{grid:{color:'rgba(255,255,255,.1)'},angleLines:{color:'rgba(255,255,255,.1)'},
+      pointLabels:{color:_C.labelColor,font:{size:11,weight:'700'}},
+      ticks:{color:_C.tickColor,font:{size:9},backdropColor:'transparent'}}}}});
+}
+
+function cmpDose(id,val){
+  _cmpInit();
+  const it=(S.comparativo.itens||[]).find(x=>x.id===id); if(!it) return;
+  it.doseKgHa=val; sched(); renderComp();
+}
+
+function cmpRemove(id){
+  _cmpInit();
+  S.comparativo.itens=(S.comparativo.itens||[]).filter(x=>x.id!==id);
+  sched(); renderComp();
+}
+
+function cmpAdd(){
+  _cmpInit();
+  const cot=S.cotacao||[];
+  if(!cot.length){alert('Cotação vazia. Adicione itens na aba Cotação primeiro.');return;}
+  const existing=new Set((S.comparativo.itens||[]).map(x=>x._cotIdx));
+  const rows=cot.map((item,i)=>{
+    const p=_cotP_of(item), cv=_cotCalcVenda(item.custo,p);
+    const label=item.grade||item.formula||'Item '+(i+1);
+    const nt=(item.nt||[]).map(n=>n.lbl+' '+n.val+'%').join(' · ')||'sem teores';
+    const already=existing.has(i);
+    return `<label style="display:flex;gap:12px;padding:12px;border-radius:8px;cursor:${already?'default':'pointer'};border:1px solid var(--border);margin-bottom:8px;background:var(--surface3);opacity:${already?.55:1};transition:.15s" ${!already?'onmouseover="this.style.borderColor=\'var(--green)\'" onmouseout="this.style.borderColor=\'var(--border)\'"':''}>
+      <input type="checkbox" data-idx="${i}" ${already?'disabled':''}  style="margin-top:2px;flex-shrink:0;accent-color:var(--green);width:16px;height:16px;cursor:pointer">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${label} ${already?'<span style="font-size:10px;color:var(--text3);font-weight:400">(já adicionado)</span>':''}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;font-family:var(--mono)">${nt}</div>
+        <div style="display:flex;gap:14px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text2)">Custo <strong style="color:var(--amber);font-family:var(--mono)">U$ ${item.custo.toFixed(2)}/t</strong></span>
+          <span style="font-size:11px;color:var(--text2)">Venda <strong style="color:var(--green);font-family:var(--mono)">U$ ${cv.venda.toFixed(2)}/t</strong></span>
+          <span style="font-size:11px;color:var(--text3)">${item.fabs||''}</span>
+        </div>
       </div>
-      <select id=”rent-src-price-${i}” style=”background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:3px 7px;margin-top:3px;flex-shrink:0”>
-        <option value=”custo”>Custo ${fmtMoney(item.custo,'USD')}/t</option>
-        <option value=”venda”>Venda ${fmtMoney(cv.venda,'USD')}/t</option>
-      </select>
     </label>`;
   }).join('');
-  window._rentCotItens=itens;
-  document.getElementById('rentImportContent').innerHTML=`
-    <button class=”crm-modal-close” onclick=”rentCloseImport()”>✕</button>
-    <div style=”font-size:16px;font-weight:800;margin-bottom:4px”>Adicionar da Cotação</div>
-    <div style=”font-size:11px;color:var(--text3);margin-bottom:12px”>${itens.length} item(ns) · selecione e escolha o preço de referência</div>
-    <div style=”max-height:55vh;overflow-y:auto”>${rows}</div>
-    <button class=”btn btn-green” style=”width:100%;margin-top:14px” onclick=”rentConfirmCotacao()”>Adicionar selecionados</button>`;
-  document.getElementById('rentImportOverlay').style.display='flex';
-}
-function rentConfirmCotacao(){
-  _rentInit();
-  const itens=window._rentCotItens||[];
-  document.querySelectorAll('#rentImportContent input[type=checkbox]:checked').forEach(ch=>{
-    const i=+ch.value;
-    const item=itens[i]; if(!item) return;
-    const sel=document.getElementById('rent-src-price-'+i);
-    let priceUSD=item.custo;
-    if(sel&&sel.value==='venda'){ const p=_cotP_of(item); priceUSD=_cotCalcVenda(item.custo,p).venda; }
-    const label=item.grade||(item.type==='mp'&&item.mats&&item.mats[0]?item.mats[0].name:'')||('Item '+(i+1));
-    const nutObj={N:0,P:0,K:0,S:0};
-    (item.nt||[]).forEach(n=>{ if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl)) nutObj[n.lbl]=+n.val||0; });
-    S.rent.itens.push({id:rentId(),nome:label,custoUSD:priceUSD,doseKgHa:0,...nutObj,source:'cotacao'});
-  });
-  sched(); rentCloseImport(); renderRent();
+  document.getElementById('cmpModal').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div style="font-size:15px;font-weight:800;color:var(--text)">Selecionar da Cotação</div>
+      <button onclick="cmpCloseModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="max-height:52vh;overflow-y:auto;padding-right:2px">${rows}</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <button class="btn" onclick="cmpCloseModal()">Cancelar</button>
+      <button class="btn btn-green" onclick="cmpConfirm()">Adicionar Selecionados</button>
+    </div>`;
+  document.getElementById('cmpOverlay').style.display='flex';
 }
 
-function rentAddFormulacao(){
-  _rentInit();
-  const f=window._crmLastFormulacao;
-  if(!f){ alert('Nenhuma formulação calculada. Vá à aba Formulação e clique Calcular primeiro.'); return; }
-  const nutObj={N:0,P:0,K:0,S:0};
-  (f.nt||[]).forEach(n=>{ if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl)) nutObj[n.lbl]=+n.val||0; });
-  S.rent.itens.push({id:rentId(),nome:f.grade||'Formulação',custoUSD:f.custo||0,doseKgHa:0,...nutObj,source:'form'});
-  sched(); renderRent();
+function cmpConfirm(){
+  _cmpInit();
+  document.querySelectorAll('#cmpModal input[type=checkbox]:checked:not([disabled])').forEach(chk=>{
+    const i=+chk.dataset.idx, item=S.cotacao[i]; if(!item) return;
+    const nutObj={}; _CMP_NUTS.forEach(k=>nutObj[k]=0);
+    (item.nt||[]).forEach(n=>{if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl))nutObj[n.lbl]=+n.val||0;});
+    S.comparativo.itens.push({id:_cmpId(),label:item.grade||item.formula||'Item '+(i+1),custoUSD:item.custo,fab:item.fabs||'',doseKgHa:0,source:'cotacao',_cotIdx:i,...nutObj});
+  });
+  sched(); cmpCloseModal(); renderComp();
 }
-function rentCloseImport(){ const ov=document.getElementById('rentImportOverlay'); if(ov) ov.style.display='none'; }
+
+function cmpManual(){
+  _cmpInit();
+  document.getElementById('cmpModal').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div style="font-size:15px;font-weight:800;color:var(--text)">Adicionar Manual</div>
+      <button onclick="cmpCloseModal()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1">✕</button>
+    </div>
+    <div style="display:grid;gap:10px">
+      <div><label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:4px">Nome do produto</label>
+        <input id="cmpMnome" type="text" placeholder="Ex: MAP Catalão" style="width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;font-family:inherit;box-sizing:border-box"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:4px">Custo U$/t</label>
+          <input id="cmpMcusto" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;font-family:var(--mono);box-sizing:border-box"></div>
+        <div><label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:4px">Fábrica / Origem</label>
+          <input id="cmpMfab" type="text" placeholder="Ex: Catalão" style="width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;outline:none;font-family:inherit;box-sizing:border-box"></div>
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Teores (%)</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+          ${_CMP_NUTS.map(k=>`<div>
+            <label style="font-size:10px;color:var(--text3);display:block;margin-bottom:3px">${k}</label>
+            <input id="cmpM${k}" type="number" min="0" max="100" step="0.1" placeholder="0"
+              style="width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-size:12px;outline:none;font-family:var(--mono);box-sizing:border-box">
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <button class="btn" onclick="cmpCloseModal()">Cancelar</button>
+      <button class="btn btn-green" onclick="cmpConfirmManual()">Adicionar</button>
+    </div>`;
+  document.getElementById('cmpOverlay').style.display='flex';
+}
+
+function cmpConfirmManual(){
+  _cmpInit();
+  const nome=document.getElementById('cmpMnome')?.value?.trim();
+  if(!nome){alert('Informe o nome do produto');return;}
+  const nutObj={}; _CMP_NUTS.forEach(k=>{nutObj[k]=+(document.getElementById('cmpM'+k)?.value)||0;});
+  S.comparativo.itens.push({id:_cmpId(),label:nome,custoUSD:+(document.getElementById('cmpMcusto')?.value)||0,fab:document.getElementById('cmpMfab')?.value||'Manual',doseKgHa:0,source:'manual',...nutObj});
+  sched(); cmpCloseModal(); renderComp();
+}
+
+function cmpCloseModal(){const o=document.getElementById('cmpOverlay');if(o)o.style.display='none';}
+
+// ── END COMPARATIVO ───────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
