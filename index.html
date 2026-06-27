@@ -13005,7 +13005,7 @@ function rentRenderHero(){
   const el=document.getElementById('rentHero'); if(!el) return;
   _rentInit();
   const calcs=(S.rent.itens||[]).map(it=>({it,c:_rentCalc(it)})).filter(x=>(+x.it.doseKgHa||0)>0);
-  if(!calcs.length){ el.innerHTML=''; return; }
+  if(!calcs.length){ el.className=''; el.innerHTML=''; return; }
   const sorted=calcs.slice().sort((a,b)=>a.c.custoHa-b.c.custoHa);
   const best=sorted[0];
   const worst=sorted[sorted.length-1];
@@ -13059,10 +13059,10 @@ function rentRenderCustoTab(){
     const srcTag=it.source==='cotacao'?'<span style=”font-size:9px;background:rgba(91,140,255,.18);color:#7fabff;padding:1px 5px;border-radius:3px;margin-left:5px”>cotação</span>':it.source==='form'?'<span style=”font-size:9px;background:rgba(16,213,156,.15);color:var(--green);padding:1px 5px;border-radius:3px;margin-left:5px”>formulação</span>':'';
     const rowBg=isBest?'background:rgba(16,213,156,0.06);border-left:3px solid var(--green)':'';
     return `<tr style=”border-top:1px solid var(--border);${rowBg}”>
-      <td style=”padding:8px 6px;white-space:nowrap”>
-        ${isBest?'<span style=”background:var(--green);color:#0a0a0a;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;margin-right:5px;vertical-align:middle”>MELHOR</span>':''}
+      <td style=”padding:8px 6px”>
+        <span id=”rc-best-${it.id}” style=”display:${isBest?'inline-block':'none'};background:var(--green);color:#0a0a0a;font-size:9px;font-weight:900;padding:2px 6px;border-radius:4px;margin-right:5px;vertical-align:middle”>MELHOR</span>
         <input type=”text” value=”${(it.nome||'').replace(/”/g,'&quot;')}” placeholder=”Nome do produto”
-          oninput=”rentEdit('${it.id}','nome',this.value)” style=”${INP};width:160px”>${srcTag}
+          oninput=”rentEdit('${it.id}','nome',this.value)” style=”${INP};width:150px”>${srcTag}
       </td>
       <td style=”padding:8px 6px”><input type=”number” min=”0” step=”0.01” value=”${price}” placeholder=”0.00”
         oninput=”rentEditPrice('${it.id}',this.value)” style=”${INP};width:104px;text-align:right”></td>
@@ -13148,25 +13148,43 @@ function rentRenderNutTab(){
   </div>`;
 }
 
-function rentRecalcRow(id){
+function rentRecalcRow(_id){
   _rentInit();
-  const it=S.rent.itens.find(x=>x.id===id); if(!it) return;
-  const c=_rentCalc(it);
-  const hasData=+it.doseKgHa>0;
-  const elC=document.getElementById('rc-custo-'+id);
-  if(elC) elC.innerHTML=hasData?rentMoney(c.custoHa):'—';
+  const its=S.rent.itens;
+  const calcs=its.map(it=>({it,c:_rentCalc(it)}));
+  const withDose=calcs.filter(x=>+x.it.doseKgHa>0).sort((a,b)=>a.c.custoHa-b.c.custoHa);
+  const minCusto=withDose.length?withDose[0].c.custoHa:null;
+  const bestId=withDose.length?withDose[0].it.id:null;
+  calcs.forEach(({it,c})=>{
+    const hasData=+it.doseKgHa>0;
+    const isBest=it.id===bestId;
+    const elC=document.getElementById('rc-custo-'+it.id);
+    const elD=document.getElementById('rc-diff-'+it.id);
+    const elB=document.getElementById('rc-best-'+it.id);
+    if(elC){ elC.innerHTML=hasData?rentMoney(c.custoHa):'—'; elC.style.color=isBest?'var(--green)':'var(--amber)'; }
+    if(elD) elD.innerHTML=hasData&&minCusto!=null&&!isBest?'+'+rentMoney(c.custoHa-minCusto,0):'';
+    if(elB) elB.style.display=isBest?'inline-block':'none';
+  });
   rentRenderHero();
 }
-function rentRecalcNutRow(id){
+function rentRecalcNutRow(_id){
   _rentInit();
-  const it=S.rent.itens.find(x=>x.id===id); if(!it) return;
-  const c=_rentCalc(it);
-  const hasData=+it.doseKgHa>0;
-  const elC=document.getElementById('rn-custo-'+id);
-  if(elC) elC.innerHTML=hasData?rentMoney(c.custoHa):'—';
-  ['N','P','K','S'].forEach(k=>{
-    const el=document.getElementById('rn-'+k+'-'+id);
-    if(el) el.innerHTML=c.nuts[k].custoKg!=null?rentMoney(c.nuts[k].custoKg):'—';
+  const NUTS=['N','P','K','S'];
+  const calcs=S.rent.itens.map(it=>({it,c:_rentCalc(it)}));
+  const nutMin={};
+  NUTS.forEach(k=>{ const vs=calcs.map(x=>x.c.nuts[k].custoKg).filter(v=>v!=null); nutMin[k]=vs.length?Math.min(...vs):null; });
+  calcs.forEach(({it,c})=>{
+    const hasData=+it.doseKgHa>0;
+    const elCost=document.getElementById('rn-custo-'+it.id);
+    if(elCost) elCost.innerHTML=hasData?rentMoney(c.custoHa):'—';
+    NUTS.forEach(k=>{
+      const el=document.getElementById('rn-'+k+'-'+it.id); if(!el) return;
+      const cpk=c.nuts[k].custoKg;
+      const isBest=cpk!=null&&nutMin[k]!=null&&Math.abs(cpk-nutMin[k])<0.0001;
+      el.innerHTML=cpk!=null?rentMoney(cpk):'—';
+      el.style.color=isBest?'var(--green)':'var(--text2)';
+      el.style.background=isBest?'rgba(16,213,156,0.08)':'';
+    });
   });
   rentRenderHero();
 }
@@ -13253,7 +13271,7 @@ function rentConfirmCotacao(){
 function rentAddFormulacao(){
   _rentInit();
   const f=window._crmLastFormulacao;
-  if(!f){ alert('Nenhuma formulação calculada. Vá à aba Formulação, calcule e clique “Incluir na Cotação”.'); return; }
+  if(!f){ alert('Nenhuma formulação calculada. Vá à aba Formulação e clique Calcular primeiro.'); return; }
   const nutObj={N:0,P:0,K:0,S:0};
   (f.nt||[]).forEach(n=>{ if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl)) nutObj[n.lbl]=+n.val||0; });
   S.rent.itens.push({id:rentId(),nome:f.grade||'Formulação',custoUSD:f.custo||0,doseKgHa:0,...nutObj,source:'form'});
