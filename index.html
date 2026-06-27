@@ -1707,33 +1707,24 @@ select:focus-visible{
 .mnav-btn::after{background:var(--brand)!important;box-shadow:0 0 8px var(--brand-glow)!important}
 
 /* ── APPLE SWITCH ────────────────────────────────────────────── */
-.sw{
-  position:relative;display:inline-flex;align-items:center;
-  cursor:pointer;flex-shrink:0;
-  -webkit-tap-highlight-color:transparent;user-select:none
-}
-.sw input{opacity:0;width:0;height:0;position:absolute}
 .sw-track{
   width:42px;height:26px;border-radius:13px;
   background:#3a3a3c;
-  position:relative;flex-shrink:0;
+  position:relative;flex-shrink:0;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;user-select:none;
   transition:background .2s cubic-bezier(.4,0,.2,1),box-shadow .2s cubic-bezier(.4,0,.2,1)
 }
 .sw-knob{
   position:absolute;left:3px;top:3px;
   width:20px;height:20px;border-radius:50%;
-  background:#fff;
+  background:#fff;pointer-events:none;
   box-shadow:0 2px 6px rgba(0,0,0,.45),0 0 0 .5px rgba(0,0,0,.12);
-  transition:left .22s cubic-bezier(.4,0,.2,1),
-             width .09s ease,border-radius .09s ease
+  transition:left .22s cubic-bezier(.4,0,.2,1),width .09s ease,border-radius .09s ease
 }
-.sw input:checked ~ .sw-track{
-  background:var(--green);
-  box-shadow:0 0 14px rgba(168,255,83,.22)
-}
-.sw input:checked ~ .sw-track .sw-knob{left:19px}
-.sw:active .sw-knob{width:25px;border-radius:10px}
-.sw:active input:checked ~ .sw-track .sw-knob{width:25px;border-radius:10px;left:14px}
+.sw-track.sw-on{background:var(--green);box-shadow:0 0 14px rgba(168,255,83,.22)}
+.sw-track.sw-on .sw-knob{left:19px}
+.sw-track:active .sw-knob{width:25px;border-radius:10px}
+.sw-track.sw-on:active .sw-knob{width:25px;border-radius:10px;left:14px}
 
 /* Currency toggle — amber active */
 .cur-btn.active{background:var(--brand)!important;color:#0a0e1a!important;box-shadow:0 2px 8px var(--brand-glow)!important}
@@ -3916,7 +3907,7 @@ function _fabGridHTML(){
       const cellBg=act?'rgba(168,255,83,.03)':'rgba(242,114,91,.03)';
       h+=`<td style="padding:9px 12px;border-bottom:1px solid var(--border);box-shadow:${cellShadow};background:${cellBg};transition:box-shadow .2s,background .2s">
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-<label class="sw" onclick="toggleMatFab(${fi},${jmp})"><input type="checkbox" ${act?'checked':''} style="pointer-events:none"><span class="sw-track"><span class="sw-knob"></span></span></label>
+<span class="sw-track${act?' sw-on':''}" onclick="_swFab(this,${fi},${jmp})"><span class="sw-knob"></span></span>
 <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:${lc};letter-spacing:.03em">
 <span style="width:5px;height:5px;border-radius:50%;background:${lc};flex-shrink:0"></span>${act?'Ativo':'Inativo'}</span>
 </div>
@@ -4025,6 +4016,25 @@ function renderMatCards(){
 }
 
 
+function _swFab(el,fi,mp){
+  const m=S.fabs[fi]?.mats.find(x=>x.name===mp);
+  if(!m)return;
+  m.active=!m.active;
+  el.classList.toggle('sw-on',m.active);
+  const lbl=el.nextElementSibling;
+  if(lbl){const c=m.active?'var(--green)':'var(--red)';lbl.style.color=c;lbl.innerHTML='<span style="width:5px;height:5px;border-radius:50%;background:'+c+';display:inline-block;flex-shrink:0;margin-right:4px"></span>'+(m.active?'Ativo':'Inativo');}
+  const td=el.closest('td');
+  if(td){td.style.boxShadow=m.active?'inset 0 0 0 1px rgba(168,255,83,.18),inset 3px 0 0 rgba(168,255,83,.45)':'inset 0 0 0 1px rgba(242,114,91,.16),inset 3px 0 0 rgba(242,114,91,.4)';td.style.background=m.active?'rgba(168,255,83,.03)':'rgba(242,114,91,.03)';}
+  sched();
+  setTimeout(()=>{renderMatSelGrid();renderMatCards();renderRestrGrid();},260);
+}
+function _swMat(el,i){
+  const m=mats()[i];if(!m)return;
+  m.active=!m.active;
+  el.classList.toggle('sw-on',m.active);
+  sched();
+  setTimeout(()=>{renderMatSelGrid();renderRestrGrid();renderMatCards();},260);
+}
 function toggleMatFab(fabIdx, mpName){
   const m=S.fabs[fabIdx].mats.find(x=>x.name===mpName);
   if(m){ m.active=!m.active; renderMatSelGrid(); renderMatCards(); renderRestrGrid(); sched(); }
@@ -4164,7 +4174,7 @@ function renderMatCards_UNUSED(){
       <!-- HEADER ROW -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleExpand(${i})">
         <div style="width:4px;height:36px;background:${m.active?col:'var(--border2)'};border-radius:2px;flex-shrink:0"></div>
-        <label class="sw" onclick="event.stopPropagation();mats()[${i}].active=!mats()[${i}].active;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()"><input type="checkbox" ${m.active?'checked':''} style="pointer-events:none"><span class="sw-track"><span class="sw-knob"></span></span></label>
+        <span class="sw-track${m.active?' sw-on':''}" onclick="event.stopPropagation();_swMat(this,${i})"><span class="sw-knob"></span></span>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:${m.active?'var(--text)':'var(--text3)'}">${m.name}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${activeNuts}</div>
