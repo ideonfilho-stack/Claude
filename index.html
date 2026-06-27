@@ -1617,7 +1617,7 @@ select:focus-visible{
 }
 
 /* Sidebar — heavier, branded */
-.sidebar{background:#0b1020;border-right:1px solid rgba(255,255,255,0.04)}
+.sidebar{background:var(--bg);border-right:1px solid var(--border)}
 
 /* Logo — industrial stamp */
 .logo{
@@ -1683,7 +1683,7 @@ select:focus-visible{
 }
 
 /* Topbar — editorial */
-.topbar{border-bottom:1px solid rgba(224,160,32,0.14)!important;background:rgba(9,13,24,0.97)!important}
+.topbar{border-bottom:1px solid rgba(224,160,32,0.14)!important;background:var(--bg)!important}
 .topbar h2{font-size:11px!important;font-weight:700!important;text-transform:uppercase;letter-spacing:.14em!important;color:var(--text2)!important}
 
 /* KPI cards — Bloomberg thin top bar */
@@ -1693,7 +1693,7 @@ select:focus-visible{
 .mc-val{font-family:var(--mono)!important;font-variant-numeric:tabular-nums;font-weight:800!important}
 
 /* Chart boxes — editorial */
-.chart-box{border-top:2px solid rgba(91,140,255,0.35)!important;border-radius:0 0 var(--radius-sm) var(--radius-sm)!important}
+.chart-box{border-top:2px solid rgba(168,255,83,0.30)!important;border-radius:0 0 var(--radius-sm) var(--radius-sm)!important}
 .chart-title{font-family:var(--mono)!important;font-size:9.5px!important;text-transform:uppercase;letter-spacing:.11em!important;padding-bottom:10px!important;margin-bottom:12px!important;border-bottom:1px solid var(--border)}
 
 /* Buttons — sharper, utilitarian */
@@ -3900,7 +3900,7 @@ function _fabGridHTML(){
       if(!m){h+='<td style="border-left:1px solid var(--border)"></td>';return;}
       const act=m.active;
       h+='<td style="padding:5px 8px;vertical-align:top;border-left:1px solid var(--border)">';
-      h+='<div style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-bottom:4px" onclick="toggleMatFab('+fi+',\''+mpName+'\')"><div style="width:10px;height:10px;border-radius:50%;background:'+(act?'var(--green)':'var(--red)')+';flex-shrink:0"></div><span style="font-size:11px;font-weight:600;color:'+(act?'var(--green)':'var(--red)')+';">'+(act?'Ativo':'Inativo')+'</span></div>';
+      h+='<label class="sw" style="margin-bottom:6px" onclick="event.preventDefault();toggleMatFab('+fi+',\''+mpName+'\')"><input type="checkbox" '+(act?'checked':'')+' onclick="event.preventDefault()"><span class="sw-track"><span class="sw-knob"></span></span></label>';
       h+='<input type="number" value="'+m.costUSD+'" min="0" step="0.01" placeholder="0.00"'
         +' style="width:100%;background:var(--surface3);border:1px solid rgba(77,142,240,.3);border-radius:5px;color:var(--text);padding:4px 6px;font-size:11px;outline:none;font-family:inherit;text-align:center"'
         +' onchange="toggleMatFabPrice('+fi+',\''+mpName+'\',+this.value)">';
