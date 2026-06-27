@@ -1712,7 +1712,7 @@ select:focus-visible{
   cursor:pointer;flex-shrink:0;
   -webkit-tap-highlight-color:transparent;user-select:none
 }
-.sw input{opacity:0;width:0;height:0;position:absolute;pointer-events:none}
+.sw input{opacity:0;width:0;height:0;position:absolute}
 .sw-track{
   width:42px;height:26px;border-radius:13px;
   background:#3a3a3c;
@@ -4164,7 +4164,7 @@ function renderMatCards_UNUSED(){
       <!-- HEADER ROW -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleExpand(${i})">
         <div style="width:4px;height:36px;background:${m.active?col:'var(--border2)'};border-radius:2px;flex-shrink:0"></div>
-        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" ${m.active?'checked':''} onchange="mats()[${i}].active=this.checked;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()" style="pointer-events:none;opacity:0;width:0;height:0;position:absolute"><span class="sw-track"><span class="sw-knob"></span></span></label>
+        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" ${m.active?'checked':''} onchange="mats()[${i}].active=this.checked;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()"><span class="sw-track"><span class="sw-knob"></span></span></label>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:${m.active?'var(--text)':'var(--text3)'}">${m.name}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${activeNuts}</div>
