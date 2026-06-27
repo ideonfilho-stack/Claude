@@ -1706,6 +1706,35 @@ select:focus-visible{
 .mnav-btn.active{color:var(--brand)!important}
 .mnav-btn::after{background:var(--brand)!important;box-shadow:0 0 8px var(--brand-glow)!important}
 
+/* ── APPLE SWITCH ────────────────────────────────────────────── */
+.sw{
+  position:relative;display:inline-flex;align-items:center;
+  cursor:pointer;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;user-select:none
+}
+.sw input{opacity:0;width:0;height:0;position:absolute;pointer-events:none}
+.sw-track{
+  width:42px;height:26px;border-radius:13px;
+  background:#3a3a3c;
+  position:relative;flex-shrink:0;
+  transition:background .2s cubic-bezier(.4,0,.2,1),box-shadow .2s cubic-bezier(.4,0,.2,1)
+}
+.sw-knob{
+  position:absolute;left:3px;top:3px;
+  width:20px;height:20px;border-radius:50%;
+  background:#fff;
+  box-shadow:0 2px 6px rgba(0,0,0,.45),0 0 0 .5px rgba(0,0,0,.12);
+  transition:left .22s cubic-bezier(.4,0,.2,1),
+             width .09s ease,border-radius .09s ease
+}
+.sw input:checked ~ .sw-track{
+  background:var(--green);
+  box-shadow:0 0 14px rgba(168,255,83,.22)
+}
+.sw input:checked ~ .sw-track .sw-knob{left:19px}
+.sw:active .sw-knob{width:25px;border-radius:10px}
+.sw:active input:checked ~ .sw-track .sw-knob{width:25px;border-radius:10px;left:14px}
+
 /* Currency toggle — amber active */
 .cur-btn.active{background:var(--brand)!important;color:#0a0e1a!important;box-shadow:0 2px 8px var(--brand-glow)!important}
 
@@ -4115,8 +4144,7 @@ function renderMatCards_UNUSED(){
       <!-- HEADER ROW -->
       <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleExpand(${i})">
         <div style="width:4px;height:36px;background:${m.active?col:'var(--border2)'};border-radius:2px;flex-shrink:0"></div>
-        <input type="checkbox" ${m.active?'checked':''} style="width:15px;height:15px;accent-color:${col};flex-shrink:0;cursor:pointer"
-          onclick="event.stopPropagation()" onchange="mats()[${i}].active=this.checked;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()">
+        <label class="sw" onclick="event.stopPropagation()"><input type="checkbox" ${m.active?'checked':''} onchange="mats()[${i}].active=this.checked;renderMatSelGrid();renderRestrGrid();renderMatCards();sched()"><span class="sw-track"><span class="sw-knob"></span></span></label>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:${m.active?'var(--text)':'var(--text3)'}">${m.name}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${activeNuts}</div>
