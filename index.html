@@ -3910,7 +3910,11 @@ function _fabGridHTML(){
       if(!m){h+=`<td style="border-bottom:1px solid var(--border)"></td>`;return;}
       const act=m.active;
       const lc=act?'var(--green)':'var(--red)';
-      h+=`<td style="padding:9px 12px;border-bottom:1px solid var(--border)">
+      const cellShadow=act
+        ?'inset 0 0 0 1px rgba(168,255,83,.18),inset 3px 0 0 rgba(168,255,83,.45)'
+        :'inset 0 0 0 1px rgba(242,114,91,.16),inset 3px 0 0 rgba(242,114,91,.4)';
+      const cellBg=act?'rgba(168,255,83,.03)':'rgba(242,114,91,.03)';
+      h+=`<td style="padding:9px 12px;border-bottom:1px solid var(--border);box-shadow:${cellShadow};background:${cellBg};transition:box-shadow .2s,background .2s">
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
 <label class="sw" onclick="event.preventDefault();toggleMatFab(${fi},${jmp})"><input type="checkbox" ${act?'checked':''} onclick="event.preventDefault()"><span class="sw-track"><span class="sw-knob"></span></span></label>
 <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:${lc};letter-spacing:.03em">
