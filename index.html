@@ -5238,6 +5238,190 @@ async function importPricePDF(input){
 }
 
 // ── SOLVER
+// ── SOLVER EXATO (Simplex + Branch-and-Bound) ────────────────────────────────
+// Minimiza custo sujeito a: soma das frações = 1, teores min/max, restrições
+// por MP e regra dos 50kg (MP entra com >= 50kg ou não entra).
+// A heurística antiga (solve) permanece como fallback de segurança.
+
+function _lpSolve(c, A, b, rel){
+  // minimiza c·x  s.a.  A[i]·x (rel[i]) b[i],  x >= 0   — simplex duas-fases
+  const EPS=1e-9, M=A.length, N=c.length;
+  const rows=A.map(r=>r.slice()), bb=b.slice(), rr=rel.slice();
+  for(let i=0;i<M;i++) if(bb[i]<0){ rows[i]=rows[i].map(v=>-v); bb[i]=-bb[i]; rr[i]=rr[i]==='<='?'>=':(rr[i]==='>='?'<=':'='); }
+  let nS=0,nA=0;
+  rr.forEach(t=>{ if(t==='<=')nS++; else if(t==='>='){nS++;nA++;} else nA++; });
+  const NT=N+nS+nA, artStart=N+nS;
+  const T=[], basis=new Array(M);
+  let si=N, ac=artStart;
+  for(let i=0;i<M;i++){
+    const row=new Array(NT+1).fill(0);
+    for(let j=0;j<N;j++) row[j]=rows[i][j];
+    row[NT]=bb[i];
+    if(rr[i]==='<='){ row[si]=1; basis[i]=si++; }
+    else if(rr[i]==='>='){ row[si++]=-1; row[ac]=1; basis[i]=ac++; }
+    else { row[ac]=1; basis[i]=ac++; }
+    T.push(row);
+  }
+  function pivot(pr,pc,z){
+    const P=T[pr], pv=P[pc];
+    for(let j=0;j<=NT;j++) P[j]/=pv;
+    for(let i=0;i<M;i++){ if(i===pr) continue; const f=T[i][pc]; if(Math.abs(f)>1e-12){ const R=T[i]; for(let j=0;j<=NT;j++) R[j]-=f*P[j]; } }
+    const f=z[pc]; if(Math.abs(f)>1e-12){ for(let j=0;j<=NT;j++) z[j]-=f*P[j]; }
+    basis[pr]=pc;
+  }
+  function initZ(costArr){
+    const z=new Array(NT+1).fill(0);
+    for(let j=0;j<NT;j++) z[j]=costArr[j]||0;
+    for(let i=0;i<M;i++){ const cb=costArr[basis[i]]||0; if(cb){ const R=T[i]; for(let j=0;j<=NT;j++) z[j]-=cb*R[j]; } }
+    return z;
+  }
+  function optimize(z, banned){
+    for(let iter=0;iter<3000;iter++){
+      let pc=-1;
+      if(iter>2500){ // regra de Bland (anti-ciclo)
+        for(let j=0;j<NT;j++){ if(banned&&banned[j]) continue; if(z[j]<-EPS){ pc=j; break; } }
+      } else {
+        let mv=-EPS;
+        for(let j=0;j<NT;j++){ if(banned&&banned[j]) continue; if(z[j]<mv){ mv=z[j]; pc=j; } }
+      }
+      if(pc<0) return true;
+      let pr=-1, best=Infinity;
+      for(let i=0;i<M;i++){
+        const a=T[i][pc];
+        if(a>EPS){ const rt=T[i][NT]/a; if(rt<best-1e-12||(Math.abs(rt-best)<=1e-12&&(pr<0||basis[i]<basis[pr]))){ best=rt; pr=i; } }
+      }
+      if(pr<0) return false; // ilimitado
+      pivot(pr,pc,z);
+    }
+    return true;
+  }
+  if(nA>0){
+    const c1=new Array(NT).fill(0);
+    for(let j=artStart;j<NT;j++) c1[j]=1;
+    const z1=initZ(c1);
+    optimize(z1,null);
+    if(-z1[NT]>1e-7) return null; // inviável
+    for(let i=0;i<M;i++){
+      if(basis[i]>=artStart){
+        let pc=-1;
+        for(let j=0;j<artStart;j++){ if(Math.abs(T[i][j])>1e-7){ pc=j; break; } }
+        if(pc>=0) pivot(i,pc,z1);
+      }
+    }
+  }
+  const banned=new Array(NT).fill(false);
+  for(let j=artStart;j<NT;j++) banned[j]=true;
+  const c2=new Array(NT).fill(0);
+  for(let j=0;j<N;j++) c2[j]=c[j];
+  const z2=initZ(c2);
+  if(!optimize(z2,banned)) return null;
+  const x=new Array(N).fill(0);
+  for(let i=0;i<M;i++){ if(basis[i]<N) x[basis[i]]=T[i][NT]; }
+  return {x, cost:-z2[NT]};
+}
+
+function solveExact(materials, reqs, restrArr, qty){
+  const MIN_KG=qty>0?50/qty:0.05;
+  const TOL=0.01;
+  const MACRO_SET=new Set(['N','P','K','S','Ca','Mg','Cl']);
+  const active=materials.filter(m=>m.active&&m.costUSD>0);
+  if(!active.length) return null;
+  const reqsOn=reqs.filter(r=>r.on&&r.min>0);
+  const reqsCap=reqs.filter(r=>r.on&&r.max<100);
+  const isFiller=m=>NKEYS.every(k=>!((m[k]||0)>0));
+  const mps=reqsOn.length
+    ? active.filter(m=>reqsOn.some(r=>(m[r.k]||0)>0)||restrArr.some(rr=>rr.name===m.name&&(rr.min>0||rr.max<1000))||isFiller(m))
+    : active.slice();
+  if(!mps.length) return null;
+  const n=mps.length;
+  const isManual=mps.map(m=>!!restrArr.find(rr=>rr.name===m.name&&(rr.min>0||rr.max<1000)));
+  const lbR=mps.map(m=>{const rr=restrArr.find(rr=>rr.name===m.name);return rr&&rr.min>0?Math.min(1,rr.min/1000):0;});
+  const ubR=mps.map(m=>{const rr=restrArr.find(rr=>rr.name===m.name);return rr&&rr.max<1000?Math.min(1,rr.max/1000):1;});
+  const cVec=mps.map(m=>cost(m));
+  function isMicroOnly(mp){ return !Array.from(MACRO_SET).some(k=>(mp[k]||0)>0)&&!isFiller(mp); }
+
+  // Pré-filtro de micros (mesma lógica da heurística): top-2 mais baratas por nutriente + polivalentes
+  const microReqKeys=reqsOn.map(r=>r.k).filter(k=>!MACRO_SET.has(k));
+  const microFreeIdxs=mps.map((_,i)=>i).filter(i=>isMicroOnly(mps[i])&&!isManual[i]);
+  let microCandidates=microFreeIdxs;
+  if(microReqKeys.length>0&&microFreeIdxs.length>6){
+    const candSet=new Set(microFreeIdxs.filter(i=>microReqKeys.filter(k=>(mps[i][k]||0)>0).length>=2));
+    microReqKeys.forEach(k=>{
+      microFreeIdxs.filter(i=>(mps[i][k]||0)>0)
+        .sort((a,b)=>cVec[a]/(mps[a][k]||1)-cVec[b]/(mps[b][k]||1))
+        .slice(0,2).forEach(i=>candSet.add(i));
+    });
+    microCandidates=[...candSet];
+  }
+  const microCandSet=new Set(microCandidates);
+
+  function lpWith(excl, forcedLb){
+    const inc=[]; for(let i=0;i<n;i++) if(!excl[i]) inc.push(i);
+    if(!inc.length) return null;
+    const lo=inc.map(i=>Math.max(lbR[i], forcedLb[i]||0));
+    const hi=inc.map(i=>ubR[i]);
+    for(let t=0;t<inc.length;t++) if(lo[t]>hi[t]+1e-12) return null;
+    const sumLo=lo.reduce((a,v)=>a+v,0);
+    if(sumLo>1+1e-9) return null;
+    const m=inc.length, A=[], b=[], rel=[];
+    A.push(new Array(m).fill(1)); b.push(1-sumLo); rel.push('=');
+    reqsOn.forEach(r=>{
+      const row=inc.map(i=>mps[i][r.k]||0);
+      const base=inc.reduce((a,i,t)=>a+lo[t]*(mps[i][r.k]||0),0);
+      A.push(row); b.push(r.min-base); rel.push('>=');
+    });
+    reqsCap.forEach(r=>{
+      const row=inc.map(i=>mps[i][r.k]||0);
+      const base=inc.reduce((a,i,t)=>a+lo[t]*(mps[i][r.k]||0),0);
+      A.push(row); b.push(r.max-base); rel.push('<=');
+    });
+    for(let t=0;t<m;t++){ const row=new Array(m).fill(0); row[t]=1; A.push(row); b.push(hi[t]-lo[t]); rel.push('<='); }
+    const res=_lpSolve(inc.map(i=>cVec[i]), A, b, rel);
+    if(!res) return null;
+    const fr=new Array(n).fill(0);
+    inc.forEach((i,t)=>{ fr[i]=lo[t]+Math.max(0,res.x[t]); });
+    return {fracs:fr, cost:fr.reduce((a,f,i)=>a+f*cVec[i],0)};
+  }
+
+  // Branch-and-bound sobre a regra dos 50kg: cada MP livre entra com >= MIN_KG ou sai
+  let bestSol=null, bestCost=Infinity, nodes=0;
+  const NODE_CAP=500, t0=Date.now(), TIME_CAP=8000;
+  function bnb(excl, forcedLb){
+    if(nodes++>NODE_CAP||Date.now()-t0>TIME_CAP) return;
+    const sol=lpWith(excl, forcedLb);
+    if(!sol||sol.cost>=bestCost-1e-7) return;
+    let vi=-1, vf=Infinity;
+    for(let i=0;i<n;i++){
+      if(excl[i]||isManual[i]) continue;
+      const f=sol.fracs[i];
+      if(f>1e-7&&f<MIN_KG-1e-9&&(forcedLb[i]||0)<MIN_KG&&f<vf){ vf=f; vi=i; }
+    }
+    if(vi<0){ bestCost=sol.cost; bestSol=sol; return; }
+    const e2=excl.slice(); e2[vi]=true; bnb(e2, forcedLb);
+    const f2=forcedLb.slice(); f2[vi]=MIN_KG; bnb(excl, f2);
+  }
+  const excl0=mps.map((_,i)=>ubR[i]<=1e-12||(isMicroOnly(mps[i])&&!isManual[i]&&!microCandSet.has(i)));
+  bnb(excl0, new Array(n).fill(0));
+  if(!bestSol) return null;
+
+  // Montagem final (mesmo formato da heurística)
+  const fM=[], fF=[];
+  for(let i=0;i<n;i++){
+    const f=bestSol.fracs[i];
+    if(f>=MIN_KG-1e-9||(isManual[i]&&f>1e-9)){ fM.push(mps[i]); fF.push(f); }
+  }
+  if(!fM.length) return null;
+  const s=fF.reduce((a,b)=>a+b,0);
+  if(s<=0) return null;
+  const fFn=fF.map(f=>f/s);
+  const fNt={cost:0}; NKEYS.forEach(k=>fNt[k]=0);
+  for(let i=0;i<fM.length;i++){ fNt.cost+=fFn[i]*cost(fM[i]); NKEYS.forEach(k=>fNt[k]+=fFn[i]*(fM[i][k]||0)); }
+  const fp=reqs.filter(r=>r.on).reduce((acc,r)=>{const v=fNt[r.k]||0;return acc+Math.max(0,r.min-v)+Math.max(0,v-r.max);},0);
+  if(fp>TOL) return null;
+  reqs.filter(r=>r.on).forEach(r=>{const v=fNt[r.k]||0;if(v<r.min&&v>=r.min-TOL)fNt[r.k]=r.min;});
+  return {fracs:fFn, mats:fM, nt:fNt, cpt:fNt.cost};
+}
+
 function solve(materials, reqs, restrArr, qty){
   const MIN_KG=qty>0?50/qty:0.05;
   const TOL=0.01;
@@ -5747,6 +5931,15 @@ function solve(materials, reqs, restrArr, qty){
 }
 
 function solveWithMicros(allMats, reqs, restrArr, qty){
+  // 1) Solver exato (LP + B&B): ótimo garantido, determinístico, milissegundos
+  try{
+    const ex=solveExact(allMats, reqs, restrArr, qty);
+    if(ex){
+      if(typeof self!=='undefined'&&self.postMessage) self.postMessage({progress:95});
+      return ex;
+    }
+  }catch(e){ /* qualquer falha numérica cai na heurística */ }
+  // 2) Fallback: heurística original (busca local multi-start)
   return solve(allMats, reqs, restrArr, qty);
 }
 
@@ -5754,7 +5947,21 @@ function solveWithMicros(allMats, reqs, restrArr, qty){
 let _solverWorker=null;
 function getWorker(){
   if(_solverWorker) return _solverWorker;
-  const workerCode = "\n// IMC SOLVER WORKER\nconst NKEYS=['N','P','K','S','Ca','Mg','Cl','B','Cu','Zn','Mn','Fe','Mo'];\nfunction cost(m){ return m._workerCost||m.costUSD||0; }\nconst MACRO_KEYS_SET=new Set(['N','P','K','S','Ca','Mg','Cl']);\n\nfunction solve(materials, reqs, restrArr, qty){\n  const MIN_KG=qty>0?50/qty:0.05;\n  const TOL=0.01;\n  if(typeof timeUp==='undefined') var timeUp=()=>false; // no-op fora do worker\n  const MACRO_KEYS_SET=new Set(['N','P','K','S','Ca','Mg','Cl']);\n  const TIMEOUT_MS=90000;  // 90 segundos\n  const _startTime=Date.now();\n  function timeUp(){return Date.now()-_startTime>TIMEOUT_MS;}\n\n  const active=materials.filter(m=>m.active&&m.costUSD>0);\n  if(!active.length) return null;\n\n  const reqsOn=reqs.filter(r=>r.on&&r.min>0);\n  const mps=reqsOn.length\n    ? active.filter(m=>reqsOn.some(r=>(m[r.k]||0)>0)||restrArr.some(r=>r.name===m.name&&(r.min>0||r.max<1000)))\n    : active;\n  if(!mps.length) return null;\n\n  const n=mps.length;\n  const lb=mps.map(m=>{const r=restrArr.find(r=>r.name===m.name);return r&&r.min>0?r.min/1000:MIN_KG;});\n  const ub=mps.map(m=>{const r=restrArr.find(r=>r.name===m.name);return r&&r.max<1000?Math.min(1,r.max/1000):1.0;});\n  const isManual=mps.map(m=>!!restrArr.find(r=>r.name===m.name&&(r.min>0||r.max<1000)));\n\n  function pen(nt){return reqsOn.reduce((p,r)=>p+Math.max(0,r.min-(nt[r.k]||0)),0);}\n\n  function sub(incl, deep, relaxMacros, warmup){\n    const idx=incl.map((v,i)=>v?i:-1).filter(i=>i>=0);\n    if(!idx.length) return null;\n    // relaxMacros: macros livres (não-manuais) usam lb=0 — exploração inicial\n    const lbEff=idx.map(i=>(relaxMacros&&!isManual[i]&&!isMicroOnly(mps[i]))?0:lb[i]);\n    if(lbEff.reduce((s,b)=>s+b,0)>1+1e-9) return null;\n    const slb=lbEff;\n    const sub_=idx.map(i=>ub[i]);\n    const m=idx.length;\n\n    function sNT(f){\n      const nt={cost:0};NKEYS.forEach(k=>nt[k]=0);\n      idx.forEach((gi,li)=>{nt.cost+=f[li]*cost(mps[gi]);NKEYS.forEach(k=>nt[k]+=f[li]*(mps[gi][k]||0));});\n      return nt;\n    }\n    function sObj(f){const nt=sNT(f);return nt.cost+pen(nt)*1e6;}\n    function sProj(f){\n      let a=f.map((x,i)=>Math.max(slb[i],Math.min(sub_[i],x)));\n      for(let it=0;it<20;it++){\n        const s=a.reduce((x,y)=>x+y,0);\n        if(s<=0) return slb.slice();\n        a=a.map(x=>x/s);\n        let ch=false;\n        for(let i=0;i<m;i++){\n          if(a[i]<slb[i]-1e-12){a[i]=slb[i];ch=true;}\n          if(a[i]>sub_[i]+1e-12){a[i]=sub_[i];ch=true;}\n        }\n        if(!ch) break;\n      }\n      return a;\n    }\n\n    const starts=[sProj(new Array(m).fill(1/m))];\n    reqsOn.forEach(r=>{\n      let bi=-1,bv=Infinity;\n      idx.forEach((gi,li)=>{if((mps[gi][r.k]||0)>0){const v=cost(mps[gi])/(mps[gi][r.k]||1);if(v<bv){bv=v;bi=li;}}});\n      if(bi>=0){const f=slb.slice();f[bi]=Math.max(slb[bi],0.7);starts.push(sProj(f));}\n    });\n    const ml=idx.map((gi,li)=>({li,cnt:reqsOn.filter(r=>(mps[gi][r.k]||0)>0).length,c:cost(mps[gi])}))\n      .filter(x=>x.cnt>1).sort((a,b)=>b.cnt-a.cnt||(a.c/a.cnt)-(b.c/b.cnt));\n    if(ml.length>0){\n      const f=slb.slice();f[ml[0].li]=Math.max(slb[ml[0].li],0.7);\n      starts.push(sProj(f));\n    }\n    if(deep){\n      const an=slb.slice();\n      const cov=new Set();\n      reqsOn.slice().sort((a,b)=>idx.filter(i=>(mps[i][a.k]||0)>0).length-idx.filter(i=>(mps[i][b.k]||0)>0).length).forEach(r=>{\n        if(cov.has(r.k)) return;\n        let bi=-1,bv=Infinity;\n        idx.forEach((gi,li)=>{if((mps[gi][r.k]||0)>0){const v=cost(mps[gi])/(mps[gi][r.k]||1);if(v<bv){bv=v;bi=li;}}});\n        if(bi>=0){\n          an[bi]=Math.max(an[bi],r.min/(mps[idx[bi]][r.k]||1));\n          reqsOn.forEach(r2=>{if((mps[idx[bi]][r2.k]||0)>0)cov.add(r2.k);});\n        }\n      });\n      if(an.some((v,i)=>v>slb[i]+1e-9)) starts.push(sProj(an));\n\n      // Starts diversificados: para cada par de MPs barata-polivalente, criar start com elas concentradas\n      const macroLi=idx.map((gi,li)=>({li,gi,c:cost(mps[gi]),cnt:reqsOn.filter(r=>(mps[gi][r.k]||0)>0).length}))\n        .filter(x=>x.cnt>=1&&!isMicroOnly(mps[x.gi]))\n        .sort((a,b)=>(a.c/Math.max(1,a.cnt))-(b.c/Math.max(1,b.cnt)));\n      // Top-3 macros baratos: criar starts onde cada um é maximizado individualmente\n      for(const {li:topLi} of macroLi.slice(0,3)){\n        const f=slb.slice();\n        f[topLi]=Math.max(slb[topLi],0.5);\n        // distribuir restante uniformemente entre macros relevantes\n        const remaining=1-f.reduce((a,b)=>a+b,0);\n        const others=macroLi.filter(x=>x.li!==topLi).slice(0,3);\n        if(others.length>0){\n          const share=remaining/others.length;\n          others.forEach(o=>f[o.li]=Math.max(slb[o.li],share));\n        }\n        starts.push(sProj(f));\n      }\n\n      // Multi-start aleatório: gerar pontos de partida pseudo-aleatórios para escapar de mínimos locais\n      // Usar um seed determinístico baseado no número de MPs (reprodutível)\n      let seed=m*2654435761>>>0;\n      function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}\n      const numRandom=12; // 12 starts aleatórios sempre\n      for(let rs=0;rs<numRandom;rs++){\n        const f=slb.slice();\n        const remaining=1-slb.reduce((a,b)=>a+b,0);\n        if(remaining<=1e-9) break;\n        // Distribuir o restante aleatoriamente entre as MPs\n        const weights=new Array(m).fill(0).map(()=>rnd());\n        const wsum=weights.reduce((a,b)=>a+b,0);\n        for(let li=0;li<m;li++) f[li]+=remaining*(weights[li]/wsum);\n        starts.push(sProj(f));\n      }\n    }\n\n    const ITERS=deep?Math.max(200,Math.min(500,Math.round(2000/m))):relaxMacros?Math.max(50,Math.min(120,Math.round(500/m))):Math.max(100,Math.min(300,Math.round(1200/m)));\n    let bF=null,bO=Infinity;\n    for(const f0 of starts){\n      if(timeUp()) break;  // TIMEOUT\n      let f=f0.slice(),curO=sObj(f),step=0.01;\n\n      // Warm-up com steps grandes para escapar de mínimos locais (apenas se warmup=true)\n      if(warmup){\n        for(const bigStep of [0.05,0.02]){\n          let imp=true,wcnt=0;\n          while(imp&&wcnt<15&&!timeUp()){\n            imp=false;wcnt++;\n            for(let i=0;i<m;i++)for(let j=0;j<m;j++){\n              if(i===j) continue;\n              if(f[i]-bigStep<slb[i]-1e-10) continue;\n              if(f[j]+bigStep>sub_[j]+1e-10) continue;\n              const t=f.slice();t[i]-=bigStep;t[j]+=bigStep;\n              const tO=sObj(t);if(tO<curO-1e-10){f=t;curO=tO;imp=true;}\n            }\n          }\n        }\n      }\n\n      for(let it=0;it<ITERS;it++){\n        if((it&15)===0&&timeUp()) break;  // TIMEOUT\n        if(!deep&&it>20&&pen(sNT(f))<0.001) break; // early exit: já válido (não-deep)\n        let imp=false;\n        for(let i=0;i<m;i++)for(let j=0;j<m;j++){\n          if(i===j) continue;\n          if(f[i]-step<slb[i]-1e-10) continue;\n          if(f[j]+step>sub_[j]+1e-10) continue;\n          const t=f.slice();t[i]-=step;t[j]+=step;\n          const tO=sObj(t);if(tO<curO-1e-10){f=t;curO=tO;imp=true;}\n        }\n        if(!imp) step*=0.5;if(step<1e-7) break;\n      }\n      // 3-way swap APÓS convergência inicial (deep): tentar tirar de i, distribuir para j+k\n      if(deep&&!timeUp()&&m>=4){\n        let imp=true,cnt=0;\n        while(imp&&cnt<3&&!timeUp()){\n          imp=false;cnt++;\n          const ts=0.01;\n          for(let i=0;i<m&&!imp;i++){\n            if(f[i]-ts<slb[i]-1e-10) continue;\n            for(let j=0;j<m&&!imp;j++){\n              if(j===i) continue;\n              const half=ts/2;\n              if(f[j]+half>sub_[j]+1e-10) continue;\n              for(let k=j+1;k<m;k++){\n                if(k===i) continue;\n                if(f[k]+half>sub_[k]+1e-10) continue;\n                const t=f.slice();t[i]-=ts;t[j]+=half;t[k]+=half;\n                const tO=sObj(t);if(tO<curO-1e-10){f=t;curO=tO;imp=true;break;}\n              }\n            }\n          }\n        }\n      }\n      // Random perturbation + re-converge no deep (escapa de mínimos locais)\n      if(deep&&!timeUp()&&curO<1e5){\n        // Mais restarts para problemas grandes\n        const nRestarts=m>=8?4:2;\n        for(let restart=0;restart<nRestarts;restart++){\n          if(timeUp()) break;\n          // Perturbação maior em problemas grandes\n          const fp=f.slice();\n          const pertSize=m>=8?0.08:0.05;\n          for(let p=0;p<3;p++){\n            const i=Math.floor(Math.random()*m), j=Math.floor(Math.random()*m);\n            if(i===j) continue;\n            const delta=Math.min(pertSize, fp[i]-slb[i], sub_[j]-fp[j]);\n            if(delta>0){fp[i]-=delta;fp[j]+=delta;}\n          }\n          let fr=sProj(fp),curR=sObj(fr),sR=0.01;\n          for(let it=0;it<Math.min(150,Math.round(ITERS/2));it++){\n            if((it&15)===0&&timeUp()) break;\n            let imp=false;\n            for(let i=0;i<m;i++)for(let j=0;j<m;j++){\n              if(i===j) continue;\n              if(fr[i]-sR<slb[i]-1e-10) continue;\n              if(fr[j]+sR>sub_[j]+1e-10) continue;\n              const t=fr.slice();t[i]-=sR;t[j]+=sR;\n              const tO=sObj(t);if(tO<curR-1e-10){fr=t;curR=tO;imp=true;}\n            }\n            if(!imp) sR*=0.5;if(sR<1e-7) break;\n          }\n          if(curR<curO-1e-10){f=fr;curO=curR;}\n        }\n      }\n      if(deep&&!timeUp()){\n        for(const fs of [1e-4,1e-5,1e-6]){\n          if(timeUp()) break;\n          let imp=true;let cnt=0;\n          while(imp&&cnt<15){\n            if(timeUp()) break;\n            imp=false;cnt++;\n            for(let i=0;i<m;i++)for(let j=0;j<m;j++){\n              if(i===j) continue;\n              if(f[i]-fs<slb[i]-1e-10) continue;\n              if(f[j]+fs>sub_[j]+1e-10) continue;\n              const t=f.slice();t[i]-=fs;t[j]+=fs;\n              const tO=sObj(t);if(tO<curO-1e-12){f=t;curO=tO;imp=true;}\n            }\n          }\n        }\n      }\n      if(curO<bO){bO=curO;bF=f.slice();}\n    }\n\n    if(!bF) bF=starts[0]||slb.slice();\n    const nt=sNT(bF);\n    const p=pen(nt);\n    const fracs=new Array(n).fill(0);\n    idx.forEach((gi,li)=>fracs[gi]=bF[li]);\n    return {fracs,nt,cost:nt.cost,penalty:p,valid:p<TOL};\n  }\n\n  const microReqKeys=reqsOn.map(r=>r.k).filter(k=>!MACRO_KEYS_SET.has(k));\n  function isMicroOnly(mp){\n    return !Array.from(MACRO_KEYS_SET).some(k=>(mp[k]||0)>0);\n  }\n\n  const macroIdxs=mps.map((_,i)=>i).filter(i=>!isMicroOnly(mps[i]));\n  const macroFreeIdxs=macroIdxs.filter(i=>!isManual[i]);\n  const microFreeIdxs=mps.map((_,i)=>i).filter(i=>isMicroOnly(mps[i])&&!isManual[i]);\n  const microManualIdxs=mps.map((_,i)=>i).filter(i=>isMicroOnly(mps[i])&&isManual[i]);\n\n  // FILTRO INTELIGENTE: para cada nutriente requisitado, manter top-2 MPs mais baratas + polivalentes\n  let microCandidates = microFreeIdxs;\n  if(microReqKeys.length>0 && microFreeIdxs.length>6){\n    const polyMicros = microFreeIdxs.filter(i =>\n      microReqKeys.filter(k => (mps[i][k]||0)>0).length >= 2\n    );\n    const candSet = new Set(polyMicros);\n    // Top-2 mais baratas POR NUTRIENTE\n    microReqKeys.forEach(k => {\n      const providers = microFreeIdxs\n        .filter(i => (mps[i][k]||0)>0)\n        .sort((a,b) => cost(mps[a])/(mps[a][k]||1) - cost(mps[b])/(mps[b][k]||1));\n      providers.slice(0,2).forEach(i => candSet.add(i));\n    });\n    microCandidates = [...candSet];\n  }\n\n  const microCombos=[[]];\n  for(let a=0;a<microCandidates.length;a++) microCombos.push([microCandidates[a]]);\n  for(let a=0;a<microCandidates.length;a++)\n    for(let b=a+1;b<microCandidates.length;b++)\n      microCombos.push([microCandidates[a],microCandidates[b]]);\n  for(let a=0;a<microCandidates.length;a++)\n    for(let b=a+1;b<microCandidates.length;b++)\n      for(let c=b+1;c<microCandidates.length;c++)\n        microCombos.push([microCandidates[a],microCandidates[b],microCandidates[c]]);\n\n  const validCombos=microReqKeys.length>0 ? microCombos.filter(combo=>{\n    const allMicros=[...combo,...microManualIdxs];\n    return microReqKeys.every(k=>\n      allMicros.some(i=>(mps[i][k]||0)>0) ||\n      macroIdxs.some(i=>(mps[i][k]||0)>0)\n    );\n  }) : [[]];\n\n  // FASE 1: Top-3 combos\n  const top3=[];\n  const total=validCombos.length;\n\n  for(let ci=0;ci<total;ci++){\n    if(timeUp()) break;\n    if(typeof self!=='undefined'&&self.postMessage){\n      self.postMessage({progress:Math.round(5+(ci/total)*60)});\n    }\n    const combo=validCombos[ci];\n    const incl=mps.map((_,i)=>\n      macroIdxs.includes(i) ||\n      microManualIdxs.includes(i) ||\n      combo.includes(i)\n    );\n    const r=sub(incl, false, true); // relaxMacros para exploração\n    if(!r||!r.valid) continue;\n    \n    top3.push({combo, incl, result:r, cost:r.cost});\n    top3.sort((a,b)=>a.cost-b.cost);\n    if(top3.length>5) top3.pop();\n  }\n\n  if(!top3.length){\n    const r=sub(mps.map(()=>true), false, true);\n    if(!r||!r.valid) return null;\n    top3.push({combo:microFreeIdxs, incl:mps.map(()=>true), result:r, cost:r.cost});\n  }\n\n  // FASE 2: Eliminação + refinement nos top-3\n  let bestResult=null, bestCost=Infinity;\n  for(let ti=0;ti<top3.length;ti++){\n    if(timeUp()){\n      // Tempo esgotou — pega o melhor já encontrado\n      if(top3[ti]&&top3[ti].result.cost<bestCost){\n        bestResult=top3[ti].result;\n        bestCost=top3[ti].cost;\n      }\n      break;\n    }\n    if(typeof self!=='undefined'&&self.postMessage){\n      self.postMessage({progress:Math.round(70+(ti/top3.length)*25)});\n    }\n    let {incl, result} = top3[ti];\n    let curCost=result.cost;\n    \n    // Eliminação de macros (com timeout E limite de iterações)\n    let improved=true;\n    let elimCount=0;\n    const maxElim=macroFreeIdxs.length+2;\n    while(improved&&!timeUp()&&elimCount<maxElim){\n      improved=false;\n      elimCount++;\n      // Heartbeat de progresso\n      if(typeof self!=='undefined'&&self.postMessage){\n        const subProgress=Math.round(70+(ti/top3.length)*25)+Math.round((elimCount/maxElim)*5);\n        self.postMessage({progress:Math.min(94, subProgress)});\n      }\n      let bestRem=-1, bestRemCost=curCost;\n      for(const mi of macroFreeIdxs){\n        if(timeUp()) break;\n        if(!incl[mi]) continue;\n        const test=incl.slice();test[mi]=false;\n        const rTest=sub(test, false, true);\n        if(rTest&&rTest.valid&&rTest.cost<bestRemCost-0.01){\n          bestRemCost=rTest.cost;\n          bestRem=mi;\n        }\n      }\n      if(bestRem>=0){\n        incl[bestRem]=false;\n        const rNew=sub(incl, false, true);\n        if(rNew&&rNew.valid&&rNew.cost<curCost-0.01){\n          curCost=rNew.cost;\n          result=rNew;\n          improved=true;\n        } else {\n          incl[bestRem]=true;\n        }\n      }\n    }\n    \n    // Refinamento DEEP (se houver tempo)\n    if(!timeUp()){\n      if(typeof self!=='undefined'&&self.postMessage){\n        self.postMessage({progress:Math.min(96, Math.round(70+(ti/top3.length)*25)+8)});\n      }\n      // ANTES do deep: remover macros que ficaram em fração quase zero (relaxMacros os deixou ali)\n      // Isso permite o deep refinement focar só nas MPs realmente ativas\n      const inclClean=incl.slice();\n      let cleanedAny=false;\n      for(let i=0;i<n;i++){\n        if(inclClean[i]&&!isManual[i]&&!isMicroOnly(mps[i])&&result.fracs[i]<0.01){\n          // Macro com menos de 10kg → tentar remover\n          const tryIncl=inclClean.slice(); tryIncl[i]=false;\n          const rTry=sub(tryIncl, false, true);\n          if(rTry&&rTry.valid&&rTry.cost<=curCost*1.001){\n            inclClean[i]=false;\n            result=rTry;\n            curCost=rTry.cost;\n            cleanedAny=true;\n          }\n        }\n      }\n      if(cleanedAny) incl=inclClean;\n      const rDeep=sub(incl, true, false, true); // deep+warmup\n      if(rDeep&&rDeep.valid&&rDeep.cost<curCost){\n        result=rDeep;\n        curCost=rDeep.cost;\n      }\n    }\n    \n    if(curCost<bestCost-1e-6){\n      bestCost=curCost;\n      bestResult=result;\n    }\n  }\n\n  // Garantir que sempre temos um resultado\n  if(!bestResult&&top3.length>0) bestResult=top3[0].result;\n  if(!bestResult) return null;\n\n  // REFINAMENTO FINAL: para os 3 melhores combos do top, rodar deep com macros ativos do bestResult\n  if(!timeUp()){\n    const activeMacros=mps.map((_,i)=>{\n      if(!macroIdxs.includes(i)) return false;\n      return bestResult.fracs[i]>0.001;\n    });\n    // Top 3 combos por custo\n    const sortedTop=top3.slice().sort((a,b)=>a.cost-b.cost).slice(0,3);\n    for(const t of sortedTop){\n      if(timeUp()) break;\n      const incl=mps.map((_,i)=>{\n        if(activeMacros[i]) return true;\n        if(microManualIdxs.includes(i)) return true;\n        if(t.combo.includes(i)) return true;\n        return false;\n      });\n      const r=sub(incl, true, false, true);\n      if(r&&r.valid&&r.cost<bestResult.cost-0.01){\n        bestResult=r;\n      }\n    }\n  }\n\n  if(typeof self!=='undefined'&&self.postMessage){\n    self.postMessage({progress:99});\n  }\n\n  const SHOW_MIN=qty>0?50/qty:0.05;\n\n  // Limpeza iterativa: para cada MP <50kg → tentar remover ou forçar para 50kg\n  let cleanIncl=bestResult.fracs.map(f=>f>1e-9);\n  let cleanImproved=true;\n  while(cleanImproved&&!timeUp()){\n    cleanImproved=false;\n    // Coletar todas MPs abaixo de 50kg ordenadas da menor para maior\n    const smallMPs=[];\n    for(let i=0;i<n;i++){\n      if(isManual[i]) continue;\n      if(cleanIncl[i]&&bestResult.fracs[i]<SHOW_MIN) smallMPs.push({i,f:bestResult.fracs[i]});\n    }\n    smallMPs.sort((a,b)=>a.f-b.f);\n\n    for(const {i:worstIdx} of smallMPs){\n      if(timeUp()) break;\n      // 1) Tentar remover essa MP\n      const tryIncl=cleanIncl.slice(); tryIncl[worstIdx]=false;\n      const rClean=sub(tryIncl, true, true);\n      if(rClean&&rClean.valid){\n        cleanIncl=tryIncl;\n        bestResult=rClean;\n        cleanImproved=true;\n        break;\n      }\n      // 2) Não deu — forçar lb=50kg para essa MP\n      const savedLb=lb[worstIdx];\n      lb[worstIdx]=SHOW_MIN;\n      const rForced=sub(cleanIncl, true, false, true);\n      lb[worstIdx]=savedLb;\n      if(rForced&&rForced.valid){\n        bestResult=rForced;\n        cleanImproved=true;\n        break;\n      }\n    }\n  }\n\n  // Montar resultado final\n  const fM=[],fF=[];\n  for(let i=0;i<n;i++){\n    if(bestResult.fracs[i]>=SHOW_MIN||(isManual[i]&&bestResult.fracs[i]>1e-9)){\n      fM.push(mps[i]);fF.push(bestResult.fracs[i]);\n    }\n  }\n  if(!fF.length) return null;\n  const s=fF.reduce((a,b)=>a+b,0);\n  const fFn=fF.map(f=>f/s);\n  const fNt={cost:0};NKEYS.forEach(k=>fNt[k]=0);\n  for(let i=0;i<fM.length;i++){\n    fNt.cost+=fFn[i]*cost(fM[i]);\n    NKEYS.forEach(k=>fNt[k]+=fFn[i]*(fM[i][k]||0));\n  }\n  const fp=reqs.filter(r=>r.on).reduce((acc,r)=>{const v=fNt[r.k]||0;return acc+Math.max(0,r.min-v)+Math.max(0,v-r.max);},0);\n  if(fp>TOL){\n    if(fp>0.5) return null;\n    // Fallback apenas para drift numérico pequeno (<0.5%)\n    const fM2=[],fF2=[];\n    for(let i=0;i<n;i++){\n      if(bestResult.fracs[i]>=0.001||(isManual[i]&&bestResult.fracs[i]>1e-9)){fM2.push(mps[i]);fF2.push(bestResult.fracs[i]);}\n    }\n    if(!fF2.length) return null;\n    const s2=fF2.reduce((a,b)=>a+b,0);\n    const fFn2=fF2.map(f=>f/s2);\n    const fNt2={cost:0};NKEYS.forEach(k=>fNt2[k]=0);\n    for(let i=0;i<fM2.length;i++){\n      fNt2.cost+=fFn2[i]*cost(fM2[i]);\n      NKEYS.forEach(k=>fNt2[k]+=fFn2[i]*(fM2[i][k]||0));\n    }\n    const fp2=reqs.filter(r=>r.on).reduce((acc,r)=>{const v=fNt2[r.k]||0;return acc+Math.max(0,r.min-v)+Math.max(0,v-r.max);},0);\n    if(fp2>TOL) return null;\n    reqs.filter(r=>r.on).forEach(r=>{const v=fNt2[r.k]||0;if(v<r.min&&v>=r.min-TOL) fNt2[r.k]=r.min;});\n    return {fracs:fFn2,mats:fM2,nt:fNt2,cpt:fNt2.cost};\n  }\n  reqs.filter(r=>r.on).forEach(r=>{const v=fNt[r.k]||0;if(v<r.min&&v>=r.min-TOL) fNt[r.k]=r.min;});\n  return {fracs:fFn,mats:fM,nt:fNt,cpt:fNt.cost};\n}\n\nfunction solveWithMicros(allMats, reqs, restrArr, qty){\n  return solve(allMats, reqs, restrArr, qty);\n}\n\n\nlet _solverWorker=null;\nlet _workerStartTime=0;\nfunction timeUp(){return Date.now()-_workerStartTime>55000;}\nself.onmessage=function(e){\n  _workerStartTime=Date.now();\n  const {materials,reqs,restrArr,cur,qty}=e.data;\n  materials.forEach(m=>{m._workerCost=cur==='BRL'?m.costBRL:m.costUSD;});\n  try{\n    const res=solveWithMicros(materials,reqs,restrArr,qty||1000);\n    self.postMessage({ok:true,res});\n  }catch(err){self.postMessage({ok:false,error:err.message});}\n};\n"
+  // Worker gerado a partir das funções reais (fonte única — nunca diverge do main thread)
+  const workerCode=[
+    'const NKEYS='+JSON.stringify(NKEYS)+';',
+    'function cost(m){ return m._workerCost||m.costUSD||0; }',
+    _lpSolve.toString(),
+    solveExact.toString(),
+    solve.toString(),
+    solveWithMicros.toString(),
+    'self.onmessage=function(e){',
+    '  const {materials,reqs,restrArr,cur,qty}=e.data;',
+    "  materials.forEach(function(m){m._workerCost=cur==='BRL'?m.costBRL:m.costUSD;});",
+    '  try{ var res=solveWithMicros(materials,reqs,restrArr,qty||1000); self.postMessage({ok:true,res:res}); }',
+    '  catch(err){ self.postMessage({ok:false,error:err.message}); }',
+    '};'
+  ].join('\n');
   const blob = new Blob([workerCode], {type:'application/javascript'});
   _solverWorker = new Worker(URL.createObjectURL(blob));
   return _solverWorker;
