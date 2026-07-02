@@ -5347,8 +5347,15 @@ function solveExact(materials, reqs, restrArr, qty){
   if(microReqKeys.length>0&&microFreeIdxs.length>6){
     const candSet=new Set(microFreeIdxs.filter(i=>microReqKeys.filter(k=>(mps[i][k]||0)>0).length>=2));
     microReqKeys.forEach(k=>{
-      microFreeIdxs.filter(i=>(mps[i][k]||0)>0)
-        .sort((a,b)=>cVec[a]/(mps[a][k]||1)-cVec[b]/(mps[b][k]||1))
+      const provs=microFreeIdxs.filter(i=>(mps[i][k]||0)>0);
+      // top-2 por custo/unidade de nutriente (bom quando a dose necessária > 50kg)
+      provs.slice().sort((a,b)=>cVec[a]/(mps[a][k]||1)-cVec[b]/(mps[b][k]||1))
+        .slice(0,2).forEach(i=>candSet.add(i));
+      // top-2 pelo custo REAL de cobrir o requisito com o piso de 50kg:
+      // fontes concentradas desperdiçam dinheiro quando o requisito é pequeno
+      const need=(reqsOn.find(r=>r.k===k)||{}).min||0;
+      provs.slice().sort((a,b)=>
+        Math.max(need/(mps[a][k]||1),MIN_KG)*cVec[a]-Math.max(need/(mps[b][k]||1),MIN_KG)*cVec[b])
         .slice(0,2).forEach(i=>candSet.add(i));
     });
     microCandidates=[...candSet];
@@ -5674,12 +5681,17 @@ function solve(materials, reqs, restrArr, qty){
       microReqKeys.filter(k => (mps[i][k]||0)>0).length >= 2
     );
     const candSet = new Set(polyMicros);
-    // Top-2 mais baratas POR NUTRIENTE
+    // Top-2 mais baratas POR NUTRIENTE (custo/unidade)
     microReqKeys.forEach(k => {
       const providers = microFreeIdxs
         .filter(i => (mps[i][k]||0)>0)
         .sort((a,b) => cost(mps[a])/(mps[a][k]||1) - cost(mps[b])/(mps[b][k]||1));
       providers.slice(0,2).forEach(i => candSet.add(i));
+      // Top-2 pelo custo real de cobrir o requisito com o piso de 50kg
+      const need=(reqsOn.find(r=>r.k===k)||{}).min||0;
+      microFreeIdxs.filter(i=>(mps[i][k]||0)>0)
+        .sort((a,b)=>Math.max(need/(mps[a][k]||1),MIN_KG)*cost(mps[a])-Math.max(need/(mps[b][k]||1),MIN_KG)*cost(mps[b]))
+        .slice(0,2).forEach(i=>candSet.add(i));
     });
     microCandidates = [...candSet];
   }
