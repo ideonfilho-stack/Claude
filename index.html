@@ -2316,7 +2316,7 @@ select:focus-visible{
         Arquivo
       </span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <input id="arq-search" placeholder="Buscar cliente, fórmula…" oninput="renderArquivo()"
+        <input id="arq-search" placeholder="Buscar cliente, fórmula…" oninput="arqBuscar()"
           style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px;outline:none;width:170px">
         <button class="btn btn-sm" onclick="arqExportarJSON()" style="border-color:rgba(16,213,156,0.3);color:var(--green)">
           <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3765,10 +3765,6 @@ function fmtMoney(v, cur){
   return 'U$ '+v.toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-// Atalho — formata em USD ou BRL
-function fmtUSD(v){ return fmtMoney(v, 'USD'); }
-function fmtBRL(v){ return fmtMoney(v, 'BRL'); }
-
 // ── CURRENCY
 function setCur(c){
   S.cur=c;
@@ -4046,10 +4042,6 @@ function _swMat(el,i){
   sched();
   setTimeout(()=>{renderMatSelGrid();renderRestrGrid();renderMatCards();},260);
 }
-function toggleMatFab(fabIdx, mpName){
-  const m=S.fabs[fabIdx].mats.find(x=>x.name===mpName);
-  if(m){ m.active=!m.active; renderMatSelGrid(); renderMatCards(); renderRestrGrid(); sched(); }
-}
 function toggleMatFabPrice(fabIdx, mpName, val){
   const m=S.fabs[fabIdx].mats.find(x=>x.name===mpName);
   if(!m) return;
@@ -4066,13 +4058,6 @@ function toggleMat(i){
   mats()[i].active=!mats()[i].active;
   renderMatSelGrid(); renderRestrGrid();
   // Re-render dos cards de MPs se a aba estiver visível
-  const pgMats=document.getElementById('pg-mats');
-  if(pgMats && pgMats.style.display!=='none') renderMatCards();
-  sched();
-}
-function toggleAllMats(val){
-  mats().forEach(m=>m.active=val);
-  renderMatSelGrid(); renderRestrGrid();
   const pgMats=document.getElementById('pg-mats');
   if(pgMats && pgMats.style.display!=='none') renderMatCards();
   sched();
@@ -4125,123 +4110,6 @@ function restrChange(el){
 
 // ── MAT TABLE
 let _expandedMat=null;
-function renderMatTable(){ renderMatCards(); }
-
-function renderMatCards_UNUSED(){
-  const lbl=document.getElementById('facLbl'); if(lbl) lbl.textContent=fab().name;
-  const container=document.getElementById('matCards'); if(!container) return;
-  const search=(document.getElementById('matSearch')||{value:''}).value.toLowerCase();
-  const ms=mats();
-  const COLS=['#22c98a','#4d8ef0','#f0a500','#a78bfa','#f05252','#2dd4bf','#fb923c','#e879f9','#60a5fa','#34d399','#f87171','#c084fc'];
-
-  // Group nutrients for display
-  const macros=[
-    {k:'N',  lbl:'N',     name:'Nitrogênio'},
-    {k:'P',  lbl:'P₂O₅', name:'Fósforo'},
-    {k:'K',  lbl:'K₂O',  name:'Potássio'},
-    {k:'S',  lbl:'S',    name:'Enxofre'},
-    {k:'Cl', lbl:'Cl',   name:'Cloro'},
-    {k:'Ca', lbl:'Ca',   name:'Cálcio'},
-    {k:'Mg', lbl:'Mg',   name:'Magnésio'},
-  ];
-  const micros=[
-    {k:'B',  lbl:'B',    name:'Boro'},
-    {k:'Cu', lbl:'Cu',   name:'Cobre'},
-    {k:'Zn', lbl:'Zn',   name:'Zinco'},
-    {k:'Mn', lbl:'Mn',   name:'Manganês'},
-    {k:'Fe', lbl:'Fe',   name:'Ferro'},
-    {k:'Mo', lbl:'Mo',   name:'Molibdênio'},
-  ];
-
-  const filtered=ms.map((m,i)=>({m,i})).filter(({m})=>!search||m.name.toLowerCase().includes(search));
-
-  container.innerHTML=filtered.map(({m,i})=>{
-    const col=COLS[i%COLS.length];
-    const brl=parseFloat((m.costUSD*S.fx).toFixed(2));
-    const activeNuts=NKEYS.filter(k=>m[k]&&m[k]>0).map(k=>k+'='+m[k].toFixed(1)+'%').join(' · ')||'—';
-    const expanded=_expandedMat===i;
-
-    // Nutrient input fields
-    const macroFields=macros.map(n=>`
-      <div style="display:flex;flex-direction:column;gap:3px">
-        <label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">${n.lbl}<br><span style="font-weight:400;color:var(--text3);font-size:9px">${n.name}</span></label>
-        <input type="number" value="${m[n.k]||0}" min="0" max="100" step="0.01"
-          style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;outline:none;font-family:inherit;width:100%"
-          onchange="mats()[${i}]['${n.k}']=+this.value;sched()"
-          onfocus="this.style.borderColor='${col}'" onblur="this.style.borderColor='var(--border2)'">
-      </div>`).join('');
-
-    const microFields=micros.map(n=>`
-      <div style="display:flex;flex-direction:column;gap:3px">
-        <label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">${n.lbl}<br><span style="font-weight:400;color:var(--text3);font-size:9px">${n.name}</span></label>
-        <input type="number" value="${m[n.k]||0}" min="0" max="100" step="0.01"
-          style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;outline:none;font-family:inherit;width:100%"
-          onchange="mats()[${i}]['${n.k}']=+this.value;sched()"
-          onfocus="this.style.borderColor='${col}'" onblur="this.style.borderColor='var(--border2)'">
-      </div>`).join('');
-
-    const cardBorder=m.active?col+'60':'var(--border)';
-    return `<div style="background:var(--surface);border:1px solid ${cardBorder};border-radius:var(--radius-sm);overflow:hidden;transition:border-color .2s">
-      <!-- HEADER ROW -->
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleExpand(${i})">
-        <div style="width:4px;height:36px;background:${m.active?col:'var(--border2)'};border-radius:2px;flex-shrink:0"></div>
-        <span class="sw-track${m.active?' sw-on':''}" onclick="event.stopPropagation();_swMat(this,${i})"><span class="sw-knob"></span></span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:${m.active?'var(--text)':'var(--text3)'}">${esc(m.name)}</div>
-          <div style="font-size:10px;color:var(--text3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${activeNuts}</div>
-        </div>
-        <div style="display:flex;gap:16px;align-items:center;flex-shrink:0">
-          <div style="text-align:right">
-            <div style="font-size:11px;font-weight:700;color:var(--blue)">$${m.costUSD.toFixed(2)}</div>
-            <div style="font-size:11px;color:var(--green)">R$${brl.toFixed(2)}</div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-icon btn-red" title="Excluir" onclick="event.stopPropagation();delMat(${i})" style="font-size:12px;padding:4px 7px"></button>
-            <div style="font-size:14px;color:var(--text2);width:16px;text-align:center;line-height:36px">${expanded?'▲':'▼'}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- EXPANDED EDITOR -->
-      ${expanded?`<div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--surface2)">
-        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;margin-bottom:1rem;align-items:flex-end">
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <label style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Nome</label>
-            <input type="text" value="${esc(m.name)}"
-              style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 10px;font-size:13px;font-weight:700;outline:none;font-family:inherit"
-              onchange="mats()[${i}].name=this.value;renderMatCards();sched()">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <label style="font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em">Preço USD $/t</label>
-            <input type="number" value="${m.costUSD}" min="0" step="0.01"
-              style="background:var(--surface3);border:1px solid rgba(77,142,240,.5);border-radius:6px;color:var(--text);padding:6px 10px;font-size:14px;font-weight:700;outline:none;font-family:inherit"
-              onchange="setMatPrice(${i},'costUSD',+this.value)">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:3px">
-            <label style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.05em">Preço BRL R$/t <span style="font-weight:400;color:var(--text3)">(auto)</span></label>
-            <input type="number" value="${brl}" readonly
-              style="background:var(--surface3);border:1px solid rgba(34,201,138,.3);border-radius:6px;color:var(--green);padding:6px 10px;font-size:14px;font-weight:700;cursor:default;font-family:inherit">
-          </div>
-        </div>
-
-        <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Macronutrientes (%)</div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:1rem">
-          ${macroFields}
-        </div>
-
-        <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Micronutrientes (%)</div>
-        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
-          ${microFields}
-        </div>
-      </div>`:''}
-    </div>`;
-  }).join('');
-
-  if(filtered.length===0){
-    container.innerHTML='<div style="text-align:center;color:var(--text3);padding:2rem;font-size:13px">Nenhuma matéria prima encontrada.</div>';
-  }
-}
-
 function toggleExpand(i){
   _expandedMat=(_expandedMat===i)?null:i;
   renderMatCards();
@@ -5994,7 +5862,9 @@ function getWorker(){
     '};'
   ].join('\n');
   const blob = new Blob([workerCode], {type:'application/javascript'});
-  _solverWorker = new Worker(URL.createObjectURL(blob));
+  const blobUrl = URL.createObjectURL(blob);
+  _solverWorker = new Worker(blobUrl);
+  URL.revokeObjectURL(blobUrl); // o worker já carregou — não acumular blob URLs
   return _solverWorker;
 }
 
@@ -6130,6 +6000,11 @@ function runSolve(){
   if(_solverWorker){ _solverWorker.terminate(); _solverWorker=null; }
 
   function runFallback(){
+    // Sem worker: o solver roda na thread principal — avisar em vez de barra congelada
+    const pct=document.getElementById('_solverPct');
+    if(pct) pct.textContent='Calculando… (pode levar mais tempo neste dispositivo)';
+    const bar=document.getElementById('_solverBar');
+    if(bar) bar.style.width='50%';
     setTimeout(()=>{
       try{
         console.log('[FALLBACK] iniciando solver...');
@@ -7745,73 +7620,14 @@ function renderDash(){
   });
 }
 
-// ── COMPARATIVO
-function solveFast(materials, reqs, restrArr){
-  // Solver rápido para comparativo — sem busca de subconjuntos, apenas otimização direta
-  const active=materials.filter(m=>m.active&&m.costUSD>0);
-  if(!active.length) return null;
-  const n=active.length;
-  const MIN_KG=50/1000;
-  const fMin=active.map(m=>{
-    const r=restrArr.find(r=>r.name===m.name)||{min:0,max:1000};
-    return r.min>0 ? r.min/1000 : MIN_KG;
-  });
-  const fMax=active.map(m=>{
-    const r=restrArr.find(r=>r.name===m.name)||{min:0,max:1000};
-    return Math.min(1,r.max/1000);
-  });
-  function calcN(fracs){
-    const res={cost:0}; NKEYS.forEach(k=>res[k]=0);
-    for(let i=0;i<n;i++){res.cost+=fracs[i]*cost(active[i]);NKEYS.forEach(k=>res[k]+=fracs[i]*(active[i][k]||0));}
-    return res;
-  }
-  function pen(nt,fracs){
-    let p=0;
-    reqs.forEach(r=>{if(!r.on)return;const v=nt[r.k]||0;p+=Math.max(0,r.min-v)+Math.max(0,v-r.max);});
-    for(let i=0;i<n;i++){p+=Math.max(0,fMin[i]-fracs[i])*500+Math.max(0,fracs[i]-fMax[i])*500;}
-    return p;
-  }
-  function norm(fracs){
-    const arr=fracs.map((f,i)=>Math.min(fMax[i],Math.max(fMin[i],f)));
-    const s=arr.reduce((a,b)=>a+b,0);
-    return s===0?arr.map((_,i)=>fMin[i]||1/n):arr.map(f=>f/s);
-  }
-  function obj(fracs){const nt=calcN(fracs);return nt.cost+pen(nt,fracs)*10000;}
-  let bF=null,bO=Infinity;
-  for(let s=0;s<60;s++){
-    let fracs=s===0?norm(new Array(n).fill(1)):norm(Array.from({length:n},()=>Math.random()));
-    let curO=obj(fracs),step=0.005;
-    for(let it=0;it<200;it++){
-      let imp=false;
-      for(let i=0;i<n;i++)for(let j=0;j<n;j++){
-        if(i===j||fracs[i]<step)continue;
-        const t=fracs.slice();t[i]-=step;t[j]+=step;
-        const tO=obj(t);if(tO<curO-1e-9){fracs=t;curO=tO;imp=true;}
-      }
-      if(!imp)step*=0.5;if(step<0.0001)break;
-    }
-    if(curO<bO){bO=curO;bF=fracs.slice();}
-  }
-  const nt=calcN(bF);
-  const fp=reqs.filter(r=>r.on).reduce((acc,r)=>{const v=nt[r.k]||0;return acc+Math.max(0,r.min-v)+Math.max(0,v-r.max);},0);
-  if(fp>0.001) return null;
-  const MIN_F=0.001;
-  let fM=[],fF=[];
-  for(let i=0;i<n;i++){if(bF[i]>=MIN_F){fM.push(active[i]);fF.push(bF[i]);}}
-  const s2=fF.reduce((a,b)=>a+b,0); fF=fF.map(f=>f/s2);
-  const fNt={cost:0}; NKEYS.forEach(k=>fNt[k]=0);
-  for(let i=0;i<fM.length;i++){fNt.cost+=fF[i]*cost(fM[i]);NKEYS.forEach(k=>fNt[k]+=fF[i]*(fM[i][k]||0));}
-  return {fracs:fF,mats:fM,nt:fNt,cpt:fNt.cost};
-}
-
 function runComp(){
   const el=document.getElementById('compResult');
   el.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text2)">Calculando…</div>';
 
   setTimeout(()=>{
     const fx=fxVal();
-    // Usa o mesmo solver principal para consistência com a aba Formulação
-    const results=S.fabs.map(f=>({name:f.name,res:solve(f.mats,S.reqs,f.restr||[])}))
+    // Solver exato (com fallback heurístico) — o mesmo da aba Formulação
+    const results=S.fabs.map(f=>({name:f.name,res:solveWithMicros(f.mats,S.reqs,f.restr||[],S.qty||1000)}))
       .sort((a,b)=>{if(!a.res)return 1;if(!b.res)return -1;return a.res.cpt-b.res.cpt;});
 
     el.innerHTML='<div class="fcgrid">'+results.map((r,idx)=>{
@@ -7867,23 +7683,6 @@ var NUT_COLORS={N:'#22c98a',P:'#4d8ef0',K:'#f0a500',S:'#a78bfa',Ca:'#2dd4bf',Mg:
 
 // ═══════════════════════════════════════════════════════════════
 // FÓRMULA COLORIDA — ex: 04.00-30.00-10.00 + 5.00%S + 0.60%B
-// ═══════════════════════════════════════════════════════════════
-function buildFormulaHTML(N){
-  var macros=['N','P','K'];
-  var micros=['S','Ca','Mg','Cl','B','Cu','Zn','Mn','Fe','Mo'];
-  var html='';
-  var mv=macros.filter(function(k){return (N[k]||0)>0.005;});
-  mv.forEach(function(k,i){
-    if(i>0) html+='<span style="color:var(--text3)">-</span>';
-    html+='<span style="color:'+NUT_COLORS[k]+';font-weight:700">'+fl2(N[k])+'</span>';
-  });
-  micros.filter(function(k){return (N[k]||0)>0.005;}).forEach(function(k){
-    html+='<span style="color:var(--text3)"> + </span>';
-    html+='<span style="color:'+NUT_COLORS[k]+';font-weight:700">'+fl2(N[k])+'%'+k+'</span>';
-  });
-  return html||'<span style="color:var(--text3)">—</span>';
-}
-
 function buildFormulaText(N){
   var macros=['N','P','K'];
   var micros=['S','Ca','Mg','Cl','B','Cu','Zn','Mn','Fe','Mo'];
@@ -7979,172 +7778,6 @@ function propFxResync(){
 // ═══════════════════════════════════════════════════════════════
 // EXPORT JPEG DO RESULTADO (canvas) — DEPRECATED em V11
 // A nova Proposta é multi-item; export usará rota diferente
-// ═══════════════════════════════════════════════════════════════
-function exportResultJPEG(){
-  alert('Exportação será disponibilizada em breve para a nova Proposta multi-item.');
-  return;
-  // Código abaixo mantido para referência (não roda)
-  /* eslint-disable */
-  if(false){
-  var fx=parseFloat(document.getElementById('prop-fx')?.value)||S.fx||5.20;
-  var valorIn=parseFloat(document.getElementById('prop-valor')?.value)||0;
-  var valorCur=document.getElementById('prop-valor-cur')?.value||'BRL';
-  var freteIn=parseFloat(document.getElementById('prop-frete')?.value)||0;
-  var freteCur=document.getElementById('prop-frete-cur')?.value||'BRL';
-  var taxa=parseFloat(document.getElementById('prop-taxa')?.value)||0;
-  var comissao=parseFloat(document.getElementById('prop-comissao')?.value)||0;
-  var emb=document.getElementById('prop-emb')?.value||'bag';
-  var vctoStr=document.getElementById('prop-vcto')?.value||'';
-  var qty=parseFloat(document.getElementById('prop-qty')?.value)||1;
-
-  // Normaliza para BRL
-  var valor=valorCur==='USD' ? valorIn*fx : valorIn;
-  var frete=freteCur==='USD' ? freteIn*fx : freteIn;
-
-  var meses=0;
-  if(vctoStr){
-    var vcto=new Date(vctoStr+'T12:00:00');
-    var hoje=new Date();
-    meses=Math.max(0,(vcto.getFullYear()-hoje.getFullYear())*12+(vcto.getMonth()-hoje.getMonth()));
-  }
-
-  var fabIdx=parseInt(document.getElementById('prop-fab').value||0);
-  var fabNome=S.fabs[fabIdx]&&S.fabs[fabIdx].name||'—';
-  var res=S.lastRes;
-  var hasMPs=res&&res.res&&res.fac===fabNome;
-
-  var valorLiqR=valor-frete;
-  var valorUSD0=valorLiqR/fx;
-  var fatorJuros=meses>0?Math.pow(1+taxa/100,meses):1;
-  var valorUSD1=valorUSD0/fatorJuros;
-  var comissaoUSD=valorUSD1*(comissao/100);
-  var precoFOBliq=valorUSD1-comissaoUSD;
-  var jurosUSD=valorUSD0-valorUSD1;
-  var custoBase=hasMPs?res.res.cpt:null;
-  var custoAdj=custoBase!=null?custoBase-(emb==='granel'?8:0):null;
-  var deficit=custoAdj!=null?precoFOBliq-custoAdj:null;
-
-  var mpRows=hasMPs?res.res.mats.length:0;
-  var W=820;
-  var lineH=26;
-  var resultLines=custoAdj!=null?8:7;
-  var headerH=110;
-  var resultH=40+resultLines*lineH+20;
-  var mpH=hasMPs?(60+mpRows*28+20):0;
-  var footerH=30;
-  var totalH=headerH+resultH+mpH+footerH;
-
-  var canvas=document.createElement('canvas');
-  canvas.width=W; canvas.height=totalH;
-  var ctx=canvas.getContext('2d');
-
-  // Background
-  ctx.fillStyle='#0f1117'; ctx.fillRect(0,0,W,totalH);
-
-  // Header bar
-  var g=ctx.createLinearGradient(0,0,W,0);
-  g.addColorStop(0,'#1a2744'); g.addColorStop(1,'#0f1117');
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,headerH-8);
-
-  ctx.fillStyle='#22c98a'; ctx.font='bold 22px Arial';
-  ctx.fillText('Fertilizer Sphere Intelli — Proposta Comercial',20,36);
-  ctx.fillStyle='#8b90a8'; ctx.font='13px Arial';
-  ctx.fillText(fabNome+' · '+new Date().toLocaleDateString('pt-BR'),20,56);
-
-  // Formula + custo if available
-  if(hasMPs){
-    ctx.fillStyle='#ffffff'; ctx.font='bold 20px monospace';
-    ctx.fillText(buildFormulaText(res.res.nt),20,82);
-    ctx.fillStyle='#4d8ef0'; ctx.font='12px Arial';
-    ctx.fillText('Custo IMC: U$ '+res.res.cpt.toFixed(2)+'/t  |  Câmbio: '+fx.toFixed(4)+'  |  '+qty.toFixed(1)+' ton',20,100);
-  } else {
-    ctx.fillStyle='#8b90a8'; ctx.font='13px Arial';
-    ctx.fillText('Câmbio: '+fx.toFixed(4)+'  |  '+qty.toFixed(1)+' ton',20,82);
-  }
-
-  // Separator
-  ctx.strokeStyle='#2a2d3a'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(20,headerH); ctx.lineTo(W-20,headerH); ctx.stroke();
-
-  // === RESULTADO CARD ===
-  var ry=headerH+10;
-  ctx.fillStyle='#4d8ef0'; ctx.font='bold 13px Arial';
-  ctx.fillText('Resultado',20,ry+16);
-  ctx.fillStyle='#8b90a8'; ctx.font='11px Arial';
-  ctx.fillText('Vencimento: '+(vctoStr||'—')+' ('+meses+' meses)',200,ry+16);
-  ry+=28;
-
-  var linhas=[
-    {lbl:'Valor proposta CIF',           val:'R$ '+valor.toFixed(2)+'/t', big:false, col:'#e2e4ef'},
-    {lbl:'(-) Frete',                    val:'R$ '+frete.toFixed(2)+'/t  →  R$ '+valorLiqR.toFixed(2)+'/t líquido', big:false, col:'#8b90a8'},
-    {lbl:'(÷) Câmbio R$ '+fx.toFixed(4),val:'U$ '+valorUSD0.toFixed(2)+'/t', big:false, col:'#8b90a8'},
-    {lbl:'(-) Juros '+taxa+'% × '+meses+' meses',val:'-U$ '+jurosUSD.toFixed(2)+'/t', big:false, col:'#8b90a8'},
-    {lbl:'(-) Comissão '+comissao+'%',   val:'-U$ '+comissaoUSD.toFixed(2)+'/t', big:false, col:'#8b90a8'},
-    {lbl:'= Preço FOB líquido cliente',  val:'U$ '+precoFOBliq.toFixed(2)+'/t', big:true,  col:'#4d8ef0'},
-  ];
-  if(custoAdj!=null){
-    linhas.push({lbl:'Custo IMC'+(emb==='granel'?' (- U$8 granel)':''), val:'U$ '+custoAdj.toFixed(2)+'/t', big:false, col:'#8b90a8'});
-    linhas.push({
-      lbl:deficit>=0?'✅ Margem disponível':'⚠️ Déficit',
-      val:(deficit>=0?'+ ':'- ')+'U$ '+Math.abs(deficit).toFixed(2)+'/t',
-      big:true, col:deficit>=0?'#22c98a':'#f05252'
-    });
-  }
-
-  linhas.forEach(function(l){
-    if(l.big){
-      ctx.fillStyle='rgba(255,255,255,0.04)'; ctx.fillRect(20,ry-2,W-40,lineH+2);
-    }
-    ctx.fillStyle='#8b90a8'; ctx.font='12px Arial'; ctx.fillText(l.lbl,28,ry+14);
-    ctx.fillStyle=l.col; ctx.font=(l.big?'bold ':'')+' 13px Arial';
-    var vw=ctx.measureText(l.val).width;
-    ctx.fillText(l.val,W-28-vw,ry+14);
-    // bottom border
-    ctx.strokeStyle='#1e2030'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(20,ry+lineH); ctx.lineTo(W-20,ry+lineH); ctx.stroke();
-    ry+=lineH;
-  });
-
-  // === CONSUMO DE MPs CARD ===
-  if(hasMPs){
-    ry+=16;
-    ctx.fillStyle='#2a2d3a'; ctx.fillRect(20,ry,W-40,1);
-    ry+=12;
-    ctx.fillStyle='#22c98a'; ctx.font='bold 13px Arial';
-    ctx.fillText('Consumo de MPs — '+fabNome,20,ry+14);
-    ctx.fillStyle='#8b90a8'; ctx.font='11px Arial';
-    ctx.fillText('Por tonelada e total ('+qty.toFixed(1)+' t)',350,ry+14);
-    ry+=30;
-
-    var kgsMPs=fracsToKg(res.res.fracs,Math.round(qty*1000));
-    res.res.mats.forEach(function(m,i){
-      if(i%2===0){ctx.fillStyle='rgba(255,255,255,0.025)';ctx.fillRect(20,ry-2,W-40,26);}
-      var col=PCOLS[i%PCOLS.length];
-      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(32,ry+10,4,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle='#e2e4ef'; ctx.font='12px Arial'; ctx.fillText(m.name,44,ry+14);
-      var kgT=Math.round(res.res.fracs[i]*1000);
-      var kgTot=kgsMPs[i];
-      ctx.fillStyle='#ffffff'; ctx.font='bold 12px Arial';
-      var rTxt=kgT+' kg/t  |  '+kgTot+' kg total';
-      var rtw=ctx.measureText(rTxt).width;
-      ctx.fillText(rTxt,W-28-rtw,ry+14);
-      ctx.strokeStyle='#1e2030'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(20,ry+24); ctx.lineTo(W-20,ry+24); ctx.stroke();
-      ry+=26;
-    });
-  }
-
-  // Footer
-  ctx.fillStyle='rgba(139,144,168,0.25)'; ctx.font='10px Arial';
-  ctx.textAlign='right';
-  ctx.fillText('Fertilizer Sphere Intelli · '+new Date().toLocaleDateString('pt-BR'),W-16,totalH-10);
-
-  var link=document.createElement('a');
-  link.download='proposta_'+fabNome.replace(/\s+/g,'_')+'_'+new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')+'.jpg';
-  link.href=canvas.toDataURL('image/jpeg',0.95);
-  link.click();
-  } // end if(false)
-}
 // Busca câmbio via script tag (JSONP) — funciona com file://
 function fetchRateJsonp(){
   return new Promise(function(resolve){
@@ -8273,21 +7906,24 @@ async function fetchRate(){
   // Sincroniza prop-fx badge SEMPRE (independente de mudança)
   propFxSetSynced(newRate);
 
-  // Recalcula MPs só se taxa mudou
-  if(newRate!==_fxLastRate){
+  // Recalcula MPs só se a taxa mudou de forma relevante (>0.5 centavo)
+  // e sem destruir grades com input em foco; ticks automáticos não salvam estado
+  if(_fxLastRate==null||Math.abs(newRate-_fxLastRate)>0.005){
     S.fx=newRate;
     S.fabs.forEach(function(f){f.mats.forEach(function(m){m.costBRL=parseFloat((m.costUSD*newRate).toFixed(2));});});
-    renderMatSelGrid();
-    if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none') renderMatCards();
-    sched();
+    const focused=document.activeElement&&document.activeElement.tagName==='INPUT';
+    if(!focused){
+      renderMatSelGrid();
+      if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none') renderMatCards();
+    }
+    _fxLastRate=newRate;
   }
-  _fxLastRate=newRate;
 }
 
 function startFxLive(){
   fetchRate(); // imediato
   if(_fxInterval) clearInterval(_fxInterval);
-  _fxInterval=setInterval(fetchRate, 10000); // a cada 10 segundos
+  _fxInterval=setInterval(fetchRate, 60000); // a cada 60 segundos
 }
 
 function applyFxToAll(){
@@ -8409,7 +8045,7 @@ function confirmarAddMP(){
 
 // ── EXPORTAR COTAÇÃO ─────────────────────────────────────────────────────────
 // Sem dependências externas — usa canvas nativo + geração de PDF pura
-async function loadLib(url, globalCheck){ return; } // não usa mais CDN
+ // não usa mais CDN
 
 function buildCotHTML(){
   const itens = S.cotacao||[];
@@ -8585,13 +8221,6 @@ function buildCotHTML(){
 }
 
 
-async function getCotCanvas(){
-  // Reutiliza buildCotHTML — mesma fonte do PDF, sem dados financeiros
-  if(!(S.cotacao||[]).length){ alert('Nenhuma cotação para exportar.'); return null; }
-  return {_useHTML:true};
-}
-
-
 async function exportCotPDF(){
   const btn=event.target; btn.textContent='Gerando…'; btn.disabled=true;
   try{
@@ -8680,7 +8309,7 @@ function arqTab(tab){
     btn.style.color=active?'#fff':'var(--text2)';
     btn.style.boxShadow=active?'0 2px 8px rgba(91,140,255,0.25)':'none';
   });
-  renderArquivo();
+  renderArquivo(true);
 }
 
 async function salvarCotacaoDB(silencioso){
@@ -8695,7 +8324,7 @@ async function salvarCotacaoDB(silencioso){
   },0);
   try{
     await dbAdd('cotacoes',{cliente,fx,itens:JSON.parse(JSON.stringify(itens)),totalUSD,totalBRL:totalUSD*fx});
-    if(!silencioso){ renderArquivo(); alert('Cotação salva no Arquivo.'); }
+    if(!silencioso){ renderArquivo(true); alert('Cotação salva no Arquivo.'); }
   }catch(e){
     if(!silencioso) alert('Falha ao salvar no Arquivo: '+(e.message||'erro de rede'));
   }
@@ -8707,7 +8336,7 @@ async function salvarPropostaDB(silencioso){
   const cliente=itens.map(it=>(it.params||{}).cliente).filter(Boolean)[0]||'';
   try{
     await dbAdd('propostas',{cliente,fx:S.fx,itens:JSON.parse(JSON.stringify(itens))});
-    if(!silencioso){ renderArquivo(); alert('Proposta salva no Arquivo.'); }
+    if(!silencioso){ renderArquivo(true); alert('Proposta salva no Arquivo.'); }
   }catch(e){
     if(!silencioso) alert('Falha ao salvar no Arquivo: '+(e.message||'erro de rede'));
   }
@@ -8961,17 +8590,25 @@ function arqToggle(id){
   if(arrow) arrow.style.transform=open?'rotate(180deg)':'';
 }
 
-async function renderArquivo(){
+let _arqCache={}, _arqSearchT=null;
+async function renderArquivo(force){
   const lista=document.getElementById('arq-lista');
   const empty=document.getElementById('arq-empty');
   if(!lista) return;
   const busca=((document.getElementById('arq-search')||{}).value||'').toLowerCase();
   const store=_arqTab||'cotacoes';
-  const recs=await dbGetAll(store);
-  recs.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
-  const cards=recs.map(r=>_arqCard(r,store,busca)).filter(Boolean);
+  // Cache por store: a busca filtra localmente, sem query no Supabase por tecla
+  if(force||!_arqCache[store]){
+    _arqCache[store]=await dbGetAll(store);
+    _arqCache[store].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  }
+  const cards=_arqCache[store].map(r=>_arqCard(r,store,busca)).filter(Boolean);
   lista.innerHTML=cards.join('');
   empty.style.display=cards.length?'none':'';
+}
+function arqBuscar(){
+  clearTimeout(_arqSearchT);
+  _arqSearchT=setTimeout(()=>renderArquivo(),200);
 }
 
 async function arqRestaurar(id,store){
@@ -9005,7 +8642,7 @@ async function arqAbrirRelatorio(id){
 async function arqExcluir(id,store){
   if(!confirm('Excluir este registro permanentemente?')) return;
   await dbDelete(store,id);
-  renderArquivo();
+  renderArquivo(true);
 }
 
 async function arqExportarJSON(){
@@ -9060,7 +8697,7 @@ async function arqImportarJSON(input){
     sched();
     lsSet('imc_last_backup',new Date().toISOString());
     populateFacSels(); renderAll();
-    renderArquivo();
+    renderArquivo(true);
     alert('Backup importado com sucesso!'+(temFabs?'\nFábricas e MPs restauradas.':''));
   }catch(e){ alert('Erro ao importar: '+e.message); }
   input.value='';
@@ -9402,13 +9039,6 @@ function setItemParamLive(idx, key, value){
   r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral (USD)</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totU,'USD')+'</div><div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:4px">'+fmtMoney(totU*S.fx,'BRL')+'</div></div></div>';
   tc.innerHTML=r;
 }
-function resetItemParam(idx, key){
-  if(!S.cotacao[idx] || !S.cotacao[idx].params) return;
-  S.cotacao[idx].params[key] = null;
-  sched();
-  recalcCotacao();
-}
-
 // ── COPIAR PARÂMETROS ENTRE LINHAS ───────────────────────────────────────────
 let _copiarFromIdx = null;
 const PARAMS_COPIADOS = ['taxa','prazo','com','frete','embalagem','cur','cliente','desc'];
@@ -9477,12 +9107,6 @@ function confirmarCopiarParams(){
   recalcCotacao();
 }
 
-function _cotChip(lbl,val,col,big){
-  return '<div style="background:var(--surface2);border:1px solid '+(big?col:'var(--border)')+';border-radius:var(--radius-sm);padding:8px 10px">'
-    +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+lbl+'</div>'
-    +'<div style="font-size:'+(big?'16px':'13px')+';font-weight:700;color:'+col+'">'+val+'</div>'
-    +'</div>';
-}
 function _cotLinha(lbl,val,destaque){
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px dashed var(--border)">'
     +'<span style="font-size:12px;color:var(--text2)">'+lbl+'</span>'
@@ -10480,14 +10104,6 @@ function relUpdateConc(id, campo, valor){
   // Não rerenderiza — mantém foco no campo
 }
 
-function relImportarFormula(id){
-  if(!S.lastRes||!S.lastRes.res){alert('Calcule uma formulação primeiro.');return;}
-  const N = S.lastRes.res.nt;
-  const formula = fl2(N.N)+'-'+fl2(N.P)+'-'+fl2(N.K);
-  const c = relConcorrentes.find(c=>c.id===id);
-  if(c){ c.produto=formula; relRenderConcorrentes(); }
-}
-
 function relUpdateConcComparativo(id){
   const c=relConcorrentes.find(c=>c.id===id);
   const el=document.getElementById('conc-comp-'+id);
@@ -10686,11 +10302,6 @@ function relRemoveAndamento(id){
 function _relAndVal(id,campo,valor){
   const r=relAndamento.find(r=>r.id===id);
   if(r) r[campo]=valor;
-}
-
-function relUpdateAndamento(id,campo,valor){
-  const r=relAndamento.find(r=>r.id===id);
-  if(r){r[campo]=valor;relRenderAndamento();}
 }
 
 // ── Fix 6: Minimizar seções ───────────────────────────────────────────────────
@@ -12018,7 +11629,6 @@ function crmNow(){return new Date().toISOString();}
 function crmFmtDate(iso){if(!iso)return'';try{const d=new Date(iso);return d.toLocaleDateString('pt-BR');}catch(e){return iso;}}
 function crmFmtMoney(v){return'$'+(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0});}
 function crmCliente(id){return(S.crm&&S.crm.clientes||[]).find(c=>c.id===id)||null;}
-function crmCliNome(id){const c=crmCliente(id);return c?(c.nome+(c.municipio?' · '+c.municipio:'')):'—';}
 function crmIsOverdue(lead){
   if(!lead.proximaAcao||!lead.proximaAcao.data) return false;
   return new Date(lead.proximaAcao.data+'T23:59:59')<new Date(); // só vence no fim do dia (fuso local)
@@ -13007,13 +12617,6 @@ function crmDeleteCliente(id){
   fecharCrmModal();
 }
 
-function crmEditClienteField(id,key,value){
-  const cli=(S.crm&&S.crm.clientes||[]).find(c=>c.id===id);
-  if(!cli) return;
-  cli[key]=value;
-  sched();
-}
-
 window._crmDashCats=new Set();
 window._crmDashSubs=new Set();
 
@@ -13351,7 +12954,7 @@ function _cmpItemsHTML(calcs,best){
           <input type="number" value="${it.doseKgHa||''}" min="0" step="10" placeholder="0"
             style="width:80px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-size:12px;outline:none;font-family:var(--mono);text-align:right;transition:border-color .15s;box-sizing:border-box"
             onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'"
-            oninput="cmpDose('${it.id}',+this.value)">
+            onchange="cmpDose('${it.id}',+this.value)">
           <span style="font-size:10px;color:var(--text3)">kg/ha</span>
         </div>
       </td>
