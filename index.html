@@ -3590,7 +3590,14 @@ async function dbClear(store){
 async function loadS(){
   try{
     const { data, error } = await _sb().from('user_state').select('state').maybeSingle();
-    if(error){ console.warn('loadS state', error); initFabs(); window._stateLoaded=true; return; }
+    if(error){
+      // Falha ao carregar: NÃO liberar saves — senão o estado default sobrescreve os dados na nuvem
+      console.warn('loadS state', error);
+      initFabs();
+      window._loadFailed=true;
+      document.getElementById('offlineBanner')?.classList.add('show');
+      return;
+    }
     if(data?.state && Object.keys(data.state).length){
       Object.assign(S, data.state);
       if(!S.fabs?.length) initFabs();
@@ -3605,15 +3612,17 @@ async function loadS(){
     window._stateLoaded=true;
     _sbOk();
   }catch(e){
+    // Falha ao carregar: NÃO liberar saves — senão o estado default sobrescreve os dados na nuvem
     console.error('loadS', e);
     document.getElementById('offlineBanner')?.classList.add('show');
     initFabs();
-    window._stateLoaded=true;
+    window._loadFailed=true;
   }
 }
 async function saveS(){
   if(!S.fabs?.length) return;
   if(!window._stateLoaded) return; // não sobrescrever antes do load inicial concluir
+  if(window._loadFailed) return;   // load falhou — salvar destruiria os dados da nuvem
   const d=document.getElementById('saveDot'), l=document.getElementById('saveLbl');
   try{
     const u = (await _sb().auth.getUser()).data.user;
@@ -3672,6 +3681,12 @@ function restr(){ return fab().restr||[]; }
 function getRestr(name){ return restr().find(r=>r.name===name)||{min:0,max:1000}; }
 function setRestr(name,f,v){ let r=restr().find(r=>r.name===name); if(!r){r={name,min:0,max:1000};fab().restr.push(r);} r[f]=v; sched(); }
 function cost(m){ return S.cur==='USD'?m.costUSD:m.costBRL; }
+// Lê o campo de câmbio aceitando vírgula decimal (pt-BR) — usar SEMPRE este helper
+function fxVal(){
+  const el=document.getElementById('fxRate');
+  if(!el) return S.fx||5.20;
+  return parseFloat(String(el.value).replace(',','.'))||S.fx||5.20;
+}
 
 // ── TRATAMENTOS
 function setTratamento(key, val){
@@ -4296,6 +4311,8 @@ function delFab(i){
   if(S.fabs.length<=1){alert('Deve haver ao menos uma fábrica.');return;}
   if(!confirm('Excluir "'+S.fabs[i].name+'"?')) return;
   S.fabs.splice(i,1);
+  if(i<S.fac) S.fac--;             // fábrica removida antes da ativa: índice desloca
+  else if(i===S.fac) S.fac=0;      // a própria ativa foi removida
   if(S.fac>=S.fabs.length) S.fac=0;
   populateFacSels(); renderAll(); sched();
 }
@@ -6452,7 +6469,7 @@ S.propostas = S.propostas || [];
 function initPropPage(){
   // Sincronizar câmbio
   const fxEl=document.getElementById('prop-fx');
-  const liveFx=parseFloat(document.getElementById('fxRate')?.value)||S.fx||5.20;
+  const liveFx=fxVal();
   if(fxEl&&fxEl.dataset.manual!=='1') propFxSetSynced(liveFx);
   else if(fxEl) propFxSetManual();
   recalcProposta();
@@ -7790,7 +7807,7 @@ function runComp(){
   el.innerHTML='<div style="text-align:center;padding:2rem;color:var(--text2)">Calculando…</div>';
 
   setTimeout(()=>{
-    const fx=parseFloat(document.getElementById('fxRate').value)||S.fx;
+    const fx=fxVal();
     // Usa o mesmo solver principal para consistência com a aba Formulação
     const results=S.fabs.map(f=>({name:f.name,res:solve(f.mats,S.reqs,f.restr||[])}))
       .sort((a,b)=>{if(!a.res)return 1;if(!b.res)return -1;return a.res.cpt-b.res.cpt;});
@@ -7896,7 +7913,7 @@ function onFxRateManualEdit(){
   // Chamado quando usuário edita o campo fxRate nas configurações
   document.getElementById('fxRate').dataset.manual='1';
   if(_fxLiveRate){
-    const cur=parseFloat(document.getElementById('fxRate').value)||0;
+    const cur=fxVal();
     const desync=Math.abs(cur-_fxLiveRate)>0.001;
     setFxHeaderColor(desync?'red':'green');
   }
@@ -7952,7 +7969,7 @@ function propFxSetError(){
 function propFxResync(){
   var fxEl=document.getElementById('prop-fx');
   if(fxEl) fxEl.dataset.manual='';
-  var rate=parseFloat(document.getElementById('fxRate').value)||S.fx||5.20;
+  var rate=fxVal();
   propFxSetSynced(rate);
   calcProp();
 }
@@ -8238,7 +8255,7 @@ async function fetchRate(){
 
   // Checar se o campo de CFG foi editado manualmente
   const fxRateEl=document.getElementById('fxRate');
-  const currentManual=parseFloat(fxRateEl.value)||0;
+  const currentManual=parseFloat(String(fxRateEl.value).replace(',','.'))||0;
   const isDesync=fxRateEl.dataset.manual==='1'&&Math.abs(currentManual-newRate)>0.001;
 
   if(!isDesync){
@@ -8272,7 +8289,7 @@ function startFxLive(){
 }
 
 function applyFxToAll(){
-  const rate=parseFloat(document.getElementById('fxRate').value.replace(',','.'));
+  const rate=fxVal();
   if(!rate||rate<1) return;
   S.fx=rate;
   // Always recalc BRL for all factories: BRL = USD × rate
@@ -8664,28 +8681,34 @@ function arqTab(tab){
   renderArquivo();
 }
 
-function salvarCotacaoDB(silencioso){
+async function salvarCotacaoDB(silencioso){
   const itens=S.cotacao||[];
   if(!itens.length){ if(!silencioso) alert('Cotação vazia.'); return; }
   const fx=S.fx||5.20;
   const cliente=itens.map(it=>(it.params||{}).cliente).filter(Boolean)[0]||'';
+  // Mesma fórmula da tela (desconto, frete, granel) — antes divergia do total exibido
   const totalUSD=itens.reduce((sum,it)=>{
-    const P=it.params||{};
-    const custo=(it.custo||0)-(P.embalagem==='granel'?8:0);
-    const taxa=P.taxa||1.6, meses=P.prazo||0, com=P.com||0, qtd=P.qtd||1;
-    const vendaSemJuros=custo*Math.pow(1+taxa/100,meses)/(1-com/100);
-    return sum+vendaSemJuros*qtd;
+    const P=_cotP_of(it);
+    return sum+_cotCalcVenda(it.custo||0,P).venda*(P.qtd||1);
   },0);
-  dbAdd('cotacoes',{cliente,fx,itens:JSON.parse(JSON.stringify(itens)),totalUSD,totalBRL:totalUSD*fx});
-  if(!silencioso){ renderArquivo(); alert('Cotação salva no Arquivo.'); }
+  try{
+    await dbAdd('cotacoes',{cliente,fx,itens:JSON.parse(JSON.stringify(itens)),totalUSD,totalBRL:totalUSD*fx});
+    if(!silencioso){ renderArquivo(); alert('Cotação salva no Arquivo.'); }
+  }catch(e){
+    if(!silencioso) alert('Falha ao salvar no Arquivo: '+(e.message||'erro de rede'));
+  }
 }
 
-function salvarPropostaDB(silencioso){
+async function salvarPropostaDB(silencioso){
   const itens=S.propostas||[];
   if(!itens.length){ if(!silencioso) alert('Proposta vazia.'); return; }
   const cliente=itens.map(it=>(it.params||{}).cliente).filter(Boolean)[0]||'';
-  dbAdd('propostas',{cliente,fx:S.fx,itens:JSON.parse(JSON.stringify(itens))});
-  if(!silencioso){ renderArquivo(); alert('Proposta salva no Arquivo.'); }
+  try{
+    await dbAdd('propostas',{cliente,fx:S.fx,itens:JSON.parse(JSON.stringify(itens))});
+    if(!silencioso){ renderArquivo(); alert('Proposta salva no Arquivo.'); }
+  }catch(e){
+    if(!silencioso) alert('Falha ao salvar no Arquivo: '+(e.message||'erro de rede'));
+  }
 }
 
 function _fmtTs(ts){
@@ -8711,7 +8734,7 @@ function _arqRowCotItem(it, idx){
   let html='<div style="margin-top:8px;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px">';
   html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
     +'<span style="font-size:9px;font-weight:800;color:'+accentColor+';background:var(--surface);border:1px solid var(--border);padding:2px 6px;border-radius:4px;letter-spacing:.06em;text-transform:uppercase">ITEM '+(idx+1)+' · '+tipoLbl+'</span>'
-    +'<span style="font-size:11px;color:var(--text3);font-weight:600">'+P.fabs+' '+it.fabs+'</span>'
+    +'<span style="font-size:11px;color:var(--text3);font-weight:600">'+(it.fabs||'')+'</span>'
     +'</div>';
   html+='<div style="font-size:13px;font-weight:800;color:'+accentColor+';margin-bottom:6px;letter-spacing:-0.01em">'+nome+'</div>';
   html+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
@@ -9024,6 +9047,7 @@ async function arqImportarJSON(input){
     // Restaurar fábricas + MPs
     if(temFabs){
       S.fabs=JSON.parse(JSON.stringify(data._fabs));
+      if(S.fac>=S.fabs.length) S.fac=0; // backup pode ter menos fábricas que o índice ativo
     }
     // Restaurar config básica (câmbio, moeda)
     if(data._config){
@@ -9033,6 +9057,7 @@ async function arqImportarJSON(input){
     }
     sched();
     lsSet('imc_last_backup',new Date().toISOString());
+    populateFacSels(); renderAll();
     renderArquivo();
     alert('Backup importado com sucesso!'+(temFabs?'\nFábricas e MPs restauradas.':''));
   }catch(e){ alert('Erro ao importar: '+e.message); }
@@ -9466,7 +9491,7 @@ function _cotLinha(lbl,val,destaque){
 // ── CONFIG
 function saveCfg(){
   // Salvar API key Anthropic
-  S.fx=+document.getElementById('fxRate').value||5.20;
+  S.fx=fxVal();
   const key=document.getElementById('apiKey').value.trim();
   if(key){ S._apikey=key; saveSettings({apikey:key}); }
   const ok=document.getElementById('cfgOk');
@@ -11852,7 +11877,7 @@ function renderLineup(){
     return`<div class="vessel-row ${rcls}" title="${(v.origin||'')+' · '+(v.cargo||'')}">
       <span style="font-size:10px;line-height:1">${v.flag||'🚢'}</span>
       <span class="vessel-name">${v.name}</span>
-      <span class="vessel-meta">${(v.cargo||'').replace(/\\s+t$/,'t')||''}</span>
+      <span class="vessel-meta">${(v.cargo||'').replace(/\s+t$/,'t')||''}</span>
       <span class="vessel-eta">${v.eta}</span>
     </div>`;
   }
@@ -11994,7 +12019,7 @@ function crmCliente(id){return(S.crm&&S.crm.clientes||[]).find(c=>c.id===id)||nu
 function crmCliNome(id){const c=crmCliente(id);return c?(c.nome+(c.municipio?' · '+c.municipio:'')):'—';}
 function crmIsOverdue(lead){
   if(!lead.proximaAcao||!lead.proximaAcao.data) return false;
-  return new Date(lead.proximaAcao.data)<new Date();
+  return new Date(lead.proximaAcao.data+'T23:59:59')<new Date(); // só vence no fim do dia (fuso local)
 }
 
 function renderCRM(){
@@ -12011,8 +12036,10 @@ function renderCRM(){
 }
 
 function _seedCrmClientes(){
-  if(S.crm.clientes.length) return;
+  if(S.crm._clientesSeedV1) return; // seed já rodou — não ressuscitar clientes apagados
+  if(S.crm.clientes.length){ S.crm._clientesSeedV1=true; return; }
   if(window._authEmail !== 'ideondw@gmail.com') return;
+  S.crm._clientesSeedV1=true;
   const now=crmNow();
   const D=[
     ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650],
@@ -13495,12 +13522,12 @@ function cmpAdd(){
   _cmpInit();
   const cot=S.cotacao||[];
   if(!cot.length){alert('Cotação vazia. Adicione itens na aba Cotação primeiro.');return;}
-  const existing=new Set((S.comparativo.itens||[]).map(x=>x._cotIdx));
+  const existing=new Set((S.comparativo.itens||[]).map(x=>x._cotKey).filter(Boolean));
   const rows=cot.map((item,i)=>{
     const p=_cotP_of(item), cv=_cotCalcVenda(item.custo,p);
     const label=item.grade||item.formula||'Item '+(i+1);
     const nt=(item.nt||[]).map(n=>n.lbl+' '+n.val+'%').join(' · ')||'sem teores';
-    const already=existing.has(i);
+    const already=existing.has((item.grade||'')+'|'+item.custo);
     return `<label style="display:flex;gap:12px;padding:12px;border-radius:8px;cursor:${already?'default':'pointer'};border:1px solid var(--border);margin-bottom:8px;background:var(--surface3);opacity:${already?.55:1};transition:.15s" ${!already?'onmouseover="this.style.borderColor=\'var(--green)\'" onmouseout="this.style.borderColor=\'var(--border)\'"':''}>
       <input type="checkbox" data-idx="${i}" ${already?'disabled':''}  style="margin-top:2px;flex-shrink:0;accent-color:var(--green);width:16px;height:16px;cursor:pointer">
       <div style="flex:1;min-width:0">
@@ -13532,8 +13559,11 @@ function cmpConfirm(){
   document.querySelectorAll('#cmpModal input[type=checkbox]:checked:not([disabled])').forEach(chk=>{
     const i=+chk.dataset.idx, item=S.cotacao[i]; if(!item) return;
     const nutObj={}; _CMP_NUTS.forEach(k=>nutObj[k]=0);
-    (item.nt||[]).forEach(n=>{if(Object.prototype.hasOwnProperty.call(nutObj,n.lbl))nutObj[n.lbl]=+n.val||0;});
-    S.comparativo.itens.push({id:_cmpId(),label:item.grade||item.formula||'Item '+(i+1),custoUSD:item.custo,fab:item.fabs||'',doseKgHa:0,source:'cotacao',_cotIdx:i,...nutObj});
+    (item.nt||[]).forEach(n=>{
+      const key=n.lbl==='P₂O₅'?'P':n.lbl==='K₂O'?'K':n.lbl; // rótulos da cotação → chaves do comparativo
+      if(Object.prototype.hasOwnProperty.call(nutObj,key))nutObj[key]=+n.val||0;
+    });
+    S.comparativo.itens.push({id:_cmpId(),label:item.grade||item.formula||'Item '+(i+1),custoUSD:item.custo,fab:item.fabs||'',doseKgHa:0,source:'cotacao',_cotKey:(item.grade||'')+'|'+item.custo,...nutObj});
   });
   sched(); cmpCloseModal(); renderComp();
 }
