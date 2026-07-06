@@ -12241,35 +12241,91 @@ function _crmToast(msg){const n=document.createElement('div');n.style.cssText='p
 function _crmLeadSelectModal(title,subtitle,type){
   S.crm=S.crm||{clientes:[],leads:[]};
   const leads=S.crm.leads.filter(l=>l.etapa!=='perdido');
-  if(!leads.length){if(confirm('Nenhum lead ativo. Criar um novo lead?')){abrirNovoLead();}return;}
   _crmSalvType=type;
+  const temLeads=leads.length>0;
   const opts=leads.map(l=>{
     const cli=crmCliente(l.clienteId);
     const et=CRM_ETAPAS.find(e=>e.key===l.etapa);
-    return '<option value="'+l.id+'">'+l.titulo+(cli?' — '+cli.nome:'')+(et?' ['+et.lbl+']':'')+' </option>';
+    return '<option value="'+l.id+'">'+esc(l.titulo)+(cli?' — '+esc(cli.nome):'')+(et?' ['+et.lbl+']':'')+' </option>';
   }).join('');
+  const cliOpts=(S.crm.clientes||[]).map(c=>'<option value="'+c.id+'">'+esc(c.nome)+(c.municipio?' — '+esc(c.municipio):'')+'</option>').join('');
+  // Sugestão de título: cliente da cotação/proposta atual, se houver
+  const srcItens=type==='cotacao'?(S.cotacao||[]):type==='proposta'?(S.propostas||[]):[];
+  const cliSugestao=srcItens.map(it=>(it.params||{}).cliente).filter(Boolean)[0]||'';
+  const tituloSugestao=cliSugestao?('Cotação — '+cliSugestao):'';
+  const INP='width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px';
   const ov=document.createElement('div');
   ov.id='crmSalvModal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
-  ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:420px">'
+  ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:1.5rem;width:100%;max-width:440px">'
     +'<div style="font-size:15px;font-weight:800;margin-bottom:.5rem">'+title+'</div>'
     +'<div style="font-size:12px;color:var(--text2);margin-bottom:1rem">'+subtitle+'</div>'
+    // Alternador: existente | novo
+    +'<div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:1rem">'
+    +'<button class="crm-subtab-btn'+(temLeads?' active':'')+'" id="salmTabExist" onclick="crmSalvModo(\'exist\')" style="flex:1;font-size:12px"'+(temLeads?'':' disabled')+'>Lead existente</button>'
+    +'<button class="crm-subtab-btn'+(temLeads?'':' active')+'" id="salmTabNovo" onclick="crmSalvModo(\'novo\')" style="flex:1;font-size:12px">+ Novo lead</button>'
+    +'</div>'
+    // Painel: lead existente
+    +'<div id="salmPainelExist" style="display:'+(temLeads?'':'none')+'">'
     +'<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Lead</div>'
-    +'<select id="salmCrmLead" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;margin-bottom:1rem">'+opts+'</select>'
+    +'<select id="salmCrmLead" style="'+INP+';margin-bottom:1rem">'+opts+'</select>'
+    +'</div>'
+    // Painel: novo lead
+    +'<div id="salmPainelNovo" style="display:'+(temLeads?'none':'')+'">'
+    +'<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Título do lead *</div>'
+    +'<input id="salmNovoTitulo" type="text" value="'+esc(tituloSugestao)+'" placeholder="Ex: Soja safra 2026/27" style="'+INP+';margin-bottom:10px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem">'
+    +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Cliente (opcional)</div>'
+    +'<select id="salmNovoCliente" style="'+INP+'"><option value="">— sem cliente —</option>'+cliOpts+'</select></div>'
+    +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Etapa</div>'
+    +'<select id="salmNovoEtapa" style="'+INP+'">'
+    +CRM_ETAPAS.filter(e=>e.key!=='perdido').map(e=>'<option value="'+e.key+'"'+(e.key==='proposta'?' selected':'')+'>'+e.lbl+'</option>').join('')
+    +'</select></div>'
+    +'</div>'
+    +'</div>'
     +'<div style="display:flex;gap:8px">'
     +'<button class="btn btn-green" style="flex:1" onclick="crmExecutarSalvar()">Salvar</button>'
     +'<button class="btn" onclick="document.getElementById(\'crmSalvModal\').remove()">Cancelar</button>'
     +'</div></div>';
   document.body.appendChild(ov);
+  window._crmSalvModo=temLeads?'exist':'novo';
+}
+
+function crmSalvModo(modo){
+  window._crmSalvModo=modo;
+  document.getElementById('salmPainelExist').style.display=modo==='exist'?'':'none';
+  document.getElementById('salmPainelNovo').style.display=modo==='novo'?'':'none';
+  document.getElementById('salmTabExist').classList.toggle('active',modo==='exist');
+  document.getElementById('salmTabNovo').classList.toggle('active',modo==='novo');
 }
 
 function crmExecutarSalvar(){
-  const sel=document.getElementById('salmCrmLead');
-  if(!sel) return;
-  const leadId=sel.value;
+  let leadId;
+  if(window._crmSalvModo==='novo'){
+    const titulo=(document.getElementById('salmNovoTitulo').value||'').trim();
+    if(!titulo){alert('Informe o título do lead.');return;}
+    const lead={
+      id:crmId(),
+      clienteId:document.getElementById('salmNovoCliente').value||'',
+      titulo,
+      etapa:document.getElementById('salmNovoEtapa').value||'proposta',
+      valorUSD:0,qtdTons:0,probabilidade:50,
+      proximaAcao:{tipo:'',data:'',obs:''},
+      cotacao:'',empresa:'',safra:'',volumeFechado:0,produto:'',
+      historico:[{ts:crmNow(),obs:'Lead criado a partir da '+(_crmSalvType==='cotacao'?'cotação':_crmSalvType==='proposta'?'proposta':'formulação')+'.'}],
+      criadoEm:crmNow(),fechadoEm:null
+    };
+    S.crm.leads.push(lead);
+    leadId=lead.id;
+  } else {
+    const sel=document.getElementById('salmCrmLead');
+    if(!sel) return;
+    leadId=sel.value;
+  }
   if(_crmSalvType==='cotacao') _crmDoSalvCotacao(leadId);
   else if(_crmSalvType==='proposta') _crmDoSalvProposta(leadId);
   else if(_crmSalvType==='formulacao') _crmDoSalvFormulacao(leadId);
+  if(window._crmSalvModo==='novo') renderKanban(); // novo lead aparece no pipeline
 }
 
 function crmSalvarCotacaoModal(){
