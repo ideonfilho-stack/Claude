@@ -2029,20 +2029,26 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
 </div>
 
 <script>
-/* ── Login · partículas de fertilizante fluidas + interação do cursor ── */
+/* ── Login · partículas moleculares + feixe de fluxo no cursor ── */
 (function(){
+  // Logo da tela de login: injetar imediatamente, sem esperar o SDK do Supabase
+  try{
+    const _logo=document.querySelector('link[rel="apple-touch-icon"]')?.href||'';
+    const _img=document.getElementById('ag-logo');
+    if(_logo&&_img) _img.src=_logo;
+  }catch(_){ }
   const canvas=document.getElementById('ag-particles');
   const gate=document.getElementById('authGate');
   if(!canvas||!gate) return;
   const ctx=canvas.getContext('2d');
   let W=0,H=0,DPR=1,parts=[],raf=null;
-  const mouse={x:-9999,y:-9999,active:false};
+  const mouse={x:-9999,y:-9999,px:-9999,py:-9999,dx:0,dy:0,speed:0,active:false};
   const PAL=[
-    {r:16,g:213,b:156},   // verde
+    {r:168,g:255,b:83},   // lima
     {r:248,g:181,b:62},   // âmbar
     {r:91,g:140,b:255},   // azul
     {r:62,g:221,b:199},   // teal
-    {r:241,g:243,b:249},  // branco
+    {r:242,g:244,b:243},  // branco
   ];
   function resize(){
     DPR=Math.min(window.devicePixelRatio||1,2);
@@ -2053,24 +2059,26 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     spawn();
   }
   function spawn(){
-    const n=Math.round(Math.min(120,Math.max(36,(W*H)/14000)));
+    const n=Math.round(Math.min(240,Math.max(80,(W*H)/6500)));
     parts=[];
     for(let i=0;i<n;i++){
       const depth=Math.random();
       parts.push({
         x:Math.random()*W, y:Math.random()*H,
         vx:(Math.random()-0.5)*0.25, vy:(Math.random()-0.5)*0.25,
-        r:0.6+depth*2.6, depth,
+        r:0.6+depth*2.4, depth,
         col:PAL[(Math.random()*PAL.length)|0],
-        a:0.16+depth*0.5,
+        a:0.14+depth*0.48,
       });
     }
   }
-  const R=155, R2=R*R, LINK=120, LINK2=LINK*LINK;
+  const R=190, R2=R*R, LINK=105, LINK2=LINK*LINK;
   function step(){
     if(gate.classList.contains('hidden')){ raf=null; return; }
     ctx.clearRect(0,0,W,H);
-    // física
+    // física — feixe molecular: partículas são arrastadas no fluxo do cursor
+    const beam=mouse.speed>0.35;              // cursor em movimento = feixe ativo
+    const bx=mouse.dx, by=mouse.dy;           // direção do feixe (unitária, suavizada)
     for(const p of parts){
       p.x+=p.vx*(0.4+p.depth); p.y+=p.vy*(0.4+p.depth);
       if(p.x<-12)p.x=W+12; else if(p.x>W+12)p.x=-12;
@@ -2078,23 +2086,36 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       if(mouse.active){
         const dx=p.x-mouse.x, dy=p.y-mouse.y, d2=dx*dx+dy*dy;
         if(d2<R2 && d2>0.5){
-          const d=Math.sqrt(d2), f=(1-d/R), nx=dx/d, ny=dy/d;
-          p.vx+=nx*f*0.9*(0.5+p.depth);  p.vy+=ny*f*0.9*(0.5+p.depth);   // repulsão
-          p.vx+=-ny*f*0.32;               p.vy+= nx*f*0.32;               // redemoinho
+          const d=Math.sqrt(d2), f=(1-d/R);
+          if(beam){
+            // 1) arrasto ao longo do feixe (entranhamento, como moléculas num jato)
+            const drag=f*Math.min(mouse.speed*0.16,1.4)*(0.45+p.depth*0.55);
+            p.vx+=bx*drag; p.vy+=by*drag;
+            // 2) focalização: puxa para o eixo do feixe (componente perpendicular)
+            const perp=dx*(-by)+dy*bx;        // distância assinada ao eixo
+            p.vx+=(-by)*(-perp)*f*0.012;
+            p.vy+=( bx)*(-perp)*f*0.012;
+          } else {
+            // cursor parado: leve convergência orbital — nuvem molecular
+            const nx=dx/d, ny=dy/d;
+            p.vx+=-nx*f*0.10*(0.5+p.depth); p.vy+=-ny*f*0.10*(0.5+p.depth);
+            p.vx+=-ny*f*0.16;               p.vy+= nx*f*0.16;
+          }
         }
       }
       p.vx*=0.94; p.vy*=0.94;
       const sp=Math.hypot(p.vx,p.vy);
       if(sp<0.05){ p.vx+=(Math.random()-0.5)*0.05; p.vy+=(Math.random()-0.5)*0.05; }
-      else if(sp>2.2){ p.vx=p.vx/sp*2.2; p.vy=p.vy/sp*2.2; }
+      else if(sp>3.4){ p.vx=p.vx/sp*3.4; p.vy=p.vy/sp*3.4; }
     }
+    mouse.speed*=0.92; // decaimento do feixe quando o mouse para
     // linhas (constelação + cursor)
     for(let i=0;i<parts.length;i++){
       const a=parts[i];
       for(let j=i+1;j<parts.length;j++){
         const b=parts[j], dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy;
         if(d2<LINK2){
-          const al=(1-Math.sqrt(d2)/LINK)*0.13*Math.min(a.depth+b.depth,1);
+          const al=(1-Math.sqrt(d2)/LINK)*0.10*Math.min(a.depth+b.depth,1);
           if(al>0.012){
             ctx.strokeStyle='rgba(125,150,175,'+al.toFixed(3)+')';
             ctx.lineWidth=0.6;
@@ -2112,26 +2133,46 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
         }
       }
     }
-    // grânulos com glow
+    // grânulos — glow (gradiente) só nas partículas grandes; as demais são pontos simples
     for(const p of parts){
-      const glow=p.r*3.5;
-      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,glow);
-      g.addColorStop(0,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+p.a.toFixed(3)+')');
-      g.addColorStop(0.4,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+(p.a*0.35).toFixed(3)+')');
-      g.addColorStop(1,'rgba('+p.col.r+','+p.col.g+','+p.col.b+',0)');
-      ctx.fillStyle=g;
-      ctx.beginPath(); ctx.arc(p.x,p.y,glow,0,6.2832); ctx.fill();
+      if(p.depth>0.55){
+        const glow=p.r*3.2;
+        const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,glow);
+        g.addColorStop(0,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+p.a.toFixed(3)+')');
+        g.addColorStop(0.4,'rgba('+p.col.r+','+p.col.g+','+p.col.b+','+(p.a*0.35).toFixed(3)+')');
+        g.addColorStop(1,'rgba('+p.col.r+','+p.col.g+','+p.col.b+',0)');
+        ctx.fillStyle=g;
+        ctx.beginPath(); ctx.arc(p.x,p.y,glow,0,6.2832); ctx.fill();
+      }
       ctx.fillStyle='rgba('+p.col.r+','+p.col.g+','+p.col.b+','+Math.min(p.a*1.7,0.9).toFixed(3)+')';
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.2832); ctx.fill();
     }
     raf=requestAnimationFrame(step);
   }
   function start(){ if(!raf && !gate.classList.contains('hidden')) raf=requestAnimationFrame(step); }
-  function setM(x,y){ const r=canvas.getBoundingClientRect(); mouse.x=x-r.left; mouse.y=y-r.top; mouse.active=true; }
+  function setM(x,y){
+    const r=canvas.getBoundingClientRect();
+    const nx=x-r.left, ny=y-r.top;
+    if(mouse.px>-9000){
+      const mdx=nx-mouse.px, mdy=ny-mouse.py, md=Math.hypot(mdx,mdy);
+      if(md>0.5){
+        // direção do feixe suavizada + velocidade instantânea
+        mouse.dx=mouse.dx*0.75+(mdx/md)*0.25;
+        mouse.dy=mouse.dy*0.75+(mdy/md)*0.25;
+        const dl=Math.hypot(mouse.dx,mouse.dy)||1;
+        mouse.dx/=dl; mouse.dy/=dl;
+        mouse.speed=Math.min(mouse.speed*0.6+md*0.4,26);
+      }
+    }
+    mouse.px=nx; mouse.py=ny;
+    mouse.x=nx; mouse.y=ny; mouse.active=true;
+  }
+  function resetM(){ mouse.active=false; mouse.px=-9999; mouse.py=-9999; mouse.speed=0; }
   window.addEventListener('mousemove',e=>setM(e.clientX,e.clientY),{passive:true});
-  window.addEventListener('mouseout',()=>{ mouse.active=false; });
+  window.addEventListener('mouseout',resetM);
+  window.addEventListener('touchstart',e=>{ if(e.touches[0]){ mouse.px=-9999; setM(e.touches[0].clientX,e.touches[0].clientY); } },{passive:true});
   window.addEventListener('touchmove',e=>{ if(e.touches[0]) setM(e.touches[0].clientX,e.touches[0].clientY); },{passive:true});
-  window.addEventListener('touchend',()=>{ mouse.active=false; });
+  window.addEventListener('touchend',resetM);
   window.addEventListener('resize',resize);
   new MutationObserver(()=>{ if(!gate.classList.contains('hidden')) start(); }).observe(gate,{attributes:true,attributeFilter:['class']});
   resize(); start();
