@@ -11041,7 +11041,9 @@ function initRotasPage(){
     _vt.lam-=dx*k; _vt.phi+=dy*k;
     if(_vt.lam>180)_vt.lam-=360; if(_vt.lam<-180)_vt.lam+=360;
     _vt.phi=Math.max(-85,Math.min(85,_vt.phi));
-    _vt.vlam=-dx*k; _vt.vphi=dy*k;
+    const cap=1.2; // limite da inércia (graus/frame) — parada previsível
+    _vt.vlam=Math.max(-cap,Math.min(cap,-dx*k));
+    _vt.vphi=Math.max(-cap,Math.min(cap,dy*k));
     _lastInteract=performance.now();
   }
   canvas.addEventListener('wheel',e=>{
@@ -11174,14 +11176,14 @@ function initRotasPage(){
   // ── Frame ──
   function frame(ts){
     if(!_rotasActive) return;
-    // Inércia + rotação automática em repouso
+    // Inércia curta (desliza pouco e para onde o usuário soltou)
     if(!_vt.dragging){
-      if(Math.abs(_vt.vlam)>0.002||Math.abs(_vt.vphi)>0.002){
-        _vt.lam+=_vt.vlam*16; _vt.phi=Math.max(-85,Math.min(85,_vt.phi+_vt.vphi*16));
-        _vt.vlam*=0.94;_vt.vphi*=0.94;
+      if(Math.abs(_vt.vlam)>0.01||Math.abs(_vt.vphi)>0.01){
+        _vt.lam+=_vt.vlam; _vt.phi=Math.max(-85,Math.min(85,_vt.phi+_vt.vphi));
+        _vt.vlam*=0.82;_vt.vphi*=0.82;
         if(_vt.lam>180)_vt.lam-=360;if(_vt.lam<-180)_vt.lam+=360;
-      } else if(ts-_lastInteract>5000){
-        _vt.lam+=0.018; if(_vt.lam>180)_vt.lam-=360;
+      } else if(ts-_lastInteract>8000){
+        _vt.lam+=0.012; if(_vt.lam>180)_vt.lam-=360;
       }
     }
     _updView();
