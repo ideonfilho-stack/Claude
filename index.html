@@ -2279,6 +2279,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     <div class="nav-label">Relatórios</div>
     <button class="nav-btn" id="nb-dash" onclick="goPage('dash')"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg><span class="nav-lbl">Dashboard</span></button>
     <button class="nav-btn" id="nb-rotas" onclick="goPage('rotas')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span class="nav-lbl">Rotas Marítimas</span></button>
+    <button class="nav-btn" id="nb-rotas2" onclick="goPage('rotas2')"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2v20"/></svg><span class="nav-lbl">Rotas Marítimas 2</span></button>
   </div>
   <div class="nav-section">
     <div class="nav-label">CRM</div>
@@ -3386,6 +3387,12 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
   </div>
 </div>
 
+<!-- ROTAS MARÍTIMAS 2 — preview MapLibre GL -->
+<div class="content" id="pg-rotas2" style="display:none">
+  <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Preview · MapLibre GL + tiles escuros (Carto/OSM) · arraste, role para zoom, clique nos portos</div>
+  <div id="mlMapWrap" style="height:calc(100vh - 170px);height:calc(100dvh - 170px);border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);background:#05070a"></div>
+</div>
+
 </div><!-- /main -->
 </div><!-- /shell -->
 
@@ -3904,7 +3911,7 @@ let _rotasRAF=null, _rotasActive=false, _rotasAbortCtrl=null;
 const _vt={scale:1,tx:0,ty:0,dragging:false,lx:0,ly:0};
 const _rotasHL={id:null}; // id da rota destacada (hover no painel ou sobre navio)
 let _rotasPanelCollapsed=false;
-const PAGES=['dash','form','cot','mats','fabs','comp','prop','rel','cfg','rotas','crm','rent'];
+const PAGES=['dash','form','cot','mats','fabs','comp','prop','rel','cfg','rotas','rotas2','crm','rent'];
 function switchFormTab(tab){
   const isForm = tab==='form';
   const fbtn = document.getElementById('ftab-form');
@@ -3937,7 +3944,7 @@ function goPage(p){
     const b=document.getElementById('nb-'+pg); if(b) b.classList.toggle('active',pg===p);
     const mb=document.getElementById('mnb-'+pg); if(mb) mb.classList.toggle('active',pg===p);
   });
-  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',crm:'CRM',rent:'Comparativo'}[p]||p;
+  document.getElementById('pgTitle').textContent={dash:'Dashboard',form:'Formulação',cot:'Cotação',mats:'Matérias Primas',fabs:'Fábricas',comp:'Comparativo',prop:'Proposta Comercial',rel:'Relatório Semanal',cfg:'Configurações',rotas:'Rotas Marítimas',rotas2:'Rotas Marítimas 2',crm:'CRM',rent:'Comparativo'}[p]||p;
   if(p==='mats'){_expandedMat=null;renderMatCards();renderPDFHistPanel();}
   if(p==='prop'){initPropPage();}
   if(p==='rel'){initRelPage();}
@@ -3948,6 +3955,7 @@ function goPage(p){
   if(p==='cot'){recalcCotacao();}
   if(p==='dash'){renderDash();renderPriceHistCharts();renderArquivo();checkBackupAviso();}
   if(p==='rotas'){initRotasPage();}
+  if(p==='rotas2'){initRotas2();}
   if(p==='crm'){renderCRM();}
   if(p==='rent'){renderComp();}
   // Scroll to top on mobile page change
@@ -11487,6 +11495,85 @@ function initRotasPage(){
   }
 
   _rotasRAF=requestAnimationFrame(frame);
+}
+
+// ── ROTAS MARÍTIMAS 2 — preview MapLibre GL (carregado sob demanda) ─────────
+let _ml=null,_mlLoading=false;
+function initRotas2(){
+  if(_ml){ setTimeout(()=>{try{_ml.resize();}catch(_){}},60); return; }
+  if(_mlLoading) return;
+  _mlLoading=true;
+  const el=document.getElementById('mlMapWrap');
+  el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">Carregando MapLibre GL…</div>';
+  const css=document.createElement('link');
+  css.rel='stylesheet'; css.href='https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css';
+  document.head.appendChild(css);
+  const s=document.createElement('script');
+  s.src='https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js';
+  s.onload=_mlInit;
+  s.onerror=()=>{ _mlLoading=false; el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--red);font-size:13px">Falha ao carregar MapLibre GL (CDN)</div>'; };
+  document.head.appendChild(s);
+}
+function _mlInit(){
+  const el=document.getElementById('mlMapWrap');
+  el.innerHTML='';
+  _ml=new maplibregl.Map({
+    container:el,
+    style:{
+      version:8,
+      glyphs:'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+      sources:{
+        carto:{
+          type:'raster',
+          tiles:[
+            'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+            'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+            'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+          ],
+          tileSize:256,
+          attribution:'© OpenStreetMap contributors © CARTO'
+        }
+      },
+      layers:[{id:'carto',type:'raster',source:'carto'}]
+    },
+    center:[-30,-8], zoom:2.2, attributionControl:{compact:true}
+  });
+  _ml.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
+  _ml.on('load',()=>{
+    try{ _ml.setProjection({type:'globe'}); }catch(e){ console.warn('[ml] globe indisponível',e); }
+    // Rotas (mesmos waypoints da aba Rotas Marítimas)
+    _ml.addSource('rotas',{type:'geojson',data:{
+      type:'FeatureCollection',
+      features:_ROTAS_DEF.map(r=>({type:'Feature',properties:{color:r.color,name:r.name,product:r.product,eta:r.eta},geometry:{type:'LineString',coordinates:r.pts}}))
+    }});
+    _ml.addLayer({id:'rotas-glow',type:'line',source:'rotas',
+      paint:{'line-color':['get','color'],'line-width':6,'line-opacity':0.12,'line-blur':3}});
+    _ml.addLayer({id:'rotas-line',type:'line',source:'rotas',
+      layout:{'line-cap':'round','line-join':'round'},
+      paint:{'line-color':['get','color'],'line-width':2,'line-opacity':0.85,'line-dasharray':[0.1,2]}});
+    // Portos brasileiros
+    _ml.addSource('portos',{type:'geojson',data:{
+      type:'FeatureCollection',
+      features:_DEST_PORTS.map(p=>({type:'Feature',properties:{name:p.name,code:p.code,tier:p.tier},geometry:{type:'Point',coordinates:[p.lon,p.lat]}}))
+    }});
+    _ml.addLayer({id:'portos-halo',type:'circle',source:'portos',
+      paint:{'circle-radius':['case',['==',['get','tier'],1],11,7],'circle-color':'#A8FF53','circle-opacity':0.15,'circle-blur':0.6}});
+    _ml.addLayer({id:'portos-c',type:'circle',source:'portos',
+      paint:{'circle-radius':['case',['==',['get','tier'],1],4.5,3],'circle-color':'#A8FF53','circle-opacity':0.95,'circle-stroke-width':1,'circle-stroke-color':'#08090A'}});
+    // Popups
+    _ml.on('click','portos-c',e=>{
+      const f=e.features[0];
+      new maplibregl.Popup({closeButton:false}).setLngLat(f.geometry.coordinates)
+        .setHTML('<div style="font-family:Inter,sans-serif;font-size:12px;color:#111"><b>'+f.properties.name+'</b> · '+f.properties.code+'</div>').addTo(_ml);
+    });
+    _ml.on('click','rotas-line',e=>{
+      const f=e.features[0];
+      new maplibregl.Popup({closeButton:false}).setLngLat(e.lngLat)
+        .setHTML('<div style="font-family:Inter,sans-serif;font-size:12px;color:#111"><b>'+f.properties.name+'</b><br>'+f.properties.product+' · ETA '+f.properties.eta+'</div>').addTo(_ml);
+    });
+    _ml.on('mouseenter','portos-c',()=>{_ml.getCanvas().style.cursor='pointer';});
+    _ml.on('mouseleave','portos-c',()=>{_ml.getCanvas().style.cursor='';});
+  });
 }
 
 // Zoom button handlers (global — called from HTML onclick)
