@@ -10936,184 +10936,168 @@ function initRotasPage(){
   const sig=_rotasAbortCtrl.signal;
 
   const ctx=canvas.getContext('2d');
-  // Projeção Plate Carrée. Bounds expandidos para incluir Groenlândia/N Canadá
-  // até ~82°N (antes 75° cortava na metade) e excluir Antártida no sul (-60).
-  const LON_MIN=-140,LON_MAX=165,LAT_MAX=82,LAT_MIN=-60;
-
-  function proj(lon,lat){
-    return[
-      (lon-LON_MIN)/(LON_MAX-LON_MIN)*canvas.width,
-      (1-(lat-LAT_MIN)/(LAT_MAX-LAT_MIN))*canvas.height
-    ];
-  }
-  function screenToBase(sx,sy){return[(sx-_vt.tx)/_vt.scale,(sy-_vt.ty)/_vt.scale];}
-
-  // Clamp pan: impede o usuário de arrastar o mundo todo para fora da tela.
-  // Permite ~20% de over-pan para não parecer travado nas bordas.
-  function _clampVt(){
-    const w=canvas.width, h=canvas.height, ov=0.2;
-    const maxTx=ov*w, minTx=-(w*_vt.scale-w*(1-ov));
-    if(_vt.tx>maxTx) _vt.tx=maxTx;
-    if(_vt.tx<minTx) _vt.tx=minTx;
-    const maxTy=ov*h, minTy=-(h*_vt.scale-h*(1-ov));
-    if(_vt.ty>maxTy) _vt.ty=maxTy;
-    if(_vt.ty<minTy) _vt.ty=minTy;
-  }
-
-  let routeData=[],internalData=[],bnData=[],destData=[],intData=[],_shipPositions=[];
-
-  // Amostra Catmull-Rom em forma de Bezier cúbico → array denso de pontos
-  // SEGS = subdivisões por segmento entre waypoints
-  function _sampleSmooth(pts, SEGS){
-    if(pts.length<2) return pts.slice();
-    const t=0.18; // tensão da curva
-    const out=[];
-    for(let i=0;i<pts.length-1;i++){
-      const p0=pts[i-1]||pts[i];
-      const p1=pts[i];
-      const p2p=pts[i+1];
-      const p3=pts[i+2]||p2p;
-      const cp1x=p1[0]+(p2p[0]-p0[0])*t;
-      const cp1y=p1[1]+(p2p[1]-p0[1])*t;
-      const cp2x=p2p[0]-(p3[0]-p1[0])*t;
-      const cp2y=p2p[1]-(p3[1]-p1[1])*t;
-      const n=(i===pts.length-2)?SEGS+1:SEGS;
-      for(let k=0;k<n;k++){
-        const u=k/SEGS, mu=1-u;
-        const x=mu*mu*mu*p1[0]+3*mu*mu*u*cp1x+3*mu*u*u*cp2x+u*u*u*p2p[0];
-        const y=mu*mu*mu*p1[1]+3*mu*mu*u*cp1y+3*mu*u*u*cp2y+u*u*u*p2p[1];
-        out.push([x,y]);
-      }
-    }
-    return out;
-  }
-
-  function buildProj(){
-    routeData=_ROTAS_DEF.map(r=>{
-      const raw=r.pts.map(([ln,la])=>proj(ln,la));
-      const p2=_sampleSmooth(raw,18); // ~18 sub-segmentos por waypoint
-      const ds=[0];
-      for(let i=1;i<p2.length;i++){
-        const[x1,y1]=p2[i-1],[x2,y2]=p2[i];
-        ds.push(ds[i-1]+Math.hypot(x2-x1,y2-y1));
-      }
-      return{...r,p2,ds,tot:ds[ds.length-1]};
-    });
-    internalData=_INTERNAL.map(r=>({
-      ...r,
-      p2:_sampleSmooth(r.pts.map(([ln,la])=>proj(ln,la)),10)
-    }));
-    bnData=_BOTTLENECKS.map(b=>({...b,px:proj(b.lon,b.lat)}));
-    destData=_DEST_PORTS.map(p=>({...p,px:proj(p.lon,p.lat)}));
-    intData=_INTERIOR.map(i=>({...i,px:proj(i.lon,i.lat)}));
-  }
+  // ════════════════════════════════════════════════════════════════
+  // GLOBO ORTOGRÁFICO INTERATIVO — arraste gira, scroll/pinch dá zoom
+  // Rotas em grandes círculos entre waypoints operacionais reais
+  // ════════════════════════════════════════════════════════════════
+  const D2R=Math.PI/180;
+  if(_vt.lam===undefined){_vt.lam=-28;_vt.phi=-14;_vt.scale=1;}
+  _vt.vlam=0;_vt.vphi=0;
+  let W=0,H=0,DPR=1,R=0,CX=0,CY=0;
+  let _lastInteract=0;
 
   function resize(){
     const rc=wrap.getBoundingClientRect();
-    canvas.width=Math.round(rc.width)||800;
-    canvas.height=Math.round(rc.height)||480;
-    buildProj();
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=Math.round(rc.width)||800; H=Math.round(rc.height)||480;
+    canvas.width=W*DPR; canvas.height=H*DPR;
+    canvas.style.width=W+'px'; canvas.style.height=H+'px';
   }
   resize();
-
   if(canvas._rotasRO) canvas._rotasRO.disconnect();
   const ro=new ResizeObserver(resize);
   ro.observe(wrap);
   canvas._rotasRO=ro;
 
-  // Zoom-to-cursor: clampa a escala PRIMEIRO e aplica o fator EFETIVO no pan.
-  // Sem isso, quando a escala batia no limite, o pan continuava drifteando.
-  function _zoomAt(mx,my,proposedF){
-    const newScale=Math.max(0.8,Math.min(5,_vt.scale*proposedF));
-    const eff=newScale/_vt.scale;
-    _vt.tx=mx-(mx-_vt.tx)*eff;
-    _vt.ty=my-(my-_vt.ty)*eff;
-    _vt.scale=newScale;
+  // ── Projeção ortográfica (centro λ0=_vt.lam, φ0=_vt.phi) ──
+  let _c0=1,_s0=0,_lam0=0;
+  function _updView(){
+    const p=_vt.phi*D2R;
+    _c0=Math.cos(p); _s0=Math.sin(p); _lam0=_vt.lam*D2R;
+  }
+  // pt pré-computado {lm(rad), cf(cosφ), sf(sinφ)} → [x,y,visível]
+  function projP(pt){
+    const dl=pt.lm-_lam0, cdl=Math.cos(dl);
+    const cosc=_s0*pt.sf+_c0*pt.cf*cdl;
+    return [CX+R*pt.cf*Math.sin(dl), CY-R*(_c0*pt.sf-_s0*pt.cf*cdl), cosc>0.001];
+  }
+  function mkPt(lon,lat){const la=lat*D2R;return{lm:lon*D2R,cf:Math.cos(la),sf:Math.sin(la)};}
+
+  // ── Amostragem em grande círculo (slerp) entre waypoints ──
+  function _v3(lon,lat){const la=lat*D2R,lo=lon*D2R,c=Math.cos(la);return[c*Math.cos(lo),c*Math.sin(lo),Math.sin(la)];}
+  function gcSample(pts,stepDeg){
+    const out=[];let arc=[0];let tot=0;
+    for(let i=0;i<pts.length-1;i++){
+      const A=_v3(pts[i][0],pts[i][1]),B=_v3(pts[i+1][0],pts[i+1][1]);
+      let dot=A[0]*B[0]+A[1]*B[1]+A[2]*B[2];
+      dot=Math.max(-1,Math.min(1,dot));
+      const ang=Math.acos(dot);
+      const n=Math.max(1,Math.ceil(ang/(stepDeg*D2R)));
+      const sa=Math.sin(ang)||1e-9;
+      for(let k=0;k<n;k++){
+        const t=k/n,w1=Math.sin((1-t)*ang)/sa,w2=Math.sin(t*ang)/sa;
+        const x=w1*A[0]+w2*B[0],y=w1*A[1]+w2*B[1],z=w1*A[2]+w2*B[2];
+        const lat=Math.asin(Math.max(-1,Math.min(1,z))),lon=Math.atan2(y,x);
+        if(out.length){tot+=stepAngle(out[out.length-1],lon,lat);arc.push(tot);}
+        out.push({lm:lon,cf:Math.cos(lat),sf:Math.sin(lat)});
+      }
+    }
+    const last=pts[pts.length-1];const la=last[1]*D2R,lo=last[0]*D2R;
+    tot+=stepAngle(out[out.length-1],lo,la);arc.push(tot);
+    out.push({lm:lo,cf:Math.cos(la),sf:Math.sin(la)});
+    return{smp:out,arc,tot};
+  }
+  function stepAngle(p,lon,lat){
+    const sf=Math.sin(lat),cf=Math.cos(lat);
+    let d=p.sf*sf+p.cf*cf*Math.cos(lon-p.lm);
+    return Math.acos(Math.max(-1,Math.min(1,d)));
   }
 
-  // ── Event listeners: Wheel zoom ──────────────────────────────
+  let routeData=[],internalData=[],bnData=[],destData=[],intData=[],_shipPositions=[],_portScr=[],_bnScr=[],_intScr=[];
+  function buildGeo(){
+    routeData=_ROTAS_DEF.map(r=>({...r,...gcSample(r.pts,0.8)}));
+    internalData=_INTERNAL.map(r=>({...r,...gcSample(r.pts,0.8)}));
+    bnData=_BOTTLENECKS.map(b=>({...b,pt:mkPt(b.lon,b.lat)}));
+    destData=_DEST_PORTS.map(p=>({...p,pt:mkPt(p.lon,p.lat)}));
+    intData=_INTERIOR.map(i=>({...i,pt:mkPt(i.lon,i.lat)}));
+  }
+  buildGeo();
+
+  // ── Continentes pontilhados (halftone) — raster equiretangular 1x ──
+  function buildDots(){
+    if(!_geoLand||window._globeDots) return;
+    try{
+      const oc=document.createElement('canvas');oc.width=1440;oc.height=720;
+      const o=oc.getContext('2d');o.fillStyle='#fff';
+      const drawRings=(rings,off)=>{rings.forEach(ring=>{if(!ring||ring.length<3)return;o.beginPath();ring.forEach(([lon,lat],i)=>{const x=(lon+180)*4+off,y=(90-lat)*4;i===0?o.moveTo(x,y):o.lineTo(x,y);});o.closePath();o.fill();});};
+      for(const off of[-1440,0,1440]) _geoLand.features.forEach(f=>{const g=f.geometry;if(!g)return;if(g.type==='MultiPolygon')g.coordinates.forEach(p=>drawRings(p,off));else drawRings(g.coordinates,off);});
+      const img=o.getImageData(0,0,1440,720).data;
+      const dots=[];
+      for(let lat=-58;lat<=84;lat+=1.5){
+        const cf=Math.cos(lat*D2R);
+        const step=1.5/Math.max(0.22,cf);
+        for(let lon=-180;lon<180;lon+=step){
+          const px=Math.min(1439,((lon+180)*4)|0),py=Math.min(719,((90-lat)*4)|0);
+          if(img[(py*1440+px)*4+3]>128) dots.push({lm:lon*D2R,cf,sf:Math.sin(lat*D2R)});
+        }
+      }
+      window._globeDots=dots;
+    }catch(e){console.warn('[globo] dots',e);window._globeDots=[];}
+  }
+
+  // ── Interação: arrastar gira o globo ──
+  function _rot(dx,dy){
+    const k=(1/D2R)/Math.max(60,R);
+    _vt.lam-=dx*k; _vt.phi+=dy*k;
+    if(_vt.lam>180)_vt.lam-=360; if(_vt.lam<-180)_vt.lam+=360;
+    _vt.phi=Math.max(-85,Math.min(85,_vt.phi));
+    _vt.vlam=-dx*k; _vt.vphi=dy*k;
+    _lastInteract=performance.now();
+  }
   canvas.addEventListener('wheel',e=>{
     e.preventDefault();
-    const rect=canvas.getBoundingClientRect();
-    const mx=e.clientX-rect.left, my=e.clientY-rect.top;
-    _zoomAt(mx,my,e.deltaY>0?0.84:1.19);
+    _vt.scale=Math.max(0.8,Math.min(4,_vt.scale*(e.deltaY>0?0.88:1.14)));
+    _lastInteract=performance.now();
   },{passive:false,signal:sig});
-
-  // ── Mouse drag + hover ───────────────────────────────────────
   canvas.addEventListener('mousedown',e=>{
-    _vt.dragging=true;_vt.lx=e.clientX;_vt.ly=e.clientY;
-    canvas.classList.add('dragging');
-    _hideRotasTT();
+    _vt.dragging=true;_vt.lx=e.clientX;_vt.ly=e.clientY;_vt.vlam=0;_vt.vphi=0;
+    canvas.classList.add('dragging');_hideRotasTT();
   },{signal:sig});
   canvas.addEventListener('mousemove',e=>{
     if(_vt.dragging){
-      _vt.tx+=e.clientX-_vt.lx; _vt.ty+=e.clientY-_vt.ly;
-      _vt.lx=e.clientX; _vt.ly=e.clientY;
-    } else {
-      _hoverRotas(e,canvas,screenToBase);
-    }
+      _rot(e.clientX-_vt.lx,e.clientY-_vt.ly);
+      _vt.lx=e.clientX;_vt.ly=e.clientY;
+    } else _hoverRotas(e,canvas);
   },{signal:sig});
   canvas.addEventListener('mouseup',()=>{_vt.dragging=false;canvas.classList.remove('dragging');},{signal:sig});
   canvas.addEventListener('mouseleave',()=>{_vt.dragging=false;canvas.classList.remove('dragging');_hideRotasTT();if(!_rotasHL.fromPanel)_rotasHL.id=null;},{signal:sig});
-
-  // ── Double-click zoom in ─────────────────────────────────────
-  canvas.addEventListener('dblclick',e=>{
-    const rect=canvas.getBoundingClientRect();
-    _zoomAt(e.clientX-rect.left,e.clientY-rect.top,2);
-  },{signal:sig});
-
-  // ── Touch: pinch-zoom + drag ─────────────────────────────────
+  canvas.addEventListener('dblclick',()=>{_vt.scale=Math.max(0.8,Math.min(4,_vt.scale*1.6));_lastInteract=performance.now();},{signal:sig});
   let _tLast=[];
-  canvas.addEventListener('touchstart',e=>{
-    e.preventDefault();_tLast=[...e.touches];_vt.dragging=true;_hideRotasTT();
-  },{passive:false,signal:sig});
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();_tLast=[...e.touches];_vt.dragging=true;_vt.vlam=0;_vt.vphi=0;_hideRotasTT();_lastInteract=performance.now();},{passive:false,signal:sig});
   canvas.addEventListener('touchmove',e=>{
     e.preventDefault();
     const t=[...e.touches];
     if(t.length===1&&_tLast.length>=1){
-      _vt.tx+=t[0].clientX-_tLast[0].clientX;
-      _vt.ty+=t[0].clientY-_tLast[0].clientY;
+      _rot(t[0].clientX-_tLast[0].clientX,t[0].clientY-_tLast[0].clientY);
     } else if(t.length===2&&_tLast.length===2){
       const d0=Math.hypot(_tLast[1].clientX-_tLast[0].clientX,_tLast[1].clientY-_tLast[0].clientY);
       const d1=Math.hypot(t[1].clientX-t[0].clientX,t[1].clientY-t[0].clientY);
-      if(d0>1){
-        const rect=canvas.getBoundingClientRect();
-        const mx=((t[0].clientX+t[1].clientX)/2)-rect.left;
-        const my=((t[0].clientY+t[1].clientY)/2)-rect.top;
-        _zoomAt(mx,my,d1/d0);
-      }
+      if(d0>1){_vt.scale=Math.max(0.8,Math.min(4,_vt.scale*(d1/d0)));_lastInteract=performance.now();}
     }
     _tLast=t;
   },{passive:false,signal:sig});
   canvas.addEventListener('touchend',e=>{
-    // tap (no significant move) → show tooltip
     if(e.changedTouches.length===1&&_tLast.length<=1){
       const t=e.changedTouches[0];
-      const rect=canvas.getBoundingClientRect();
-      const sx=t.clientX-rect.left, sy=t.clientY-rect.top;
-      _hoverRotas({clientX:t.clientX,clientY:t.clientY},canvas,screenToBase,true);
+      _hoverRotas({clientX:t.clientX,clientY:t.clientY},canvas,true);
     }
     _vt.dragging=false;_tLast=[];
   },{passive:false,signal:sig});
 
-  // ── Tooltip helpers ──────────────────────────────────────────
-  function _hoverRotas(e,cv,s2b,tap){
+  // ── Tooltip / hover em coordenadas de tela ──
+  function _hoverRotas(e,cv,tap){
     const rect=cv.getBoundingClientRect();
     const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
-    const[bx,by]=s2b(sx,sy);
-    // Dest ports
-    for(const p of destData){
-      const[px,py]=p.px, hit=p.tier===1?14:10;
-      if(Math.hypot(bx-px,by-py)<hit){
+    for(const p of _portScr){
+      if(Math.hypot(sx-p.sx,sy-p.sy)<(p.tier===1?14:10)){
         _showRotasTT(`<strong>${p.name}</strong>
           <div class="tt-row"><span class="tt-label">Código</span><span>${p.code}</span></div>
           <div class="tt-row"><span class="tt-label">Tipo</span><span>${p.tier===1?'Porto Principal':'Porto Secundário'}</span></div>`,sx,sy,cv);
         return;
       }
     }
-    // Ships
     for(const s of _shipPositions){
-      if(Math.hypot(bx-s.bx,by-s.by)<10){
+      if(Math.hypot(sx-s.sx,sy-s.sy)<12){
         _rotasHL.id=s.rd.id;
         _showRotasTT(`<strong>${s.rd.name}</strong>
           <div class="tt-row"><span class="tt-label">Produto</span><span>${s.rd.product}</span></div>
@@ -11123,10 +11107,8 @@ function initRotasPage(){
         return;
       }
     }
-    // Bottlenecks
-    for(const b of bnData){
-      const[px,py]=b.px;
-      if(Math.hypot(bx-px,by-py)<12){
+    for(const b of _bnScr){
+      if(Math.hypot(sx-b.sx,sy-b.sy)<12){
         const cls=b.status==='ok'?'tt-ok':b.status==='warn'?'tt-warn':'tt-cong';
         const lbl=b.status==='ok'?'Normal':b.status==='warn'?'Atenção':'Congestionado';
         _showRotasTT(`<strong>${b.name}</strong>
@@ -11136,16 +11118,13 @@ function initRotasPage(){
         return;
       }
     }
-    // Interior hubs
-    for(const ih of intData){
-      const[px,py]=ih.px;
-      if(Math.hypot(bx-px,by-py)<12){
+    for(const ih of _intScr){
+      if(Math.hypot(sx-ih.sx,sy-ih.sy)<12){
         _showRotasTT(`<strong>${ih.label} (${ih.name})</strong>
           <div class="tt-row"><span class="tt-label">Modal</span><span>Ferrovia / Rodovia</span></div>`,sx,sy,cv);
         return;
       }
     }
-    // Sem hover sobre nada relevante: limpa highlight se não veio do painel
     if(_rotasHL.id&&!_rotasHL.fromPanel) _rotasHL.id=null;
     if(!tap) _hideRotasTT();
   }
@@ -11168,276 +11147,322 @@ function initRotasPage(){
     if(tt) tt.style.opacity='0';
   }
 
-  function routePt(rd,t){
+  // posição do navio ao longo da rota (t 0..1 sobre o arco total)
+  function shipScreen(rd,t){
     const d=Math.max(0,Math.min(1,t))*rd.tot;
-    let seg=rd.p2.length-2;
-    for(let i=1;i<rd.ds.length;i++){if(rd.ds[i]>=d){seg=i-1;break;}}
-    const sl=rd.ds[seg+1]-rd.ds[seg];
-    const lt=sl>0?(d-rd.ds[seg])/sl:0;
-    const[x1,y1]=rd.p2[seg],[x2,y2]=rd.p2[Math.min(seg+1,rd.p2.length-1)];
-    return[x1+(x2-x1)*lt,y1+(y2-y1)*lt];
+    let lo=0,hi=rd.arc.length-1;
+    while(lo<hi-1){const m=(lo+hi)>>1;if(rd.arc[m]<=d)lo=m;else hi=m;}
+    const i0=Math.min(lo,rd.smp.length-2);
+    const sl=rd.arc[i0+1]-rd.arc[i0],f=sl>0?(d-rd.arc[i0])/sl:0;
+    const[a,b]=[projP(rd.smp[i0]),projP(rd.smp[i0+1])];
+    if(!a[2]&&!b[2]) return null;
+    return{sx:a[0]+(b[0]-a[0])*f,sy:a[1]+(b[1]-a[1])*f,i0,f};
   }
 
-  // ── Draw land from TopoJSON ──────────────────────────────────
-  // Cor flat (gradiente em coords transformadas causava banding em zoom alto).
-  // Stroke com floor de 0.45px para não sumir quando aproximamos.
-  // Quebra de subpath em cruzamentos do antimeridiano (salto |Δlon|>180°) —
-  // evita linhas longas atravessando o canvas em alta latitude.
-  function drawLand(){
-    if(!_geoLand) return;
-    ctx.fillStyle='#172339';
-    ctx.strokeStyle='rgba(96,134,196,0.28)';
-    ctx.lineWidth=Math.max(0.45,0.8/_vt.scale);
-    const drawRings=(rings)=>{
-      rings.forEach(ring=>{
-        if(!ring||ring.length<2) return;
-        ctx.beginPath();
-        let lastLon=null, started=false;
-        ring.forEach(([lon,lat])=>{
-          const[x,y]=proj(lon,lat);
-          if(!started){
-            ctx.moveTo(x,y); started=true;
-          } else if(lastLon!==null && Math.abs(lon-lastLon)>180){
-            ctx.moveTo(x,y); // crossing antimeridian → break subpath
-          } else {
-            ctx.lineTo(x,y);
-          }
-          lastLon=lon;
-        });
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
-      });
-    };
-    _geoLand.features.forEach(f=>{
-      const g2=f.geometry;
-      if(!g2) return;
-      if(g2.type==='MultiPolygon') g2.coordinates.forEach(poly=>drawRings(poly));
-      else if(g2.type==='Polygon') drawRings(g2.coordinates);
-    });
+  // desenha uma polilinha amostrada, quebrando na borda do globo
+  function strokeSamples(smp,from,to){
+    let started=false;
+    ctx.beginPath();
+    for(let i=from;i<=to;i++){
+      const[x,y,vis]=projP(smp[i]);
+      if(vis){ if(!started){ctx.moveTo(x,y);started=true;} else ctx.lineTo(x,y); }
+      else started=false;
+    }
+    ctx.stroke();
   }
 
-  // ── Animation frame ──────────────────────────────────────────
+  // ── Frame ──
   function frame(ts){
     if(!_rotasActive) return;
-    _clampVt();
-
-    // Identity: clear + ocean background (cor flat para evitar bandas em zoom alto)
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle='#030b16';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    // Apply viewport transform for all geographic drawing
-    ctx.setTransform(_vt.scale,0,0,_vt.scale,_vt.tx,_vt.ty);
-
-    // Grid (dentro dos bounds da projeção)
-    ctx.save();
-    ctx.strokeStyle='rgba(255,255,255,0.016)';
-    ctx.lineWidth=1/_vt.scale;
-    ctx.setLineDash([2,14]);
-    for(let ln=LON_MIN;ln<=LON_MAX;ln+=20){const[x]=proj(ln,0);ctx.beginPath();ctx.moveTo(x,-9999);ctx.lineTo(x,canvas.height+9999);ctx.stroke();}
-    for(let la=LAT_MIN;la<=LAT_MAX;la+=15){const[,y]=proj(0,la);ctx.beginPath();ctx.moveTo(-9999,y);ctx.lineTo(canvas.width+9999,y);ctx.stroke();}
-    ctx.setLineDash([]); ctx.restore();
-
-    // Equator
-    const[,eq]=proj(0,0);
-    ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1/_vt.scale;
-    ctx.setLineDash([5,11]);
-    ctx.beginPath();ctx.moveTo(-9999,eq);ctx.lineTo(canvas.width+9999,eq);ctx.stroke();
-    ctx.setLineDash([]); ctx.restore();
-
-    // Tropic of Capricorn
-    const[,tc]=proj(0,-23.4);
-    ctx.save(); ctx.strokeStyle='rgba(248,181,62,0.05)'; ctx.lineWidth=1/_vt.scale;
-    ctx.setLineDash([4,16]);
-    ctx.beginPath();ctx.moveTo(-9999,tc);ctx.lineTo(canvas.width+9999,tc);ctx.stroke();
-    ctx.setLineDash([]); ctx.restore();
-
-    // Continents (Natural Earth TopoJSON)
-    drawLand();
-
-    const pulse=ts*0.0017;
-    const fast=ts*0.0035;
-    // Níveis de detalhe revelados por zoom
-    const DETAIL=_vt.scale>=1.5;        // nomes completos de portos/hubs, wait sempre visível
-    const DETAIL_HI=_vt.scale>=2.5;     // labels de origem, código secundário nos portos
-    // Fator de crescimento de marcadores em zoom — curva mais suave que antes.
-    // scale=1 → 1.0; scale=2 → ~1.32; scale=3 → ~1.55; scale=5 → 1.7 (cap).
-    const zBoost=Math.min(1.7,Math.pow(_vt.scale,0.4));
-
-    // Internal supply routes
-    ctx.save();
-    internalData.forEach(r=>{
-      ctx.strokeStyle='#fbbf24'; ctx.globalAlpha=0.25;
-      ctx.lineWidth=1.3/_vt.scale; ctx.setLineDash([5,9]); ctx.lineJoin='round';
-      ctx.beginPath();
-      r.p2.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-      ctx.stroke(); ctx.setLineDash([]);
-    });
-    ctx.restore();
-
-    // Interior hubs diamonds
-    intData.forEach(ih=>{
-      const[x,y]=ih.px, s=zBoost/_vt.scale;
-      ctx.save();
-      ctx.globalAlpha=0.5+0.2*Math.sin(pulse*2);
-      ctx.shadowColor='#fbbf24'; ctx.shadowBlur=10;
-      ctx.fillStyle='#fbbf24';
-      ctx.beginPath();
-      ctx.moveTo(x,y-5*s);ctx.lineTo(x+4*s,y);ctx.lineTo(x,y+5*s);ctx.lineTo(x-4*s,y);
-      ctx.closePath();ctx.fill();
-      ctx.shadowBlur=0; ctx.globalAlpha=0.85;
-      ctx.font=`bold ${(DETAIL?7.5:7)*s}px "IBM Plex Mono",monospace`;
-      ctx.textAlign='center'; ctx.fillStyle='#fbbf24';
-      ctx.shadowColor='rgba(0,0,0,0.85)'; ctx.shadowBlur=3*s;
-      // Zoom baixo: sigla (GO/MT/MG). Zoom médio+: cidade (Anápolis/Sorriso/Uberaba)
-      ctx.fillText(DETAIL?ih.label:ih.name,x,y-7*s);
-      if(DETAIL){
-        ctx.font=`${6*s}px "IBM Plex Mono",monospace`;
-        ctx.globalAlpha=0.6;
-        ctx.fillText(ih.name,x,y+11*s);
+    // Inércia + rotação automática em repouso
+    if(!_vt.dragging){
+      if(Math.abs(_vt.vlam)>0.002||Math.abs(_vt.vphi)>0.002){
+        _vt.lam+=_vt.vlam*16; _vt.phi=Math.max(-85,Math.min(85,_vt.phi+_vt.vphi*16));
+        _vt.vlam*=0.94;_vt.vphi*=0.94;
+        if(_vt.lam>180)_vt.lam-=360;if(_vt.lam<-180)_vt.lam+=360;
+      } else if(ts-_lastInteract>5000){
+        _vt.lam+=0.018; if(_vt.lam>180)_vt.lam-=360;
       }
-      ctx.restore();
-    });
+    }
+    _updView();
+    R=Math.min(W,H)*0.46*_vt.scale;
+    CX=W/2; CY=H/2;
+    if(!window._globeDots) buildDots();
 
-    // Maritime routes — volume-proportional trails
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,W,H);
+    // fundo espacial
+    ctx.fillStyle='#05070a';
+    ctx.fillRect(0,0,W,H);
+
+    // halo atmosférico
+    const halo=ctx.createRadialGradient(CX,CY,R*0.94,CX,CY,R*1.16);
+    halo.addColorStop(0,'rgba(62,221,199,0.12)');
+    halo.addColorStop(0.5,'rgba(168,255,83,0.05)');
+    halo.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=halo;
+    ctx.beginPath();ctx.arc(CX,CY,R*1.16,0,6.2832);ctx.fill();
+
+    // esfera (oceano)
+    const oc=ctx.createRadialGradient(CX-R*0.28,CY-R*0.3,R*0.1,CX,CY,R);
+    oc.addColorStop(0,'#0d1418');
+    oc.addColorStop(0.65,'#090f13');
+    oc.addColorStop(1,'#05090c');
+    ctx.fillStyle=oc;
+    ctx.beginPath();ctx.arc(CX,CY,R,0,6.2832);ctx.fill();
+
+    ctx.save();
+    ctx.beginPath();ctx.arc(CX,CY,R,0,6.2832);ctx.clip();
+
+    // graticule
+    ctx.strokeStyle='rgba(255,255,255,0.045)';
+    ctx.lineWidth=0.5;
+    for(let ln=-180;ln<180;ln+=30){
+      ctx.beginPath();let st=false;
+      for(let la=-80;la<=84;la+=3){
+        const[x,y,v]=projP(mkPt(ln,la));
+        if(v){if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y);}else st=false;
+      }
+      ctx.stroke();
+    }
+    for(let la=-60;la<=75;la+=15){
+      ctx.beginPath();let st=false;
+      for(let ln=-180;ln<=180;ln+=3){
+        const[x,y,v]=projP(mkPt(ln,la));
+        if(v){if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y);}else st=false;
+      }
+      ctx.stroke();
+    }
+    // equador destacado
+    ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.setLineDash([4,8]);
+    ctx.beginPath();let stq=false;
+    for(let ln=-180;ln<=180;ln+=2){
+      const[x,y,v]=projP(mkPt(ln,0));
+      if(v){if(!stq){ctx.moveTo(x,y);stq=true;}else ctx.lineTo(x,y);}else stq=false;
+    }
+    ctx.stroke();ctx.setLineDash([]);
+
+    // continentes pontilhados
+    if(window._globeDots){
+      const dr=Math.max(0.6,R*0.0042);
+      ctx.fillStyle='rgba(62,221,199,0.34)';
+      for(const d of window._globeDots){
+        const dl=d.lm-_lam0,cdl=Math.cos(dl);
+        const cosc=_s0*d.sf+_c0*d.cf*cdl;
+        if(cosc<=0.001) continue;
+        const x=CX+R*d.cf*Math.sin(dl), y=CY-R*(_c0*d.sf-_s0*d.cf*cdl);
+        ctx.globalAlpha=0.35+cosc*0.5;
+        ctx.fillRect(x-dr,y-dr,dr*2,dr*2);
+      }
+      ctx.globalAlpha=1;
+    }
+    // linha de costa
+    if(_geoLand){
+      ctx.strokeStyle='rgba(62,221,199,0.30)';
+      ctx.lineWidth=0.7;
+      const drawRings=rings=>{rings.forEach(ring=>{
+        if(!ring||ring.length<2)return;
+        ctx.beginPath();let st=false;
+        for(const[lon,lat]of ring){
+          const la=lat*D2R,dl=lon*D2R-_lam0,cf=Math.cos(la),sf=Math.sin(la),cdl=Math.cos(dl);
+          const cosc=_s0*sf+_c0*cf*cdl;
+          if(cosc>0.001){
+            const x=CX+R*cf*Math.sin(dl),y=CY-R*(_c0*sf-_s0*cf*cdl);
+            if(!st){ctx.moveTo(x,y);st=true;}else ctx.lineTo(x,y);
+          } else st=false;
+        }
+        ctx.stroke();
+      });};
+      _geoLand.features.forEach(f=>{
+        const g=f.geometry;if(!g)return;
+        if(g.type==='MultiPolygon')g.coordinates.forEach(p=>drawRings(p));
+        else drawRings(g.coordinates);
+      });
+    }
+
+    const pulse=ts*0.0017, fast=ts*0.0035;
+    const zBoost=Math.min(1.6,Math.pow(_vt.scale,0.4));
+    const DETAIL=_vt.scale>=1.5, DETAIL_HI=_vt.scale>=2.4;
+    const fscale=Math.max(0.8,R/300);
+
+    // rotas internas (ferrovias) — âmbar tracejado
+    ctx.save();
+    ctx.strokeStyle='#fbbf24';ctx.globalAlpha=0.28;ctx.lineWidth=1.1;ctx.setLineDash([4,7]);
+    internalData.forEach(r=>strokeSamples(r.smp,0,r.smp.length-1));
+    ctx.setLineDash([]);ctx.restore();
+
+    // rotas marítimas
     _shipPositions=[];
     const hl=_rotasHL.id;
     routeData.forEach(rd=>{
-      const baseW=(0.7+(rd.vol||1)*0.85)/_vt.scale;
+      const baseW=(0.8+(rd.vol||1)*0.8)*Math.min(1.3,fscale);
       const shipT=((ts*rd.speed)+rd.phase)%1;
-      const isHL=hl===rd.id;
-      const dim=hl&&!isHL;
-      const aMul=dim?0.18:1;
-      const trailA=(isHL?0.34:0.13)*aMul/((dim?aMul:1)||1); // mantém highlight forte
+      const isHL=hl===rd.id, dim=hl&&!isHL;
+      const aMul=dim?0.15:1;
 
+      // trilho completo (tracejado, discreto)
       ctx.save();
-      ctx.strokeStyle=rd.color; ctx.globalAlpha=dim?0.05:(isHL?0.34:0.13);
-      ctx.lineWidth=isHL?Math.max(1.1/_vt.scale,baseW*0.65):Math.max(0.8/_vt.scale,baseW*0.45);
-      ctx.setLineDash([6,16]); ctx.lineJoin='round';
-      ctx.beginPath();
-      rd.p2.forEach(([x,y],i)=>i===0?ctx.moveTo(x,y):ctx.lineTo(x,y));
-      ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+      ctx.strokeStyle=rd.color;
+      ctx.globalAlpha=dim?0.05:(isHL?0.4:0.15);
+      ctx.lineWidth=isHL?baseW*0.7:baseW*0.45;
+      ctx.setLineDash([5,12]);ctx.lineJoin='round';
+      strokeSamples(rd.smp,0,rd.smp.length-1);
+      ctx.setLineDash([]);ctx.restore();
 
       function drawShip(st){
-        const tStart=Math.max(0,st-0.13), steps=36;
+        const pos=shipScreen(rd,st);
+        // rastro: últimos ~11% do arco com alpha crescente
+        const N=rd.smp.length;
+        const iShip=Math.max(1,Math.round(st*(N-1)));
+        const iFrom=Math.max(0,iShip-Math.round(N*0.11));
         ctx.save();
-        for(let i=0;i<steps;i++){
-          const ta=tStart+(i/steps)*(st-tStart);
-          const tb=tStart+((i+1)/steps)*(st-tStart);
-          if(ta<0||tb>1) continue;
-          const[x1,y1]=routePt(rd,ta),[x2,y2]=routePt(rd,tb);
-          ctx.globalAlpha=(0.03+0.72*(i/steps))*aMul;
-          ctx.strokeStyle=rd.color; ctx.lineWidth=baseW; ctx.lineCap='round';
-          ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+        ctx.strokeStyle=rd.color;ctx.lineCap='round';
+        let prev=null;
+        for(let i=iFrom;i<=iShip;i++){
+          const[x,y,v]=projP(rd.smp[i]);
+          if(v&&prev){
+            const k=(i-iFrom)/Math.max(1,iShip-iFrom);
+            ctx.globalAlpha=(0.04+0.7*k)*aMul;
+            ctx.lineWidth=baseW*(0.5+0.5*k);
+            ctx.beginPath();ctx.moveTo(prev[0],prev[1]);ctx.lineTo(x,y);ctx.stroke();
+          }
+          prev=v?[x,y]:null;
         }
-        const[sx,sy]=routePt(rd,st);
-        _shipPositions.push({rd,bx:sx,by:sy}); // store for hover detection
-        const rs=3.5/_vt.scale;
-        ctx.globalAlpha=(0.18+0.14*Math.sin(pulse*2.5+rd.phase*6))*aMul;
-        ctx.strokeStyle=rd.color; ctx.lineWidth=1.5/_vt.scale;
-        ctx.beginPath();ctx.arc(sx,sy,(8+rd.vol*0.8)/_vt.scale,0,Math.PI*2);ctx.stroke();
-        ctx.globalAlpha=aMul;
-        ctx.shadowColor=rd.color; ctx.shadowBlur=(16+rd.vol*2)/_vt.scale;
-        ctx.fillStyle=rd.color;
-        ctx.beginPath();ctx.arc(sx,sy,rs,0,Math.PI*2);ctx.fill();
-        ctx.shadowBlur=0; ctx.restore();
+        if(pos){
+          _shipPositions.push({rd,sx:pos.sx,sy:pos.sy});
+          const rs=3.4*Math.min(1.4,fscale);
+          ctx.globalAlpha=(0.18+0.14*Math.sin(pulse*2.5+rd.phase*6))*aMul;
+          ctx.strokeStyle=rd.color;ctx.lineWidth=1.4;
+          ctx.beginPath();ctx.arc(pos.sx,pos.sy,rs+5+rd.vol*0.8,0,6.2832);ctx.stroke();
+          ctx.globalAlpha=aMul;
+          ctx.shadowColor=rd.color;ctx.shadowBlur=14+rd.vol*2;
+          ctx.fillStyle=rd.color;
+          ctx.beginPath();ctx.arc(pos.sx,pos.sy,rs,0,6.2832);ctx.fill();
+          ctx.shadowBlur=0;
+        }
+        ctx.restore();
       }
-
       drawShip(shipT);
       if(rd.ships>=2) drawShip((shipT+0.5)%1);
       if(rd.ships>=3) drawShip((shipT+0.25)%1);
     });
 
-    // Bottleneck markers + labels no mapa
+    // choke-points
+    _bnScr=[];
     bnData.forEach(b=>{
-      const[x,y]=b.px, s=zBoost/_vt.scale;
+      const[x,y,v]=projP(b.pt); if(!v) return;
+      _bnScr.push({...b,sx:x,sy:y});
+      const s=zBoost*Math.min(1.3,fscale);
       const col=b.status==='ok'?'#A8FF53':b.status==='warn'?'#f59e0b':'#ef5e5e';
       const flicker=b.status==='cong'?0.4+0.5*Math.abs(Math.sin(fast*2+b.lon)):0.6;
       ctx.save();
-      ctx.shadowColor=col; ctx.shadowBlur=(b.status==='cong'?20:6)*s;
-      ctx.globalAlpha=flicker; ctx.strokeStyle=col; ctx.lineWidth=1.8*s;
+      ctx.shadowColor=col;ctx.shadowBlur=(b.status==='cong'?18:6)*s;
+      ctx.globalAlpha=flicker;ctx.strokeStyle=col;ctx.lineWidth=1.6*s;
       if(b.status==='cong'){
         ctx.beginPath();
         ctx.moveTo(x,y-7*s);ctx.lineTo(x+6*s,y+4*s);ctx.lineTo(x-6*s,y+4*s);ctx.closePath();
-        ctx.stroke(); ctx.globalAlpha=flicker*0.5; ctx.fill();
+        ctx.stroke();ctx.globalAlpha=flicker*0.5;ctx.fillStyle=col;ctx.fill();
       } else {
-        ctx.beginPath();ctx.arc(x,y,5*s,0,Math.PI*2);ctx.stroke();
+        ctx.beginPath();ctx.arc(x,y,5*s,0,6.2832);ctx.stroke();
       }
-      ctx.globalAlpha=1; ctx.fillStyle=col; ctx.shadowBlur=3*s;
-      ctx.beginPath();ctx.arc(x,y,2*s,0,Math.PI*2);ctx.fill();
+      ctx.globalAlpha=1;ctx.fillStyle=col;ctx.shadowBlur=3*s;
+      ctx.beginPath();ctx.arc(x,y,2*s,0,6.2832);ctx.fill();
       ctx.shadowBlur=0;
-      // Label
-      const lblOpacity=b.status==='ok'?(DETAIL?0.78:0.55):0.95;
+      const lblOpacity=b.status==='ok'?(DETAIL?0.78:0.5):0.95;
       ctx.globalAlpha=lblOpacity;
-      ctx.font=`bold ${7.5*s}px "IBM Plex Mono",monospace`;
-      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.font=`bold ${7.5*s}px "JetBrains Mono",monospace`;
+      ctx.textAlign='center';ctx.textBaseline='top';
       ctx.fillStyle=b.status==='ok'?'rgba(255,255,255,.85)':col;
-      ctx.shadowColor='rgba(0,0,0,0.9)'; ctx.shadowBlur=3*s;
+      ctx.shadowColor='rgba(0,0,0,0.9)';ctx.shadowBlur=3*s;
       ctx.fillText(b.name,x,y+9*s);
-      // Wait time: sempre em status != ok; em status ok aparece a partir de zoom médio
       if(b.status!=='ok'||DETAIL){
-        ctx.font=`${6.5*s}px "IBM Plex Mono",monospace`;
-        ctx.fillStyle=col;
-        ctx.globalAlpha=b.status==='ok'?0.7:0.95;
+        ctx.font=`${6.5*s}px "JetBrains Mono",monospace`;
+        ctx.fillStyle=col;ctx.globalAlpha=b.status==='ok'?0.7:0.95;
         ctx.fillText(b.wait,x,y+18*s);
       }
-      ctx.shadowBlur=0; ctx.restore();
+      ctx.shadowBlur=0;ctx.restore();
     });
 
-    // Brazilian ports
+    // portos brasileiros
+    _portScr=[];
     destData.forEach(p=>{
-      const[x,y]=p.px, t1=p.tier===1, s=zBoost/_vt.scale;
-      const r=(t1?7:4.5)*s;
+      const[x,y,v]=projP(p.pt); if(!v) return;
+      _portScr.push({...p,sx:x,sy:y});
+      const t1=p.tier===1, s=zBoost*Math.min(1.3,fscale);
+      const r=(t1?6.5:4)*s;
       ctx.save();
-      ctx.shadowColor='#A8FF53'; ctx.shadowBlur=(t1?18:8)*s;
+      ctx.shadowColor='#A8FF53';ctx.shadowBlur=(t1?16:7)*s;
       ctx.globalAlpha=(t1?0.38:0.22)+0.18*Math.sin(pulse+p.lon);
       ctx.fillStyle='#A8FF53';
-      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
-      ctx.globalAlpha=1; ctx.shadowBlur=(t1?7:3)*s;
-      ctx.beginPath();ctx.arc(x,y,(t1?3.2:2)*s,0,Math.PI*2);ctx.fill();
-      ctx.shadowBlur=0; ctx.globalAlpha=0.92; ctx.fillStyle='#A8FF53';
-      ctx.textAlign='center';
-      ctx.shadowColor='rgba(0,0,0,0.85)'; ctx.shadowBlur=3*s;
-      // Zoom baixo: só código (STS/PNG). Zoom médio+: nome completo. Zoom alto: ambos
+      ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();
+      ctx.globalAlpha=1;ctx.shadowBlur=(t1?7:3)*s;
+      ctx.beginPath();ctx.arc(x,y,(t1?3:1.9)*s,0,6.2832);ctx.fill();
+      ctx.shadowBlur=0;ctx.globalAlpha=0.92;
+      ctx.textAlign='center';ctx.textBaseline='alphabetic';
+      ctx.shadowColor='rgba(0,0,0,0.85)';ctx.shadowBlur=3*s;
       const main=DETAIL?p.name:p.code;
-      ctx.font=`${t1?'bold ':''} ${(t1?7.5:6.5)*s}px "IBM Plex Mono",monospace`;
-      ctx.fillText(main,x,y-(t1?12:9)*s);
+      ctx.font=`${t1?'bold ':''}${(t1?7.5:6.5)*s}px "JetBrains Mono",monospace`;
+      ctx.fillText(main,x,y-(t1?11:8)*s);
       if(DETAIL_HI&&t1){
-        ctx.font=`${5.5*s}px "IBM Plex Mono",monospace`;
+        ctx.font=`${5.5*s}px "JetBrains Mono",monospace`;
         ctx.globalAlpha=0.65;
-        ctx.fillText(p.code,x,y+12*s);
+        ctx.fillText(p.code,x,y+13*s);
       }
-      ctx.shadowBlur=0; ctx.restore();
+      ctx.shadowBlur=0;ctx.restore();
     });
 
-    // Origin markers
+    // hubs do interior
+    _intScr=[];
+    intData.forEach(ih=>{
+      const[x,y,v]=projP(ih.pt); if(!v) return;
+      _intScr.push({...ih,sx:x,sy:y});
+      const s=zBoost*Math.min(1.3,fscale);
+      ctx.save();
+      ctx.globalAlpha=0.5+0.2*Math.sin(pulse*2);
+      ctx.shadowColor='#fbbf24';ctx.shadowBlur=9;
+      ctx.fillStyle='#fbbf24';
+      ctx.beginPath();
+      ctx.moveTo(x,y-5*s);ctx.lineTo(x+4*s,y);ctx.lineTo(x,y+5*s);ctx.lineTo(x-4*s,y);
+      ctx.closePath();ctx.fill();
+      ctx.shadowBlur=0;ctx.globalAlpha=0.85;
+      ctx.font=`bold ${7*s}px "JetBrains Mono",monospace`;
+      ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillStyle='#fbbf24';
+      ctx.shadowColor='rgba(0,0,0,0.85)';ctx.shadowBlur=3*s;
+      ctx.fillText(DETAIL?ih.label:ih.name,x,y-7*s);
+      ctx.shadowBlur=0;ctx.restore();
+    });
+
+    // marcadores de origem
     routeData.forEach(rd=>{
-      const[ln,la]=rd.pts[0], [x,y]=proj(ln,la), s=zBoost/_vt.scale;
+      const[x,y,v]=projP(rd.smp[0]); if(!v) return;
+      const s=zBoost*Math.min(1.3,fscale);
       const ph=pulse+rd.phase*Math.PI*2;
       const isHL=hl===rd.id, dim=hl&&!isHL;
       ctx.save();
       ctx.globalAlpha=(0.42+0.28*Math.sin(ph))*(dim?0.18:1);
-      ctx.shadowColor=rd.color; ctx.shadowBlur=10*s;
+      ctx.shadowColor=rd.color;ctx.shadowBlur=9*s;
       ctx.fillStyle=rd.color;
-      ctx.beginPath();ctx.arc(x,y,5.5*s,0,Math.PI*2);ctx.fill();
-      ctx.globalAlpha=dim?0.18:1; ctx.shadowBlur=4*s;
-      ctx.beginPath();ctx.arc(x,y,2.5*s,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(x,y,5*s,0,6.2832);ctx.fill();
+      ctx.globalAlpha=dim?0.18:1;ctx.shadowBlur=4*s;
+      ctx.beginPath();ctx.arc(x,y,2.3*s,0,6.2832);ctx.fill();
       ctx.shadowBlur=0;
-      // Label da origem em zoom alto (ou se rota destacada)
       if((DETAIL_HI||isHL)&&!dim){
-        ctx.font=`bold ${6.5*s}px "IBM Plex Mono",monospace`;
-        ctx.textAlign='center'; ctx.fillStyle=rd.color;
-        ctx.globalAlpha=0.92;
-        ctx.shadowColor='rgba(0,0,0,0.85)'; ctx.shadowBlur=3*s;
+        ctx.font=`bold ${6.5*s}px "JetBrains Mono",monospace`;
+        ctx.textAlign='center';ctx.fillStyle=rd.color;ctx.globalAlpha=0.92;
+        ctx.shadowColor='rgba(0,0,0,0.85)';ctx.shadowBlur=3*s;
         ctx.fillText(rd.name,x,y-10*s);
         ctx.shadowBlur=0;
       }
       ctx.restore();
     });
 
-    // Reset transform (UI on top)
-    ctx.setTransform(1,0,0,1,0,0);
+    ctx.restore(); // fim do clip da esfera
+
+    // aro do globo
+    ctx.strokeStyle='rgba(62,221,199,0.35)';
+    ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(CX,CY,R,0,6.2832);ctx.stroke();
+
     _rotasRAF=requestAnimationFrame(frame);
   }
 
@@ -11445,19 +11470,12 @@ function initRotasPage(){
 }
 
 // Zoom button handlers (global — called from HTML onclick)
-function _rotasZoomBtn(proposedF){
-  const cv=document.getElementById('rotasCanvas');
-  if(!cv) return;
-  const cx=cv.width/2, cy=cv.height/2;
-  const newScale=Math.max(0.8,Math.min(5,_vt.scale*proposedF));
-  const eff=newScale/_vt.scale;
-  _vt.tx=cx-(cx-_vt.tx)*eff;
-  _vt.ty=cy-(cy-_vt.ty)*eff;
-  _vt.scale=newScale;
+function _rotasZoomBtn(f){
+  _vt.scale=Math.max(0.8,Math.min(4,_vt.scale*f));
 }
-function _rotasZoomIn(){_rotasZoomBtn(1.4);}
-function _rotasZoomOut(){_rotasZoomBtn(1/1.4);}
-function _rotasZoomReset(){_vt.scale=1;_vt.tx=0;_vt.ty=0;}
+function _rotasZoomIn(){_rotasZoomBtn(1.35);}
+function _rotasZoomOut(){_rotasZoomBtn(1/1.35);}
+function _rotasZoomReset(){_vt.scale=1;_vt.lam=-28;_vt.phi=-14;}
 
 function _toggleRotasPanel(){
   const shell=document.getElementById('rotasShell');
