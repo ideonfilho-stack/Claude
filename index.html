@@ -11197,6 +11197,24 @@ function initRotasPage(){
     ctx.fillStyle='#05070a';
     ctx.fillRect(0,0,W,H);
 
+    // estrelas (geradas uma vez por tamanho de tela, com cintilação suave)
+    if(!canvas._stars||canvas._stars.w!==W||canvas._stars.h!==H){
+      let seed=(W*73856093^H*19349663)>>>0;
+      const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+      const n=Math.round((W*H)/3200);
+      const arr=[];
+      for(let i=0;i<n;i++){
+        arr.push({x:rnd()*W,y:rnd()*H,r:0.4+rnd()*1.1,a:0.15+rnd()*0.55,tw:rnd()*6.28,ts:0.3+rnd()*1.2});
+      }
+      canvas._stars={w:W,h:H,arr};
+    }
+    for(const st of canvas._stars.arr){
+      ctx.globalAlpha=st.a*(0.55+0.45*Math.sin(ts*0.0008*st.ts+st.tw));
+      ctx.fillStyle=st.r>1.2?'#cfe8ff':'#ffffff';
+      ctx.beginPath();ctx.arc(st.x,st.y,st.r,0,6.2832);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+
     // halo atmosférico
     const halo=ctx.createRadialGradient(CX,CY,R*0.94,CX,CY,R*1.16);
     halo.addColorStop(0,'rgba(62,221,199,0.12)');
