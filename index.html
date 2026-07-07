@@ -3596,7 +3596,7 @@ async function dbClear(store){
 // ── State (substitui localStorage 'imc_v4') ──────────────────────────────
 async function loadS(){
   try{
-    const { data, error } = await _sb().from('user_state').select('state').maybeSingle();
+    const { data, error } = await _sb().from('user_state').select('state,updated_at').maybeSingle();
     if(error){
       // Falha ao carregar: NÃO liberar saves — senão o estado default sobrescreve os dados na nuvem
       console.warn('loadS state', error);
@@ -3613,6 +3613,7 @@ async function loadS(){
     } else {
       initFabs();
     }
+    window._stateBaseTs=data?.updated_at||null; // versão do servidor que este dispositivo conhece
     // Settings (substitui 'imc_apikey')
     const { data: cfg } = await _sb().from('user_settings').select('settings').maybeSingle();
     if(cfg?.settings?.apikey){ S._apikey = cfg.settings.apikey; }
@@ -3626,6 +3627,16 @@ async function loadS(){
     window._loadFailed=true;
   }
 }
+function _applyRemoteState(state,ts){
+  Object.assign(S,state);
+  if(!S.fabs?.length) initFabs();
+  if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
+  if(!S.crm) S.crm={clientes:[],leads:[]};
+  window._stateBaseTs=ts;
+  _dirty=false;
+  try{ renderAll(); }catch(_){ }
+}
+
 async function saveS(){
   if(!S.fabs?.length) return;
   if(!window._stateLoaded) return; // não sobrescrever antes do load inicial concluir
@@ -3634,11 +3645,33 @@ async function saveS(){
   try{
     const u = (await _sb().auth.getUser()).data.user;
     if(!u) return;
+    // GUARD DE CONFLITO: outro dispositivo salvou depois que este carregou?
+    const { data: cur } = await _sb().from('user_state').select('updated_at').maybeSingle();
+    if(cur?.updated_at && window._stateBaseTs && new Date(cur.updated_at) > new Date(window._stateBaseTs)){
+      const { data: srv } = await _sb().from('user_state').select('state,updated_at').maybeSingle();
+      if(srv?.state){
+        // Nada é destruído em silêncio: backup local do estado do servidor antes de decidir
+        try{ localStorage.setItem('imc_conflict_backup', JSON.stringify({ts:srv.updated_at,state:srv.state})); }catch(_){ }
+        const manterLocal=confirm(
+          '⚠️ CONFLITO DE DADOS\n\n'
+          +'Outro dispositivo salvou alterações mais recentes na nuvem.\n\n'
+          +'OK = manter os dados DESTE dispositivo (sobrescreve o outro)\n'
+          +'Cancelar = carregar os dados do outro dispositivo (descarta as alterações não salvas daqui)');
+        if(!manterLocal){
+          _applyRemoteState(srv.state, srv.updated_at);
+          if(d) d.classList.remove('saving');
+          if(l) l.textContent='Sincronizado';
+          return;
+        }
+      }
+    }
+    const now=new Date().toISOString();
     const { error } = await _sb().from('user_state').upsert(
-      { user_id:u.id, state:S, updated_at:new Date().toISOString() },
+      { user_id:u.id, state:S, updated_at:now },
       { onConflict:'user_id' }
     );
     if(error) throw error;
+    window._stateBaseTs=now;
     _dirty=false;
     if(d) d.classList.remove('saving');
     if(l) l.textContent='Salvo '+String(new Date().getHours()).padStart(2,'0')+':'+String(new Date().getMinutes()).padStart(2,'0');
@@ -3650,6 +3683,28 @@ async function saveS(){
     console.error('saveS', e);
   }
 }
+
+// RE-SINCRONIZAÇÃO: ao voltar para uma aba aberta, puxar alterações feitas
+// em outro dispositivo (se esta aba não tiver edições pendentes)
+let _syncChecking=false;
+async function syncIfRemoteNewer(){
+  if(_dirty||_syncChecking||!window._stateLoaded||window._loadFailed) return;
+  _syncChecking=true;
+  try{
+    const { data } = await _sb().from('user_state').select('state,updated_at').maybeSingle();
+    if(data?.state && data.updated_at && window._stateBaseTs && new Date(data.updated_at) > new Date(window._stateBaseTs)){
+      _applyRemoteState(data.state, data.updated_at);
+      const l=document.getElementById('saveLbl');
+      if(l) l.textContent='Sincronizado de outro dispositivo';
+      if(typeof _crmToast==='function') _crmToast('↻ Dados atualizados de outro dispositivo');
+    } else if(data?.updated_at && !window._stateBaseTs){
+      window._stateBaseTs=data.updated_at;
+    }
+  }catch(e){ console.warn('sync', e); }
+  _syncChecking=false;
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') syncIfRemoteNewer(); });
+window.addEventListener('focus', syncIfRemoteNewer);
 async function saveSettings(patch){
   try{
     const u = (await _sb().auth.getUser()).data.user; if(!u) return;
