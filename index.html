@@ -9154,6 +9154,8 @@ function _fmtTeorMicro(v){
   return String(n).replace('.',',');
 }
 function _cotResumoFmt(item){
+  // Matéria-prima: usar o nome (KCL, Ureia…) em vez do grade NPK
+  if(item.type==='mp') return item.grade||item.formula||'';
   const nt={};
   (item.nt||[]).forEach(n=>{
     const k=n.lbl==='P₂O₅'?'P':n.lbl==='K₂O'?'K':n.lbl;
