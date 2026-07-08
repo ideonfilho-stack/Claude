@@ -9167,8 +9167,10 @@ function _cotResumoFmt(item){
     if(nt[k]>0) s+=' + '+_fmtTeorMicro(nt[k])+'% '+k;
   });
   // Tecnologia (gravada no grade do item na hora da cotação)
-  const techs=['Fertigran P','Super N Pro','UHF'].filter(t=>String(item.grade||'').includes(t));
-  if(techs.length) s+=' - '+techs.join(' + ');
+  const sufs=['Fertigran P','Super N Pro','UHF'].filter(t=>String(item.grade||'').includes(t));
+  // NAM (nitrato de amônio) na mistura → título como as tecnologias
+  if((item.mats||[]).some(m=>/\bNAM\b/i.test(m.name||''))) sufs.push('NAM');
+  if(sufs.length) s+=' - '+sufs.join(' + ');
   return s;
 }
 function _cotVencimento(prazo){
@@ -9184,31 +9186,31 @@ function copiarResumoCotacao(){
   const itens=S.cotacao||[];
   if(!itens.length){alert('Cotação vazia.');return;}
   const fx=S.fx||5.20;
-  const linhas=itens.map(item=>{
+  const linha=item=>{
     const P=_cotP_of(item), c=_cotCalcVenda(item.custo,P);
     const v=P.cur==='BRL'?c.venda*fx:c.venda;
     const moeda=P.cur==='BRL'?'R$':'U$';
     return _cotResumoFmt(item)+' - '+moeda+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  };
+  const freteLinha=item=>{
+    const P=_cotP_of(item);
+    return (+P.frete||0)>0?'Frete CIF - Posto Fazenda':'Frete FOB - '+(item.fabs||'Fábrica');
+  };
+  const vencs=itens.map(it=>_cotVencimento(_cotP_of(it).prazo||0));
+  const multiVenc=new Set(vencs.map(String)).size>1;
+  const fretes=itens.map(freteLinha);
+  const multiFrete=new Set(fretes).size>1;
+  // Vencimento/frete diferentes entre itens → abaixo de cada item, com linha em branco
+  const blocos=itens.map((item,i)=>{
+    let b=linha(item);
+    if(multiVenc&&vencs[i]) b+='\nVencimento: '+vencs[i];
+    if(multiFrete) b+='\n'+fretes[i];
+    return b;
   });
-  let txt=linhas.join('\n')+'\n';
-  // Vencimento: linha única se todos os prazos iguais; senão, por item
-  const prazos=[...new Set(itens.map(it=>_cotP_of(it).prazo||0))];
-  if(prazos.length===1&&prazos[0]>0){
-    txt+='\nVencimento: '+_cotVencimento(prazos[0])+'\n';
-  } else if(prazos.some(p=>p>0)){
-    txt+='\n'+itens.map((it,i)=>{
-      const p=_cotP_of(it).prazo||0;
-      return p>0?('Item '+(i+1)+' — Vencimento: '+_cotVencimento(p)):null;
-    }).filter(Boolean).join('\n')+'\n';
-  }
-  // Frete: CIF se qualquer item tem frete > 0; senão FOB + fábrica(s)
-  const temFrete=itens.some(it=>(+_cotP_of(it).frete||0)>0);
-  if(temFrete){
-    txt+='\nFrete CIF - Posto Fazenda\n';
-  } else {
-    const fabs=[...new Set(itens.map(it=>it.fabs).filter(Boolean))];
-    txt+='\nFrete FOB - '+(fabs.join(' / ')||'Fábrica')+'\n';
-  }
+  let txt=blocos.join(multiVenc||multiFrete?'\n\n':'\n')+'\n';
+  if(!multiVenc&&vencs[0]) txt+='\nVencimento: '+vencs[0]+'\n';
+  if(!multiFrete) txt+='\n'+fretes[0]+'\n';
+  else txt+='\n';
   txt+='*Cotação valida para o momento, preços podem ser alterados sem aviso prévio.\nConsultar validade antes do fechamento.';
   // Copiar (com fallback para contextos sem clipboard API)
   const done=()=>{ if(typeof _crmToast==='function') _crmToast('✓ Resumo copiado'); else alert('Resumo copiado!'); };
