@@ -2714,6 +2714,10 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.85rem;display:flex;align-items:center;gap:7px;position:relative">
         <svg class="icon" viewBox="0 0 24 24" style="color:var(--green)"><polyline points="20 6 9 17 4 12"/></svg>
         Resumo da Cotação
+        <button class="btn btn-sm" onclick="copiarResumoCotacao()" style="margin-left:auto;border-color:rgba(168,255,83,0.35);color:var(--green)" title="Copiar resumo para enviar ao cliente">
+          <svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copiar
+        </button>
       </div>
       <div id="cotTotalContent" style="position:relative"></div>
     </div>
@@ -9130,11 +9134,94 @@ function setItemParamLive(idx, key, value){
   r+=itens.map((item,i)=>{
     const P=_cotP_of(item);const c=_cotCalcVenda(item.custo,P);
     const F=v=>_cotFI(v,P.cur);const TC=v=>_cotTC(v,P.cur);
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+F(TC(c.venda))+'/t</div><div style="font-size:11px;color:var(--amber)">'+F(TC(c.venda*P.qtd))+'</div></div></div>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+F(TC(c.venda))+'/t</div><div style="font-size:11px;color:var(--amber)">'+F(TC(c.venda*P.qtd))+'</div></div></div>';
   }).join('');
   r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral (USD)</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totU,'USD')+'</div><div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:4px">'+fmtMoney(totU*S.fx,'BRL')+'</div></div></div>';
   tc.innerHTML=r;
 }
+// ── RESUMO DA COTAÇÃO — formatação comercial + copiar ────────────────────────
+// "08-30-10 + 1,5% S + 0,23% B - Fertigran P"
+function _fmtTeorNPK(v){
+  const n=+v||0;
+  const int=Math.floor(n);
+  let s=String(int).padStart(2,'0');
+  const dec=Math.round((n-int)*100);
+  if(dec>0) s+=','+String(dec).padStart(2,'0').replace(/0$/,'');
+  return s;
+}
+function _fmtTeorMicro(v){
+  const n=Math.round((+v||0)*100)/100;
+  return String(n).replace('.',',');
+}
+function _cotResumoFmt(item){
+  const nt={};
+  (item.nt||[]).forEach(n=>{
+    const k=n.lbl==='P₂O₅'?'P':n.lbl==='K₂O'?'K':n.lbl;
+    nt[k]=+n.val||0;
+  });
+  let s=_fmtTeorNPK(nt.N)+'-'+_fmtTeorNPK(nt.P)+'-'+_fmtTeorNPK(nt.K);
+  // S, Ca e demais micros na ordem padrão dos nutrientes
+  ['S','Ca','Mg','Cl','B','Cu','Zn','Mn','Fe','Mo'].forEach(k=>{
+    if(nt[k]>0) s+=' + '+_fmtTeorMicro(nt[k])+'% '+k;
+  });
+  // Tecnologia (gravada no grade do item na hora da cotação)
+  const techs=['Fertigran P','Super N Pro','UHF'].filter(t=>String(item.grade||'').includes(t));
+  if(techs.length) s+=' - '+techs.join(' + ');
+  return s;
+}
+function _cotVencimento(prazo){
+  if(!prazo||prazo<=0) return null;
+  const d=new Date();
+  const mTot=d.getMonth()+prazo;            // mês atual não conta
+  const y=d.getFullYear()+Math.floor(mTot/12);
+  const m=(mTot%12)+1;
+  const dia=m===2?28:30;                    // base dia 30 (fevereiro: 28)
+  return String(dia).padStart(2,'0')+'/'+String(m).padStart(2,'0')+'/'+y;
+}
+function copiarResumoCotacao(){
+  const itens=S.cotacao||[];
+  if(!itens.length){alert('Cotação vazia.');return;}
+  const fx=S.fx||5.20;
+  const linhas=itens.map(item=>{
+    const P=_cotP_of(item), c=_cotCalcVenda(item.custo,P);
+    const v=P.cur==='BRL'?c.venda*fx:c.venda;
+    const moeda=P.cur==='BRL'?'R$':'U$';
+    return _cotResumoFmt(item)+' - '+moeda+' '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  });
+  let txt=linhas.join('\n')+'\n';
+  // Vencimento: linha única se todos os prazos iguais; senão, por item
+  const prazos=[...new Set(itens.map(it=>_cotP_of(it).prazo||0))];
+  if(prazos.length===1&&prazos[0]>0){
+    txt+='\nVencimento: '+_cotVencimento(prazos[0])+'\n';
+  } else if(prazos.some(p=>p>0)){
+    txt+='\n'+itens.map((it,i)=>{
+      const p=_cotP_of(it).prazo||0;
+      return p>0?('Item '+(i+1)+' — Vencimento: '+_cotVencimento(p)):null;
+    }).filter(Boolean).join('\n')+'\n';
+  }
+  // Frete: CIF se qualquer item tem frete > 0; senão FOB + fábrica(s)
+  const temFrete=itens.some(it=>(+_cotP_of(it).frete||0)>0);
+  if(temFrete){
+    txt+='\nFrete CIF - Posto Fazenda\n';
+  } else {
+    const fabs=[...new Set(itens.map(it=>it.fabs).filter(Boolean))];
+    txt+='\nFrete FOB - '+(fabs.join(' / ')||'Fábrica')+'\n';
+  }
+  txt+='*Cotação valida para o momento, preços podem ser alterados sem aviso prévio.\nConsultar validade antes do fechamento.';
+  // Copiar (com fallback para contextos sem clipboard API)
+  const done=()=>{ if(typeof _crmToast==='function') _crmToast('✓ Resumo copiado'); else alert('Resumo copiado!'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>{_copyFallback(txt);done();});
+  } else { _copyFallback(txt); done(); }
+}
+function _copyFallback(txt){
+  const ta=document.createElement('textarea');
+  ta.value=txt; ta.style.cssText='position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try{document.execCommand('copy');}catch(_){}
+  ta.remove();
+}
+
 // ── COPIAR PARÂMETROS ENTRE LINHAS ───────────────────────────────────────────
 let _copiarFromIdx = null;
 const PARAMS_COPIADOS = ['taxa','prazo','com','frete','embalagem','cur','cliente','desc'];
