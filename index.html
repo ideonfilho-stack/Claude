@@ -9173,12 +9173,29 @@ function _cotResumoFmt(item){
   if(sufs.length) s+=' - '+sufs.join(' + ');
   return s;
 }
+// Feriados nacionais BR do ano (fixos + móveis via Páscoa/algoritmo de Meeus)
+function _feriadosBR(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),
+        g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,
+        l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const mes=Math.floor((h+l-7*m+114)/31), dia=((h+l-7*m+114)%31)+1;
+  const pascoa=new Date(y,mes-1,dia);
+  const off=n=>{const t=new Date(pascoa);t.setDate(t.getDate()+n);return t;};
+  const datas=[[1,1],[4,21],[5,1],[9,7],[10,12],[11,2],[11,15],[11,20],[12,25]]
+    .map(([mm,dd])=>new Date(y,mm-1,dd))
+    .concat([off(-48),off(-47),off(-2),off(60)]); // Carnaval seg/ter, Sexta Santa, Corpus Christi
+  return new Set(datas.map(t=>(t.getMonth()+1)*100+t.getDate()));
+}
 function _cotVencimento(prazo){
   const d=new Date();
   if(!prazo||prazo<=0){
-    // À vista (prazo 0): último dia ÚTIL do mês atual
+    // À vista (prazo 0): último dia ÚTIL do mês atual (pula fds e feriados nacionais)
     const ult=new Date(d.getFullYear(),d.getMonth()+1,0); // último dia do mês
-    while(ult.getDay()===0||ult.getDay()===6) ult.setDate(ult.getDate()-1); // recua sáb/dom
+    let fer=_feriadosBR(ult.getFullYear());
+    while(ult.getDay()===0||ult.getDay()===6||fer.has((ult.getMonth()+1)*100+ult.getDate())){
+      ult.setDate(ult.getDate()-1);
+      if(ult.getFullYear()!==d.getFullYear()) fer=_feriadosBR(ult.getFullYear());
+    }
     return String(ult.getDate()).padStart(2,'0')+'/'+String(ult.getMonth()+1).padStart(2,'0')+'/'+ult.getFullYear();
   }
   const mTot=d.getMonth()+prazo;            // mês atual não conta
