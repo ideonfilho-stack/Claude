@@ -9174,8 +9174,13 @@ function _cotResumoFmt(item){
   return s;
 }
 function _cotVencimento(prazo){
-  if(!prazo||prazo<=0) return null;
   const d=new Date();
+  if(!prazo||prazo<=0){
+    // À vista (prazo 0): último dia ÚTIL do mês atual
+    const ult=new Date(d.getFullYear(),d.getMonth()+1,0); // último dia do mês
+    while(ult.getDay()===0||ult.getDay()===6) ult.setDate(ult.getDate()-1); // recua sáb/dom
+    return String(ult.getDate()).padStart(2,'0')+'/'+String(ult.getMonth()+1).padStart(2,'0')+'/'+ult.getFullYear();
+  }
   const mTot=d.getMonth()+prazo;            // mês atual não conta
   const y=d.getFullYear()+Math.floor(mTot/12);
   const m=(mTot%12)+1;
