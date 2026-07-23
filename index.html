@@ -3422,12 +3422,10 @@ function fl2(v){ return (Math.floor(v*100)/100).toFixed(2); }
 // Regra: NPK sempre presentes (mesmo zerados), micros somente se >0
 // buildFormulaStr → string limpa para armazenamento (sem HTML)
 function buildFormulaStr(N, reqs, matsArr){
+  // Mostra TODOS os nutrientes presentes (>0.01), independente de min/máx definidos
   const macroStr = fl2(N.N||0)+'-'+fl2(N.P||0)+'-'+fl2(N.K||0);
-  const microStr = NUTS.filter((n,i)=>{
-    if(['N','P','K'].includes(n.k)) return false;
-    const reqOn = reqs && reqs[i] && reqs[i].on;
-    return reqOn && (N[n.k]||0)>0;
-  }).map(n=>fl2(N[n.k]||0)+'%'+n.lbl).join(' + ');
+  const microStr = NUTS.filter(n=>!['N','P','K'].includes(n.k) && (N[n.k]||0)>0.01)
+    .map(n=>fl2(N[n.k]||0)+'%'+n.lbl).join(' + ');
   let base = microStr ? macroStr+' + '+microStr : macroStr;
   const suf = tratamentoSuffix(null, matsArr);
   return suf ? base+' '+suf : base;
@@ -3445,6 +3443,8 @@ function tratamentoSuffix(trat, matsArr){
     if(ok) parts.push('Super N Pro');
   }
   if(t.uhf) parts.push('UHF');
+  // NAM (nitrato de amônio) na mistura → título, como as tecnologias
+  if(matsArr && matsArr.some(m=>/\bNAM\b/i.test(m.name||''))) parts.push('NAM');
   return parts.join(' + ');
 }
 // colorFormula → HTML colorizado por nutriente (para exibição)
@@ -3456,11 +3456,8 @@ function colorFormula(N, reqs){
             + '<span style="color:'+cP+';font-weight:800">'+fl2(N.P||0)+'</span>'
             + '<span style="color:var(--text3);font-weight:600">-</span>'
             + '<span style="color:'+cK+';font-weight:800">'+fl2(N.K||0)+'</span>';
-  const micros = NUTS.filter((n,i)=>{
-    if(['N','P','K'].includes(n.k)) return false;
-    const reqOn = reqs && reqs[i] && reqs[i].on;
-    return reqOn && (N[n.k]||0)>0;
-  }).map(n=>'<span style="color:'+n.color+';font-weight:700">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join('<span style="color:var(--text3);font-weight:600"> + </span>');
+  const micros = NUTS.filter(n=>!['N','P','K'].includes(n.k) && (N[n.k]||0)>0.01)
+    .map(n=>'<span style="color:'+n.color+';font-weight:700">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join('<span style="color:var(--text3);font-weight:600"> + </span>');
   return micros ? npk+'<span style="color:var(--text3);font-weight:600"> + </span>'+micros : npk;
 }
 // colorFormulaFromStr → reconstrói versão colorizada a partir de string já armazenada
@@ -6065,7 +6062,7 @@ function _processResult(res, qty, lote){
     S.hist.push({date:_dd+'/'+_mm+'/'+_yy,costUSD:res.cpt,fac:fab().name,grade:_gradeFull});
     if(S.hist.length>30) S.hist.shift();
     dbAdd('formulacoes',{fabs:fab().name,grade:_gradeFull,formula:buildFormulaStr(res.nt,S.reqs,res.mats),custo:res.cpt,mats:res.mats,nt:res.nt});
-    window._crmLastFormulacao={grade:_gradeFull,fabs:fab().name,custo:res.cpt,qty,nt:NUTS.filter((_,i)=>S.reqs[i]&&S.reqs[i].on).map(n=>({lbl:n.lbl,val:fl2(res.nt[n.k]||0)})),mats:(()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})()};
+    window._crmLastFormulacao={grade:_gradeFull,fabs:fab().name,custo:res.cpt,qty,nt:NUTS.filter(n=>['N','P','K'].includes(n.k)||(res.nt[n.k]||0)>0.01).map(n=>({lbl:n.lbl,val:fl2(res.nt[n.k]||0)})),mats:(()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})()};
     renderRes(res,qty,lote);
     sched();
   },150);
@@ -6525,7 +6522,7 @@ function confirmarAddPropFormula(){
     fabs:fabNome,
     custo:res.res.cpt, // USD/t
     mats:res.res.mats.map((m,i)=>({name:m.name, kg:kgs[i], pct:fl2(res.res.fracs[i]*100)})),
-    nt:NUTS.filter((_,i)=>S.reqs[i]&&S.reqs[i].on).map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0)})),
+    nt:NUTS.filter(n=>['N','P','K'].includes(n.k)||(N[n.k]||0)>0.01).map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0)})),
     // Schema V11.1 — taxa, comissão, embalagem, cliente por item
     params:{ qty, vcto, valor:valorIn, valorCur, frete:freteIn, freteCur, taxa:1.6, comissao:0, embalagem:'bag', cliente:'' }
   });
@@ -8060,7 +8057,7 @@ function incluirNaCotacao(){
     custo: res.cpt,           // USD/t
     qty,                      // kg
     mats: (()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})(),
-    nt: NUTS.filter((_,i)=>S.reqs[i]&&S.reqs[i].on).map(n=>({lbl:n.lbl, val:fl2(N[n.k]||0)})),
+    nt: NUTS.filter(n=>['N','P','K'].includes(n.k)||(N[n.k]||0)>0.01).map(n=>({lbl:n.lbl, val:fl2(N[n.k]||0)})),
     // Parâmetros por item (V11.1)
     params: { taxa:1.6, prazo:1, com:0, frete:0, qtd:1, embalagem:'bag', cur:'USD', cliente:'' }
   });
@@ -9140,14 +9137,10 @@ function setItemParamLive(idx, key, value){
   tc.innerHTML=r;
 }
 // ── RESUMO DA COTAÇÃO — formatação comercial + copiar ────────────────────────
-// "08-30-10 + 1,5% S + 0,23% B - Fertigran P"
+// "08-30-24 + 1,5% S + 0,23% B - Fertigran P"
+// NPK: parte inteira apenas (sem arredondar), mínimo 2 dígitos. Ex: 3,9 → "03"
 function _fmtTeorNPK(v){
-  const n=+v||0;
-  const int=Math.floor(n);
-  let s=String(int).padStart(2,'0');
-  const dec=Math.round((n-int)*100);
-  if(dec>0) s+=','+String(dec).padStart(2,'0').replace(/0$/,'');
-  return s;
+  return String(Math.floor(+v||0)).padStart(2,'0');
 }
 function _fmtTeorMicro(v){
   const n=Math.round((+v||0)*100)/100;
@@ -9166,11 +9159,11 @@ function _cotResumoFmt(item){
   ['S','Ca','Mg','Cl','B','Cu','Zn','Mn','Fe','Mo'].forEach(k=>{
     if(nt[k]>0) s+=' + '+_fmtTeorMicro(nt[k])+'% '+k;
   });
-  // Tecnologia (gravada no grade do item na hora da cotação)
-  const sufs=['Fertigran P','Super N Pro','UHF'].filter(t=>String(item.grade||'').includes(t));
-  // NAM (nitrato de amônio) na mistura → título como as tecnologias
-  if((item.mats||[]).some(m=>/\bNAM\b/i.test(m.name||''))) sufs.push('NAM');
-  if(sufs.length) s+=' - '+sufs.join(' + ');
+  // Tecnologia + NAM (do grade gravado na cotação e/ou das MPs), sem duplicar
+  const sufSet=new Set();
+  ['Fertigran P','Super N Pro','UHF','NAM'].forEach(t=>{ if(String(item.grade||'').includes(t)) sufSet.add(t); });
+  if((item.mats||[]).some(m=>/\bNAM\b/i.test(m.name||''))) sufSet.add('NAM');
+  if(sufSet.size) s+=' - '+[...sufSet].join(' + ');
   return s;
 }
 // Feriados nacionais BR do ano (fixos + móveis via Páscoa/algoritmo de Meeus)
