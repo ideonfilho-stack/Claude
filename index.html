@@ -3356,6 +3356,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
   </div>
   <div id="crmDashView" style="display:none">
     <div id="crmDashFilters" class="fin-filterbar">
+      <div class="fin-filter-group"><span class="fin-filter-lbl">Supervisão</span><span id="crmDashSupChips"></span></div>
       <div class="fin-filter-group"><span class="fin-filter-lbl">Categoria</span><span id="crmDashCatChips"></span></div>
       <div class="fin-filter-group"><span class="fin-filter-lbl">Subcategoria</span><span id="crmDashSubChips"></span></div>
     </div>
@@ -3366,6 +3367,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <div class="fin-card"><div class="fin-card-title">Market Share Total</div><div style="height:240px"><canvas id="crmDashPie"></canvas></div></div>
     </div>
     <div class="fin-card" id="crmDashCompetTable" style="margin-top:16px"></div>
+    <div class="fin-card" id="crmDashSupTable" style="margin-top:16px"></div>
   </div>
   <!-- Detail modal (shared for lead and client) -->
   <div id="crmModalOverlay" class="crm-modal-overlay" style="display:none" onclick="if(event.target===this)fecharCrmModal()">
@@ -11863,6 +11865,26 @@ const CRM_EMPRESAS=[
 ];
 const CRM_PRODUTOS_FERTIGRAN=['Convencional','Fertigran P','Super N Pro','UHF','Mastergran'];
 const CRM_SAFRAS=[{key:'verao',lbl:'Verão'},{key:'irrigado',lbl:'Irrigado'},{key:'safrinha',lbl:'Safrinha'}];
+const CRM_SUPERVISOES=['Rio Verde II'];
+// Janelas comerciais da planilha de supervisão. A janela "safrinha" agrega
+// safrinha + irrigado, como na planilha (Pot. de compra Safrinha e Irrigado).
+const CRM_JANELAS=[
+  {key:'verao',   lbl:'Safra Verão 26/27', periodo:'abr/2026 – out/2026', potKeys:['potencialVerao'],                       rodKey:'rodadoVerao'},
+  {key:'safrinha',lbl:'Safrinha 2027',     periodo:'nov/2026 – mar/2027', potKeys:['potencialSafrinha','potencialIrrigado'],rodKey:'rodadoSafrinha'},
+];
+// Mercado rodado informado no cliente (planilha) por safra. null/'' ⇒ cai para a soma dos leads.
+const CRM_RODADO_KEYS={verao:'rodadoVerao',irrigado:'rodadoIrrigado',safrinha:'rodadoSafrinha'};
+function crmEmpMeta(k){
+  if(k==='naoident') return {lbl:'Não identificado',color:'#6b7280'};
+  return CRM_EMPRESAS.find(e=>e.key===k)||{lbl:k,color:'#8A9290'};
+}
+// Volume rodado de um cliente numa safra: o número da planilha manda; sem ele, usa os leads.
+function crmRodadoCliente(cli,safra,leadFallback){
+  const v=cli[CRM_RODADO_KEYS[safra]];
+  if(v!==undefined&&v!==null&&v!=='') return +v||0;
+  return (leadFallback||{})[safra]||0;
+}
+function crmPotJanela(cli,jan){return jan.potKeys.reduce((a,k)=>a+(+cli[k]||0),0);}
 
 function crmId(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function crmNow(){return new Date().toISOString();}
@@ -11887,54 +11909,79 @@ function renderCRM(){
   else renderClientesGrid();
 }
 
+// Planilha de supervisão — Rio Verde II. Colunas:
+// [nome, contato, município, telefone, e-mail,
+//  áreaVerão, áreaIrrigado, áreaSafrinha,
+//  potVerão, potIrrigado, potSafrinha, potTotal,
+//  supervisão, mercado rodado Verão 26/27, mercado rodado Safrinha 2027 (safrinha+irrigado)]
+const CRM_SEED_CLIENTES=[
+  ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650,'Rio Verde II',4500,6000],
+  ['ALESSANDRO CHIOGNA','Alessandro','Castelândia','064-9 9209-1280','achiogna@uol.com.br',2500,0,1000,875,0,500,1375,'Rio Verde II',0,0],
+  ['APARECIDO ALDEMIR COCARELLI','Elton','Rio Verde','064-9 9933-3034','tatiana@cocarelii.com.br',6000,0,6000,2100,0,3000,5100,'Rio Verde II',900,2000],
+  ['BRUNO ABREU LEÃO','Bruno Abreu','Rio Verde','','',2600,0,2600,910,0,1300,2210,'Rio Verde II',0,0],
+  ['CARGILL BIOENERGIA','Juliano Souza','Quirinópolis','034-9 9994-6924','cleber_cabral@sjcbioenergia.com.br',65000,0,15000,22750,0,7500,30250,'Rio Verde II',10000,0],
+  ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU','Tiago','Rio Verde','067-9 9856-6272','tiago@cargill.com',75000,0,40000,26250,0,20000,46250,'Rio Verde II',25000,5000],
+  ['CEREAL OURO','Arthur','Rio Verde','064 99975-0989','',21200,0,10000,7420,0,5000,12420,'Rio Verde II',7420,0],
+  ['DANIEL PRANTE','Daniel','Montividiu','64 99213-3434','',17000,0,13000,5950,0,6500,12450,'Rio Verde II',5950,0],
+  ['DIEGO LOBON','Diego Filho','Montividiu','(64) 99925-8005','lobon.jimenez@gmail.com',14800,0,13500,5180,0,6750,11930,'Rio Verde II',5180,0],
+  ['DIRCEU ZANCHE','Dirceu','Rio Verde','064 99870-101','',1300,0,1300,455,0,650,1105,'Rio Verde II',0,0],
+  ['EDGAR LEÃO','Humberto','Rio Verde','','',4000,0,3500,1400,0,1750,3150,'Rio Verde II',0,0],
+  ['FAMÍLIA CESCA','Alysson Cesca','Rio Verde','064-9 9987-0757','kasuecesca@gmail.com',9000,0,6000,3150,0,3000,6150,'Rio Verde II',2400,0],
+  ['FAZENDA REUNIDAS BAUMGART','Claudio','Rio Verde','064-9 9218-5237','',6000,0,3000,2100,0,1500,3600,'Rio Verde II',2100,0],
+  ['GRUPO CASSOL','Marcos','Rio Verde','(64) 99977-0238','marcos.dir@aclmaquinas.com.br',30000,0,24000,10500,0,12000,22500,'Rio Verde II',8700,0],
+  ['GRUPO CBAGRO','Josiel','Rio Verde','064-9 9987-8663','compras2.cbagro@uol.com.br',34000,0,28000,11900,0,14000,25900,'Rio Verde II',7210,0],
+  ['GRUPO G5','Elias','Rio Verde','064-9 9987-8239','',60000,0,40000,21000,0,20000,41000,'Rio Verde II',21000,20000],
+  ['GRUPO GAPES','Zizo','Rio Verde','64 99641-0323','zizo@gapescna.agr.br',100000,0,80000,35000,0,40000,75000,'Rio Verde II',35000,20400],
+  ['GRUPO SOMA','Cida','Rio Verde','064-9 9994-6576','regis@somaagronegocio.com.br',80000,0,60000,28000,0,30000,58000,'Rio Verde II',15400,10000],
+  ['GRUPO TERRA FORTE','Maicon','Rio Verde','64 99604-2058','administrativo@grupoterraforte.com',12000,0,8000,4200,0,4000,8200,'Rio Verde II',0,0],
+  ['GRUPO VALE RIO','Chiquinho','Rio Verde','64 98407-9729','',4000,0,2000,1400,0,1000,2400,'Rio Verde II',0,0],
+  ['HELIO FERREIRA LIMA','Helio','Rio Verde','(64) 99987-2923','agrocastrorv@terra.com.br',4000,0,3000,1400,0,1500,2900,'Rio Verde II',1400,0],
+  ['JOAO DOS SANTOS CANCIANO','João dos Santos','Rio Verde','(64) 9671-7666','joaoscanciano@gmail.com',3750,0,3750,1313,0,1875,3188,'Rio Verde II',1313,0],
+  ['JOSÉ DIOGO','José Diogo','Rio Verde','064-9 9987-0536','zediogoagrorv@gmail.com',4000,0,2000,1400,0,1000,2400,'Rio Verde II',0,0],
+  ['JOSE ROBERTO BRUCELLI','Jose Roberto Brucelli','Rio Verde','(64) 9987-7360','jrbrucceli@uol.com.br',4500,0,4000,1575,0,2000,3575,'Rio Verde II',460,0],
+  ['JUNIOR RIZZI','Junior','Rio Verde','64 9 9217-0462','',12000,0,7000,4200,0,3500,7700,'Rio Verde II',4200,0],
+  ['SEBASTIÃO CRUVINEL','Sebastião','Montividiu','64 99642-8284','tiaocruvinel@uol.com.br',2000,0,1500,700,0,750,1450,'Rio Verde II',0,0],
+  ['SEMENTES VITORIA','Zito','Montividiu','064 99246-0087','',3000,500,500,1050,0,250,1300,'Rio Verde II',1050,0],
+  ['SILMAR / LINDOMAR CRUVINEL','Lindomar','Montividiu','64 99641-1833','lindomaragro@gmail.com',10000,0,7000,3500,0,3500,7000,'Rio Verde II',0,0],
+  ['VALDIR ANTONIO JACOMINI','Guilherme','Rio Verde','064-9 9987-1025','grupojacomini@yahoo.com.br',3500,0,2000,1225,0,1000,2225,'Rio Verde II',0,0],
+  ['WALTER DELFINO MUNIZ','Camilla','Rio Verde','064-9 9609-9406','delfinomuniz@hotmail.com',8000,0,4000,2800,0,2000,4800,'Rio Verde II',1900,0],
+];
+
 function _seedCrmClientes(){
-  if(S.crm._clientesSeedV1) return; // seed já rodou — não ressuscitar clientes apagados
-  if(S.crm.clientes.length){ S.crm._clientesSeedV1=true; return; }
+  if(S.crm._clientesSeedV1){ _migrarCrmSupervisao(); return; } // seed já rodou — não ressuscitar clientes apagados
+  if(S.crm.clientes.length){ S.crm._clientesSeedV1=true; _migrarCrmSupervisao(); return; }
   if(window._authEmail !== 'ideondw@gmail.com') return;
   S.crm._clientesSeedV1=true;
+  S.crm._supervisaoSeedV1=true;
   const now=crmNow();
-  const D=[
-    ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650],
-    ['ALESSANDRO CHIOGNA','Alessandro','Castelândia','064-9 9209-1280','achiogna@uol.com.br',2500,0,1000,875,0,500,1375],
-    ['APARECIDO ALDEMIR COCARELLI','Elton','Rio Verde','064-9 9933-3034','tatiana@cocarelii.com.br',6000,0,6000,2100,0,3000,5100],
-    ['BRUNO ABREU LEÃO','Bruno Abreu','Rio Verde','','',2600,0,2600,910,0,1300,2210],
-    ['CARGILL BIOENERGIA','Juliano Souza','Quirinópolis','034-9 9994-6924','cleber_cabral@sjcbioenergia.com.br',65000,0,15000,22750,0,7500,30250],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU','Tiago','Rio Verde','067-9 9856-6272','tiago@cargill.com',75000,0,40000,26250,0,20000,46250],
-    ['CEREAL OURO','Arthur','Rio Verde','064 99975-0989','',21200,0,10000,7420,0,5000,12420],
-    ['DANIEL PRANTE','Daniel','Montividiu','64 99213-3434','',17000,0,13000,5950,0,6500,12450],
-    ['DIEGO LOBON','Diego Filho','Montividiu','(64) 99925-8005','lobon.jimenez@gmail.com',14800,0,13500,5180,0,6750,11930],
-    ['DIRCEU ZANCHE','Dirceu','Rio Verde','064 99870-101','',1300,0,1300,455,0,650,1105],
-    ['EDGAR LEÃO','Humberto','Rio Verde','','',4000,0,3500,1400,0,1750,3150],
-    ['FAMÍLIA CESCA','Alysson Cesca','Rio Verde','064-9 9987-0757','kasuecesca@gmail.com',9000,0,6000,3150,0,3000,6150],
-    ['FAZENDA REUNIDAS BAUMGART','Claudio','Rio Verde','064-9 9218-5237','',6000,0,3000,2100,0,1500,3600],
-    ['GRUPO CASSOL','Marcos','Rio Verde','(64) 99977-0238','marcos.dir@aclmaquinas.com.br',30000,0,24000,10500,0,12000,22500],
-    ['GRUPO CBAGRO','Josiel','Rio Verde','064-9 9987-8663','compras2.cbagro@uol.com.br',34000,0,28000,11900,0,14000,25900],
-    ['GRUPO G5','Elias','Rio Verde','064-9 9987-8239','',60000,0,40000,21000,0,20000,41000],
-    ['GRUPO GAPES','Zizo','Rio Verde','64 99641-0323','zizo@gapescna.agr.br',100000,0,80000,35000,0,40000,75000],
-    ['GRUPO SOMA','Cida','Rio Verde','064-9 9994-6576','regis@somaagronegocio.com.br',80000,0,60000,28000,0,30000,58000],
-    ['GRUPO TERRA FORTE','Maicon','Rio Verde','64 99604-2058','administrativo@grupoterraforte.com',12000,0,8000,4200,0,4000,8200],
-    ['GRUPO VALE RIO','Chiquinho','Rio Verde','64 98407-9729','',4000,0,2000,1400,0,1000,2400],
-    ['HELIO FERREIRA LIMA','Helio','Rio Verde','(64) 99987-2923','agrocastrorv@terra.com.br',4000,0,3000,1400,0,1500,2900],
-    ['JOAO DOS SANTOS CANCIANO','João dos Santos','Rio Verde','(64) 9671-7666','joaoscanciano@gmail.com',3750,0,3750,1313,0,1875,3188],
-    ['JOSÉ DIOGO','José Diogo','Rio Verde','064-9 9987-0536','zediogoagrorv@gmail.com',4000,0,2000,1400,0,1000,2400],
-    ['JOSE ROBERTO BRUCELLI','Jose Roberto Brucelli','Rio Verde','(64) 9987-7360','jrbrucceli@uol.com.br',4500,0,4000,1575,0,2000,3575],
-    ['JUNIOR RIZZI','Junior','Rio Verde','64 9 9217-0462','',12000,0,7000,4200,0,3500,7700],
-    ['SEBASTIÃO CRUVINEL','Sebastião','Montividiu','64 99642-8284','tiaocruvinel@uol.com.br',2000,0,1500,700,0,750,1450],
-    ['SEMENTES VITORIA','Zito','Montividiu','064 99246-0087','',3000,500,500,1050,0,250,1300],
-    ['SILMAR / LINDOMAR CRUVINEL','Lindomar','Montividiu','64 99641-1833','lindomaragro@gmail.com',10000,0,7000,3500,0,3500,7000],
-    ['VALDIR ANTONIO JACOMINI','Guilherme','Rio Verde','064-9 9987-1025','grupojacomini@yahoo.com.br',3500,0,2000,1225,0,1000,2225],
-    ['WALTER DELFINO MUNIZ','Camilla','Rio Verde','064-9 9609-9406','delfinomuniz@hotmail.com',8000,0,4000,2800,0,2000,4800],
-  ];
-  D.forEach((r,i)=>{
+  CRM_SEED_CLIENTES.forEach((r,i)=>{
     S.crm.clientes.push({
       id:'seed'+i,nome:r[0],contato:r[1],municipio:r[2],telefone:r[3],email:r[4],
       categoria:'ferti30',subcategoria:'',
       areaVerao:r[5],areaIrrigado:r[6],areaSafrinha:r[7],
       potencialVerao:r[8],potencialIrrigado:r[9],potencialSafrinha:r[10],potencialTotal:r[11],
+      supervisao:r[12],rodadoVerao:r[13],rodadoSafrinha:r[14],
       obs:'',criadoEm:now
     });
   });
   sched();
+}
+
+// Aplica supervisão + mercado rodado da planilha em bases que já foram semeadas
+// antes destas colunas existirem. Casa por nome e nunca sobrescreve valor já preenchido.
+function _migrarCrmSupervisao(){
+  if(S.crm._supervisaoSeedV1) return;
+  S.crm._supervisaoSeedV1=true;
+  let n=0;
+  CRM_SEED_CLIENTES.forEach(r=>{
+    const c=(S.crm.clientes||[]).find(x=>(x.nome||'').trim().toUpperCase()===r[0].toUpperCase());
+    if(!c) return;
+    if(!c.supervisao) c.supervisao=r[12];
+    if(c.rodadoVerao===undefined||c.rodadoVerao===null||c.rodadoVerao==='') c.rodadoVerao=r[13];
+    if(c.rodadoSafrinha===undefined||c.rodadoSafrinha===null||c.rodadoSafrinha==='') c.rodadoSafrinha=r[14];
+    n++;
+  });
+  if(n) sched();
 }
 
 function crmShowTab(tab){
@@ -12128,7 +12175,7 @@ function renderClientesGrid(q){
   const grid=document.getElementById('crmClienteGrid');
   const empty=document.getElementById('crmClienteEmpty');
   if(!grid) return;
-  const filtered=q?clientes.filter(c=>((c.nome||'')+(c.municipio||'')+(c.contato||'')+(c.categoria||'')+(c.subcategoria||'')).toLowerCase().includes(q)):clientes;
+  const filtered=q?clientes.filter(c=>((c.nome||'')+(c.municipio||'')+(c.contato||'')+(c.categoria||'')+(c.subcategoria||'')+(c.supervisao||'')).toLowerCase().includes(q)):clientes;
   if(!filtered.length){
     grid.innerHTML='';
     if(empty) empty.style.display='';
@@ -12147,7 +12194,7 @@ function renderClientesGrid(q){
         ${catObj?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${catObj.color}22;color:${catObj.color};border:1px solid ${catObj.color}55;white-space:nowrap;flex-shrink:0">${catObj.lbl}</span>`:''}
       </div>
       ${c.subcategoria?`<div style="font-size:10px;color:var(--text3);margin-bottom:2px">${esc(c.subcategoria)}</div>`:''}
-      ${c.municipio?`<div style="font-size:11px;color:var(--text3);margin-bottom:2px">${esc(c.municipio)}</div>`:''}
+      ${c.municipio||c.supervisao?`<div style="font-size:11px;color:var(--text3);margin-bottom:2px">${esc(c.municipio||'')}${c.municipio&&c.supervisao?' · ':''}${c.supervisao?esc(c.supervisao):''}</div>`:''}
       ${c.contato?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${esc(c.contato)}${c.telefone?' · '+esc(c.telefone):''}</div>`:''}
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
         ${potTotal>0?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Pot.:</span> ${potTotal.toLocaleString('pt-BR')}t</div>`:''}
@@ -12726,7 +12773,13 @@ function abrirNovoCliente(){
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Telefone</div><input id="cl-tel" type="tel" placeholder="(00) 00000-0000" style="${INP}"></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">E-mail</div><input id="cl-email" type="email" style="${INP}"></div>
       </div>
-      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso - MT" style="${INP}"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Município</div><input id="cl-mun" type="text" placeholder="Ex: Sorriso - MT" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Supervisão</div>
+          <input id="cl-sup" type="text" list="cl-sup-list" placeholder="Ex: Rio Verde II" style="${INP}">
+          <datalist id="cl-sup-list">${crmSupervisoesAtivas().map(s=>`<option value="${esc(s)}">`).join('')}</datalist>
+        </div>
+      </div>
     </div>
     <div class="crm-section-title">Categoria</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
@@ -12756,6 +12809,11 @@ function abrirNovoCliente(){
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Safrinha (t)</div><input id="cl-ps" type="number" min="0" placeholder="0" oninput="(function(){const v=(+document.getElementById('cl-pv').value||0)+(+document.getElementById('cl-pi').value||0)+(+document.getElementById('cl-ps').value||0);document.getElementById('cl-pt').value=v||''})()" style="${INP}"></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Pot. Total (t)</div><input id="cl-pt" type="number" min="0" placeholder="auto" style="${INP};border-color:var(--blue)"></div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Mercado rodado — ${CRM_JANELAS[0].lbl} (t)</div><input id="cl-rv" type="number" min="0" placeholder="0" style="${INP}"></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Mercado rodado — ${CRM_JANELAS[1].lbl} (t)</div><input id="cl-rs" type="number" min="0" placeholder="0" style="${INP}"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:-2px">Volume já fechado no mercado (todas as empresas). Em branco, o sistema soma os leads.</div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Observações</div><textarea id="cl-obs" rows="2" style="${INP};resize:vertical"></textarea></div>
     </div>
     <button class="btn btn-green" style="width:100%;margin-top:1rem" onclick="salvarNovoCliente()">Salvar Cliente</button>
@@ -12777,6 +12835,7 @@ function salvarNovoCliente(){
     telefone:document.getElementById('cl-tel').value||'',
     email:document.getElementById('cl-email').value||'',
     municipio:document.getElementById('cl-mun').value||'',
+    supervisao:(document.getElementById('cl-sup').value||'').trim(),
     categoria:document.getElementById('cl-cat').value||'',
     subcategoria:document.getElementById('cl-sub').value||'',
     areaVerao:+document.getElementById('cl-av').value||0,
@@ -12786,6 +12845,9 @@ function salvarNovoCliente(){
     potencialIrrigado:pi,
     potencialSafrinha:ps,
     potencialTotal:ptRaw||(pv+pi+ps),
+    // '' (em branco) mantém o fallback pelos leads; 0 é um valor válido de "nada rodou"
+    rodadoVerao:document.getElementById('cl-rv').value===''?'':+document.getElementById('cl-rv').value||0,
+    rodadoSafrinha:document.getElementById('cl-rs').value===''?'':+document.getElementById('cl-rs').value||0,
     obs:document.getElementById('cl-obs').value||'',
     criadoEm:crmNow()
   };
@@ -12821,8 +12883,14 @@ function abrirCliente(id){
   ].map(s=>{
     const pot=+cli[s.pKey]||0;
     const fg=fechados.filter(l=>l.empresa==='fertigran'&&l.safra===s.sKey).reduce((a,l)=>a+tons(l),0);
-    return {...s,area:+cli[s.aKey]||0,pot,fg,pct:pot>0?Math.round(fg/pot*100):0};
+    // Mercado rodado: número da planilha quando houver, senão soma de todos os leads da safra
+    const leadTot=leads.filter(l=>l.empresa&&(l.safra||'verao')===s.sKey).reduce((a,l)=>a+tons(l),0);
+    const rod=crmRodadoCliente(cli,s.sKey,{[s.sKey]:leadTot});
+    return {...s,area:+cli[s.aKey]||0,pot,fg,rod,
+      pct:pot>0?Math.round(fg/pot*100):0,
+      pctRod:pot>0?Math.round(rod/pot*100):0};
   });
+  const rodTotal=safraStats.reduce((a,s)=>a+s.rod,0);
   const potTotal=+cli.potencialTotal||(+cli.potencialVerao||0)+(+cli.potencialIrrigado||0)+(+cli.potencialSafrinha||0);
   const pctTot=potTotal>0?Math.round(fgTons/potTotal*100):0;
   const pctColor=p=>p>=50?'#A8FF53':p>=25?'#f8b53e':'#f87171';
@@ -12849,25 +12917,30 @@ function abrirCliente(id){
     ${cli.subcategoria?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">${cli.subcategoria}</div>`:''}
     <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:1rem">
       ${cli.municipio?`<div style="font-size:12px;color:var(--text2)">📍 ${cli.municipio}</div>`:''}
+      ${cli.supervisao?`<div style="font-size:12px;color:var(--text2)">🏢 ${esc(cli.supervisao)}</div>`:''}
       ${cli.contato?`<div style="font-size:12px;color:var(--text2)">👤 ${cli.contato}</div>`:''}
       ${cli.telefone?`<a href="tel:${cli.telefone}" style="font-size:12px;color:var(--blue);text-decoration:none">📞 ${cli.telefone}</a>`:''}
       ${cli.email?`<a href="mailto:${cli.email}" style="font-size:12px;color:var(--blue);text-decoration:none">✉️ ${cli.email}</a>`:''}
     </div>
 
     <div class="crm-section-title">Informações Comerciais</div>
-    <div style="overflow-x:auto;margin-bottom:1rem"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:420px">
+    <div style="overflow-x:auto;margin-bottom:1rem"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px">
       <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
         <th style="text-align:left;padding:4px 6px">Safra</th>
         <th style="text-align:right;padding:4px 6px">Área (ha)</th>
         <th style="text-align:right;padding:4px 6px">Potencial (t)</th>
+        <th style="text-align:right;padding:4px 6px">Rodado (t)</th>
+        <th style="text-align:right;padding:4px 6px">% Rodado</th>
         <th style="text-align:right;padding:4px 6px">Fertigran (t)</th>
-        <th style="text-align:right;padding:4px 6px">% Mercado</th>
+        <th style="text-align:right;padding:4px 6px">% Fertigran</th>
       </tr></thead>
       <tbody>
         ${safraStats.map(s=>`<tr style="border-top:1px solid var(--border)">
           <td style="padding:5px 6px;font-weight:700;color:var(--text)">${s.lbl}</td>
           <td style="text-align:right;padding:5px 6px;color:var(--text2)">${s.area.toLocaleString('pt-BR')}</td>
           <td style="text-align:right;padding:5px 6px;color:var(--text2)">${s.pot.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:5px 6px;color:var(--text)">${s.rod.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:5px 6px"><span style="color:${pctColor(s.pctRod)};font-weight:700">${s.pctRod}%</span></td>
           <td style="text-align:right;padding:5px 6px;color:#A8FF53;font-weight:700">${s.fg.toLocaleString('pt-BR')}</td>
           <td style="text-align:right;padding:5px 6px"><span style="color:${pctColor(s.pct)};font-weight:700">${s.pct}%</span></td>
         </tr>`).join('')}
@@ -12875,6 +12948,8 @@ function abrirCliente(id){
           <td style="padding:6px 6px;color:var(--text)">Total</td>
           <td style="text-align:right;padding:6px 6px;color:var(--text2)">${safraStats.reduce((a,s)=>a+s.area,0).toLocaleString('pt-BR')}</td>
           <td style="text-align:right;padding:6px 6px;color:var(--text2)">${potTotal.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:6px 6px;color:var(--text)">${rodTotal.toLocaleString('pt-BR')}</td>
+          <td style="text-align:right;padding:6px 6px"><span style="color:${pctColor(potTotal>0?Math.round(rodTotal/potTotal*100):0)};font-weight:700">${potTotal>0?Math.round(rodTotal/potTotal*100):0}%</span></td>
           <td style="text-align:right;padding:6px 6px;color:#A8FF53;font-weight:700">${fgTons.toLocaleString('pt-BR')}</td>
           <td style="text-align:right;padding:6px 6px"><span style="color:${pctColor(pctTot)};font-weight:700">${pctTot}%</span></td>
         </tr>
@@ -12915,6 +12990,7 @@ function crmDeleteCliente(id){
 
 window._crmDashCats=new Set();
 window._crmDashSubs=new Set();
+window._crmDashSups=new Set();
 
 function crmDashToggleCat(key){
   if(window._crmDashCats.has(key)) window._crmDashCats.delete(key);
@@ -12926,6 +13002,17 @@ function crmDashToggleSub(s){
   else window._crmDashSubs.add(s);
   renderCrmDashboard();
 }
+function crmDashToggleSup(s){
+  if(window._crmDashSups.has(s)) window._crmDashSups.delete(s);
+  else window._crmDashSups.add(s);
+  renderCrmDashboard();
+}
+// Supervisões presentes na base (as fixas + qualquer uma digitada num cliente)
+function crmSupervisoesAtivas(){
+  const set=new Set(CRM_SUPERVISOES);
+  (S.crm&&S.crm.clientes||[]).forEach(c=>{if(c.supervisao)set.add(c.supervisao);});
+  return [...set].sort();
+}
 
 function renderCrmDashboard(){
   S.crm=S.crm||{clientes:[],leads:[]};
@@ -12935,6 +13022,12 @@ function renderCrmDashboard(){
   // Filter chips
   const catChips=document.getElementById('crmDashCatChips');
   const subChips=document.getElementById('crmDashSubChips');
+  const supChips=document.getElementById('crmDashSupChips');
+  const sups=crmSupervisoesAtivas();
+  if(supChips) supChips.innerHTML=sups.map(s=>{
+    const on=!window._crmDashSups.size||window._crmDashSups.has(s);
+    return `<span class="fin-pill" onclick="crmDashToggleSup('${s.replace(/'/g,'\\\'')}')" style="border:1px solid ${on?'#A8FF53':'var(--border2)'};background:${on?'rgba(168,255,83,.14)':'transparent'};color:${on?'#A8FF53':'var(--text3)'}">${esc(s)}</span>`;
+  }).join('');
   if(catChips) catChips.innerHTML=CRM_CATEGORIAS.map(x=>{
     const on=!window._crmDashCats.size||window._crmDashCats.has(x.key);
     return `<span class="fin-pill" onclick="crmDashToggleCat('${x.key}')" style="border:1px solid ${x.color};background:${on?x.color+'2e':'transparent'};color:${on?x.color:'var(--text3)'}">${x.lbl}</span>`;
@@ -12946,6 +13039,7 @@ function renderCrmDashboard(){
 
   // Apply client filters
   const clients=allClients.filter(c=>{
+    if(window._crmDashSups.size&&!window._crmDashSups.has(c.supervisao)) return false;
     if(window._crmDashCats.size&&!window._crmDashCats.has(c.categoria)) return false;
     if(window._crmDashSubs.size&&!window._crmDashSubs.has(c.subcategoria)) return false;
     return true;
@@ -12960,22 +13054,36 @@ function renderCrmDashboard(){
   const potBySafra ={verao:potVerao,irrigado:potIrrigado,safrinha:potSafrinha};
 
   // Aggregate ALL companies from ALL leads with empresa + volume (fechado=FG, perdido=concorrentes)
+  // Os leads dão a ATRIBUIÇÃO (quem levou o volume), não o total do mercado.
   const empMap={};
+  const leadPorCli={};
   allLeads.filter(l=>clientIds.has(l.clienteId)&&l.empresa&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
     const tons=+l.volumeFechado||+l.qtdTons||0;
     const safra=l.safra||'verao';
     if(!empMap[l.empresa]) empMap[l.empresa]={verao:0,irrigado:0,safrinha:0,total:0};
     empMap[l.empresa][safra]+=tons;
     empMap[l.empresa].total+=tons;
+    if(!leadPorCli[l.clienteId]) leadPorCli[l.clienteId]={verao:0,irrigado:0,safrinha:0};
+    leadPorCli[l.clienteId][safra]+=tons;
   });
 
-  // Rodado (total of all companies) per safra
-  const rodado={
-    verao:   Object.values(empMap).reduce((a,d)=>a+d.verao,0),
-    irrigado:Object.values(empMap).reduce((a,d)=>a+d.irrigado,0),
-    safrinha:Object.values(empMap).reduce((a,d)=>a+d.safrinha,0),
-  };
+  // Mercado rodado por safra — o número da planilha de supervisão é a autoridade;
+  // clientes sem esse número caem para a soma dos leads.
+  const SAFRA_KEYS=['verao','irrigado','safrinha'];
+  const rodado={verao:0,irrigado:0,safrinha:0};
+  clients.forEach(c=>{
+    SAFRA_KEYS.forEach(s=>{rodado[s]+=crmRodadoCliente(c,s,leadPorCli[c.id]);});
+  });
   rodado.total=rodado.verao+rodado.irrigado+rodado.safrinha;
+
+  // Volume rodado que os leads ainda não atribuem a nenhuma empresa.
+  const naoId={verao:0,irrigado:0,safrinha:0,total:0};
+  SAFRA_KEYS.forEach(s=>{
+    const atribuido=Object.values(empMap).reduce((a,d)=>a+d[s],0);
+    naoId[s]=Math.max(rodado[s]-atribuido,0);
+  });
+  naoId.total=naoId.verao+naoId.irrigado+naoId.safrinha;
+  if(naoId.total>0) empMap['naoident']=naoId;
 
   const fgD=empMap['fertigran']||{verao:0,irrigado:0,safrinha:0,total:0};
   const pctOf=(tons,pot)=>pot>0?parseFloat((tons/pot*100).toFixed(1)):0;
@@ -13052,10 +13160,10 @@ function renderCrmDashboard(){
     const safraKeys=['verao','irrigado','safrinha'];
     const pots=[potVerao,potIrrigado,potSafrinha];
     const datasets=sortedKeys.map(k=>{
-      const ent=CRM_EMPRESAS.find(e=>e.key===k);
-      const col=ent?.color||'#8A9290';
+      const ent=crmEmpMeta(k);
+      const col=ent.color;
       return {
-        label:ent?.lbl||k,
+        label:ent.lbl,
         data:safraKeys.map((s,i)=>pctOf(empMap[k][s],pots[i])),
         backgroundColor:col+'bb',borderColor:col,borderWidth:1,
       };
@@ -13088,9 +13196,9 @@ function renderCrmDashboard(){
     if(pieEl._chart){pieEl._chart.destroy();pieEl._chart=null;}
     const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
     const aRodarTot=Math.max(potTotal-rodado.total,0);
-    const pieLabels=[...sortedKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.lbl||k),'A Rodar'];
+    const pieLabels=[...sortedKeys.map(k=>crmEmpMeta(k).lbl),'A Rodar'];
     const pieData=[...sortedKeys.map(k=>empMap[k].total),aRodarTot];
-    const pieColors=[...sortedKeys.map(k=>CRM_EMPRESAS.find(e=>e.key===k)?.color||'#8A9290'),'#2A2F35'];
+    const pieColors=[...sortedKeys.map(k=>crmEmpMeta(k).color),'#2A2F35'];
     if(pieData.some(v=>v>0)){
       pieEl._chart=new Chart(pieEl,{
         type:'doughnut',
@@ -13125,11 +13233,11 @@ function renderCrmDashboard(){
               <td class="pct">${p}%</td>`;
     };
     const mkRow=(k,d)=>{
-      const ent=CRM_EMPRESAS.find(e=>e.key===k);
-      const col=ent?.color||'#8A9290';
+      const ent=crmEmpMeta(k);
+      const col=ent.color;
       const isFG=k==='fertigran';
       return `<tr style="${isFG?'background:rgba(74,222,128,0.05)':''}">
-        <td style="padding:7px 8px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${col};margin-right:8px"></span><span style="font-weight:${isFG?800:500};color:${isFG?'#A8FF53':'var(--text)'}">${ent?.lbl||k}</span></td>
+        <td style="padding:7px 8px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${col};margin-right:8px"></span><span style="font-weight:${isFG?800:500};color:${isFG?'#A8FF53':'var(--text)'}">${ent.lbl}</span></td>
         ${mkCell(d.verao,potVerao,false,isFG?'#A8FF53':null)}
         ${mkCell(d.irrigado,potIrrigado,false,isFG?'#A8FF53':null)}
         ${mkCell(d.safrinha,potSafrinha,false,isFG?'#A8FF53':null)}
@@ -13154,6 +13262,61 @@ function renderCrmDashboard(){
       </tr></thead>
       <tbody>${sortedKeys.map(k=>mkRow(k,empMap[k])).join('')}${arRow}</tbody>
     </table></div>`;
+  }
+
+  // ── Tabela: planilha de supervisão (cliente × janela de safra) ─────────────
+  const supEl=document.getElementById('crmDashSupTable');
+  if(supEl){
+    const rows=clients.map(c=>{
+      const cel=CRM_JANELAS.map(j=>{
+        const pot=crmPotJanela(c,j);
+        const rod=j.key==='safrinha'
+          ? crmRodadoCliente(c,'safrinha',leadPorCli[c.id])+crmRodadoCliente(c,'irrigado',leadPorCli[c.id])
+          : crmRodadoCliente(c,j.key,leadPorCli[c.id]);
+        return {pot,rod,pct:pot>0?Math.round(rod/pot*100):0};
+      });
+      return {c,cel};
+    }).sort((a,b)=>(a.c.nome||'').localeCompare(b.c.nome||'','pt-BR'));
+
+    const tot=CRM_JANELAS.map((j,i)=>rows.reduce((a,r)=>({pot:a.pot+r.cel[i].pot,rod:a.rod+r.cel[i].rod}),{pot:0,rod:0}));
+    const pctCell=p=>`<td class="pct" style="color:${pc(p)};font-weight:700">${p}%</td>`;
+
+    supEl.innerHTML=`<div class="fin-card-title">Potencial × Mercado Rodado por Cliente</div>
+    <div style="overflow-x:auto"><table class="fin-tbl" style="min-width:840px">
+      <thead>
+        <tr>
+          <th style="text-align:left" rowspan="2">Supervisão</th>
+          <th style="text-align:left" rowspan="2">Cliente</th>
+          ${CRM_JANELAS.map(j=>`<th colspan="3" style="text-align:center;border-left:1px solid var(--border2)">${j.lbl}<div style="font-size:9px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0">${j.periodo}</div></th>`).join('')}
+        </tr>
+        <tr>
+          ${CRM_JANELAS.map(()=>`
+            <th style="text-align:right;border-left:1px solid var(--border2)">Potencial (t)</th>
+            <th style="text-align:right">Vol. fechado</th>
+            <th style="text-align:right">% rodado</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td style="padding:6px 8px;color:var(--text3);white-space:nowrap">${esc(r.c.supervisao||'—')}</td>
+          <td style="padding:6px 8px;color:var(--text);font-weight:600;cursor:pointer" onclick="abrirCliente('${r.c.id}')">${esc(r.c.nome)}</td>
+          ${r.cel.map(x=>`
+            <td class="num" style="border-left:1px solid var(--border2)">${x.pot.toLocaleString('pt-BR')}</td>
+            <td class="num" style="color:${x.rod>0?'var(--text)':'var(--text3)'};font-weight:${x.rod>0?700:400}">${x.rod.toLocaleString('pt-BR')}</td>
+            ${pctCell(x.pct)}`).join('')}
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="border-top:2px solid var(--border2);font-weight:800">
+        <td style="padding:7px 8px" colspan="2">Total · ${rows.length} cliente${rows.length!==1?'s':''}</td>
+        ${tot.map(t=>{
+          const p=t.pot>0?Math.round(t.rod/t.pot*100):0;
+          return `<td class="num" style="border-left:1px solid var(--border2);font-weight:800">${t.pot.toLocaleString('pt-BR')}</td>
+                  <td class="num" style="font-weight:800">${t.rod.toLocaleString('pt-BR')}</td>
+                  <td class="pct" style="color:${pc(p)};font-weight:800">${p}%</td>`;
+        }).join('')}
+      </tr></tfoot>
+    </table></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Vol. fechado = mercado já rodado (todas as empresas). A janela Safrinha 2027 soma safrinha + irrigado, como na planilha de supervisão.</div>`;
   }
 }
 
