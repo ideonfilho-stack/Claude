@@ -3988,7 +3988,10 @@ function setNutMin(idx, value){
 
 // ── MATERIAL SELECTION GRID
 function _fabGridHTML(){
-  const mpNames=S.fabs[0]?.mats.map(m=>m.name)||[];
+  // União das MPs de TODAS as fábricas — uma MP cadastrada fora da fábrica 0
+  // precisa aparecer na grade do mesmo jeito. Ordem: fábrica 0 primeiro, extras depois.
+  const mpNames=[];
+  S.fabs.forEach(f=>(f.mats||[]).forEach(m=>{ if(!mpNames.includes(m.name)) mpNames.push(m.name); }));
   let h=`<div style="overflow-x:auto;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface)">
 <table style="width:100%;border-collapse:collapse;table-layout:fixed">
 <colgroup><col style="width:130px">`;
@@ -4000,7 +4003,9 @@ function _fabGridHTML(){
   });
   h+=`</tr></thead><tbody>`;
   mpNames.forEach((mpName,ri)=>{
-    const ref=S.fabs[0].mats.find(m=>m.name===mpName);
+    // Teores vêm da primeira fábrica que tiver a MP (nem toda MP existe na fábrica 0)
+    let ref=null;
+    for(const f of S.fabs){ ref=(f.mats||[]).find(m=>m.name===mpName); if(ref) break; }
     const nut=NKEYS.filter(k=>ref&&ref[k]>0).map(k=>k+' '+ref[k].toFixed(1)+'%').join(' · ');
     const rowBg=ri%2===1?'rgba(255,255,255,.02)':'transparent';
     const jmp="'"+mpName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
@@ -4011,7 +4016,11 @@ function _fabGridHTML(){
 </td>`;
     S.fabs.forEach((fab,fi)=>{
       const m=fab.mats.find(x=>x.name===mpName);
-      if(!m){h+=`<td style="border-bottom:1px solid var(--border)"></td>`;return;}
+      // MP ausente nesta fábrica (base antiga, anterior à propagação automática):
+      // oferece adicionar em vez de deixar a célula morta e sem como preencher preço.
+      if(!m){h+=`<td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center">
+<button onclick="addMatToFab(${fi},${jmp})" style="background:var(--surface3);border:1px dashed var(--border2);border-radius:6px;color:var(--text3);padding:5px 10px;font-size:10px;font-weight:700;cursor:pointer">+ Adicionar</button>
+</td>`;return;}
       const act=m.active;
       const lc=act?'var(--green)':'var(--red)';
       const cellShadow=act
@@ -4141,6 +4150,16 @@ function _swFab(el,fi,mp){
   sched();
   setTimeout(()=>{renderMatSelGrid();renderMatCards();renderRestrGrid();},260);
 }
+// Copia uma MP existente em outra fábrica para esta, com preço zerado e inativa.
+function addMatToFab(fabIdx, mpName){
+  const alvo=S.fabs[fabIdx]; if(!alvo) return;
+  if((alvo.mats||[]).some(x=>x.name===mpName)) return;
+  let ref=null;
+  for(const f of S.fabs){ ref=(f.mats||[]).find(x=>x.name===mpName); if(ref) break; }
+  if(!ref) return;
+  alvo.mats.push({...JSON.parse(JSON.stringify(ref)),costUSD:0,costBRL:0,active:false});
+  renderMatSelGrid(); renderMatCards(); renderRestrGrid(); sched();
+}
 function toggleMatFabPrice(fabIdx, mpName, val){
   const m=S.fabs[fabIdx].mats.find(x=>x.name===mpName);
   if(!m) return;
@@ -4243,7 +4262,17 @@ function saveMat(){
     active:document.getElementById('m-active').value==='1',
   };
   NKEYS.forEach(k=>{const e=document.getElementById('m-'+k);m[k]=e?+e.value:0;});
-  if(_editIdx===-1) mats().push(m);
+  if(_editIdx===-1){
+    if(mats().some(x=>x.name===m.name)){ alert('Já existe uma MP com o nome "'+m.name+'" nesta fábrica.'); return; }
+    mats().push(m);
+    // MP nova entra em TODAS as fábricas (mesma convenção da importação de preços):
+    // preço zerado e inativa nas demais, para o usuário só preencher o custo local.
+    S.fabs.forEach((f,i)=>{
+      if(i===S.fac) return;
+      if((f.mats||[]).some(x=>x.name===m.name)) return;
+      f.mats.push({...JSON.parse(JSON.stringify(m)),costUSD:0,costBRL:0,active:false});
+    });
+  }
   else Object.assign(mats()[_editIdx],m);
   closeModal(); renderMatCards(); renderMatSelGrid(); renderRestrGrid(); sched();
 }
