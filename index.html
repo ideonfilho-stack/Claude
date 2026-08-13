@@ -3272,7 +3272,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     <div id="fxCompareBox"></div>
     <div class="alert alert-ok" style="font-size:12px;margin-top:1rem">
       <svg class="icon" viewBox="0 0 24 24" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>Câmbio atualizado automaticamente a cada 60s, pela taxa média de mercado (mid-market, mesma referência do xe.com) · BRL = USD × câmbio em todas as fábricas · Digitar um valor aqui desliga o automático até você clicar em Ressincronizar</span>
+      <span>Câmbio atualizado automaticamente a cada 30s, pela taxa média de mercado (mid-market, mesma referência do xe.com) · BRL = USD × câmbio em todas as fábricas · Digitar um valor aqui desliga o automático até você clicar em Ressincronizar</span>
     </div>
   </div>
 
@@ -3282,6 +3282,12 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       Salvar configurações
     </button>
     <span id="cfgOk" style="font-size:12.5px;color:var(--green);font-weight:600;display:flex;align-items:center"></span>
+  </div>
+
+  <!-- Marcador de versão: responde "é esta a build que está no ar?" sem console -->
+  <div id="appVersionBox" style="margin-top:1rem;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+    <span>Versão <b id="appVersionTag" style="color:var(--text2);font-family:var(--mono)">—</b></span>
+    <span>Publicado <b id="appVersionDate" style="color:var(--text2);font-family:var(--mono)">—</b></span>
   </div>
 
   <!-- ─── CONTA (v12) ─────────────────────────────────────────────── -->
@@ -3547,6 +3553,22 @@ const DEF_MATS=[
   {name:'NP 08-40',    costUSD:0, costBRL:0, active:true, N:8,   P:40, K:0,  S:0,  Cl:0,  Ca:0,  Mg:0,B:0,Cu:0,Zn:0,Mn:0,Fe:0,Mo:0},
   {name:'NPK 15-15-15',costUSD:0, costBRL:0, active:true, N:15,  P:15, K:15, S:10, Cl:0,  Ca:0,  Mg:0,B:0,Cu:0,Zn:0,Mn:0,Fe:0,Mo:0},
 ];
+// Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
+// se o navegador está servindo a versão nova ou uma do cache.
+const APP_VERSION='2026.08.13-1';
+
+function _renderAppVersion(){
+  const t=document.getElementById('appVersionTag');
+  const d=document.getElementById('appVersionDate');
+  if(t) t.textContent=APP_VERSION;
+  // document.lastModified traz o Last-Modified do index.html servido pela Vercel,
+  // isto é, a hora do deploy — automático, sem depender de lembrar de bumpar nada.
+  if(d){
+    const dt=new Date(document.lastModified);
+    d.textContent=isNaN(dt.getTime())?'—':dt.toLocaleString('pt-BR');
+  }
+}
+
 const DEF_FABS=['Catalão','Uberaba','Paranaguá'];
 const DEF_REQS=NUTS.map(n=>({k:n.k,min:0,max:100,on:false}));
 
@@ -8198,7 +8220,7 @@ async function fxCompareSources(){
 function startFxLive(){
   fetchRate(); // imediato
   if(_fxInterval) clearInterval(_fxInterval);
-  _fxInterval=setInterval(fetchRate, 60000); // a cada 60 segundos
+  _fxInterval=setInterval(fetchRate, 30000); // a cada 30 segundos
 }
 
 function applyFxToAll(){
@@ -9547,6 +9569,7 @@ async function initApp(){
   }
   document.getElementById('fxRate').value=(S.fx||5.20).toFixed(4);
   _fxPopulaSeletorFonte();
+  _renderAppVersion();
   renderAll();
   renderMatCards();
   renderPDFHistPanel();
