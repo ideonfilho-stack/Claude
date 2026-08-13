@@ -7952,34 +7952,11 @@ function fetchRateJsonp(){
 // fixing oficial do dia, congelado após o fechamento (~13h), não o spot.
 // Cada get() devolve {rate, source, ts} — ts é a hora da cotação, que denuncia atraso.
 const FX_SOURCES=[
-  // Yahoo Finance — spot USDBRL=X ao vivo, taxa média do interbancário. É a mesma
-  // referência que xe.com e portais de mercado publicam, e atualiza continuamente
-  // enquanto o câmbio negocia (24h, dias úteis).
-  {key:'yahoo', lbl:'Yahoo Finance (spot ao vivo)', get:async function(){
-    // A Yahoo não manda cabeçalho CORS, então a chamada direta do browser falha.
-    // Tenta direto (funciona fora do browser / se um dia liberarem) e, em seguida,
-    // por repassadores públicos que só reemitem a resposta com CORS aberto.
-    const alvo='https://query1.finance.yahoo.com/v8/finance/chart/USDBRL=X?interval=1m&range=1d';
-    const vias=[
-      alvo,
-      'https://api.allorigins.win/raw?url='+encodeURIComponent(alvo),
-      'https://corsproxy.io/?url='+encodeURIComponent(alvo),
-    ];
-    for(let i=0;i<vias.length;i++){
-      try{
-        const r=await fetch(vias[i],{cache:'no-store'});
-        if(!r.ok) continue;
-        const d=await r.json();
-        const meta=d&&d.chart&&d.chart.result&&d.chart.result[0]&&d.chart.result[0].meta;
-        const rate=meta?parseFloat(meta.regularMarketPrice):null;
-        if(rate>1) return {rate,source:'Yahoo Finance (spot)',
-          ts:meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleString('pt-BR'):'',
-          detalhe:i===0?'':'via repassador CORS'};
-      }catch(e){}
-    }
-    return null;
-  }},
-  // FXRatesAPI — mid-market, sem chave no plano aberto
+  // FXRatesAPI — mid-market ao vivo, sem chave. Primeira da fila: das fontes que
+  // respondem do browser, é a única de cotação contínua (as demais são o comercial
+  // com atraso, agregadas diárias ou fixing).
+  // A Yahoo Finance foi removida: não emite CORS, nunca conectava e as tentativas
+  // pelos repassadores só atrasavam a cascata.
   {key:'fxrates', lbl:'FXRatesAPI (médio)', get:async function(){
     const r=await fetch('https://api.fxratesapi.com/latest?base=USD&currencies=BRL',{cache:'no-store'});
     const d=await r.json();
@@ -8124,7 +8101,9 @@ async function fetchRate(){
 function _fxPopulaSeletorFonte(){
   const sel=document.getElementById('fxSourceSel');
   if(!sel) return;
-  const pref=S.fxSource||'auto';
+  let pref=S.fxSource||'auto';
+  // Fonte fixada que não existe mais (removida numa atualização) volta ao automático
+  if(pref!=='auto'&&!FX_SOURCES.some(s=>s.key===pref)){ pref='auto'; S.fxSource='auto'; }
   sel.innerHTML='<option value="auto">Automático (melhor disponível)</option>'
     +FX_SOURCES.filter(s=>!s.oculta).map(s=>`<option value="${s.key}">${s.lbl}</option>`).join('');
   sel.value=pref;
