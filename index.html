@@ -3555,7 +3555,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.13-4';
+const APP_VERSION='2026.08.13-5';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -8034,7 +8034,7 @@ const FX_SOURCES=[
   // com atraso, agregadas diárias ou fixing).
   // A Yahoo Finance foi removida: não emite CORS, nunca conectava e as tentativas
   // pelos repassadores só atrasavam a cascata.
-  {key:'fxrates', lbl:'FXRatesAPI (médio)', get:async function(){
+  {key:'fxrates', lbl:'FXRatesAPI (médio)', url:'https://api.fxratesapi.com/latest?base=USD&currencies=BRL', get:async function(){
     const r=await fetch('https://api.fxratesapi.com/latest?base=USD&currencies=BRL',{cache:'no-store'});
     const d=await r.json();
     const rate=d&&d.rates?parseFloat(d.rates.BRL):null;
@@ -8042,7 +8042,7 @@ const FX_SOURCES=[
     if(rate>1) return {rate,source:'FXRatesAPI (médio)',tsMs,ts:tsMs?new Date(tsMs).toLocaleString('pt-BR'):''};
     return null;
   }},
-  {key:'awesome', lbl:'AwesomeAPI (médio)', get:async function(){
+  {key:'awesome', lbl:'AwesomeAPI (médio)', url:'https://economia.awesomeapi.com.br/json/last/USD-BRL', get:async function(){
     const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
     const d=await r.json();
     const u=d.USDBRL; if(!u) return null;
@@ -8051,28 +8051,28 @@ const FX_SOURCES=[
     return null;
   }},
   {key:'awesomejsonp', lbl:'AwesomeAPI (JSONP)', oculta:true, get:function(){ return fetchRateJsonp(); }},
-  {key:'erapi', lbl:'Open ER-API', get:async function(){
+  {key:'erapi', lbl:'Open ER-API', url:'https://open.er-api.com/v6/latest/USD', get:async function(){
     const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
     const d=await r.json();
     if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API',ts:d.time_last_update_utc||'',tsMs:_fxTsMs(d.time_last_update_utc)};
     return null;
   }},
   // Coinbase — sem chave, CORS liberado, atualiza com frequência
-  {key:'coinbase', lbl:'Coinbase', get:async function(){
+  {key:'coinbase', lbl:'Coinbase', url:'https://api.coinbase.com/v2/exchange-rates?currency=USD', get:async function(){
     const r=await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD',{cache:'no-store'});
     const d=await r.json();
     const rate=d&&d.data&&d.data.rates?parseFloat(d.data.rates.BRL):null;
     if(rate>1) return {rate,source:'Coinbase',ts:'',tsMs:null};
     return null;
   }},
-  {key:'fawaz', lbl:'Fawazahmed0', get:async function(){
+  {key:'fawaz', lbl:'Fawazahmed0', url:'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json', get:async function(){
     const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
     const d=await r.json();
     if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0',ts:d.date||'',tsMs:_fxTsMs(d.date)};
     return null;
   }},
   // Mesmo dado da Fawazahmed0 por outro host — cobre queda do jsDelivr
-  {key:'fawazmirror', lbl:'Fawazahmed0 (espelho)', get:async function(){
+  {key:'fawazmirror', lbl:'Fawazahmed0 (espelho)', url:'https://latest.currency-api.pages.dev/v1/currencies/usd.json', get:async function(){
     const r=await fetch('https://latest.currency-api.pages.dev/v1/currencies/usd.json',{cache:'no-store'});
     const d=await r.json();
     if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0 (espelho)',ts:d.date||'',tsMs:_fxTsMs(d.date)};
@@ -8080,7 +8080,7 @@ const FX_SOURCES=[
   }},
   // Frankfurter — referência do BCE, uma vez por dia útil. Não é spot, mas é a
   // fonte gratuita mais estável que existe; entra antes da PTAX como rede.
-  {key:'frankfurter', lbl:'Frankfurter (BCE, diária)', get:async function(){
+  {key:'frankfurter', lbl:'Frankfurter (BCE, diária)', url:'https://api.frankfurter.app/latest?from=USD&to=BRL', get:async function(){
     const r=await fetch('https://api.frankfurter.app/latest?from=USD&to=BRL',{cache:'no-store'});
     const d=await r.json();
     const rate=d&&d.rates?parseFloat(d.rates.BRL):null;
@@ -8230,6 +8230,30 @@ function fxSetSource(key){
   fetchRate();
 }
 
+// Quando uma fonte não devolve cotação, refaz a chamada crua só para ler o motivo.
+// Distingue as três causas que antes apareciam todas como "sem resposta":
+// limite de chamadas estourado (429), erro do servidor (5xx) e bloqueio de CORS.
+// Os cabeçalhos de limite só chegam se a API os expuser via Access-Control-Expose-Headers.
+async function _fxDiagnostico(s){
+  if(!s.url) return 'sem resposta';
+  try{
+    const r=await _fxComTimeout(fetch(s.url,{cache:'no-store'}));
+    if(!r) return 'tempo esgotado ('+(FX_TIMEOUT_MS/1000)+'s)';
+    const lim =r.headers.get('x-ratelimit-limit')    ||r.headers.get('ratelimit-limit');
+    const rest=r.headers.get('x-ratelimit-remaining')||r.headers.get('ratelimit-remaining');
+    const reset=r.headers.get('x-ratelimit-reset')   ||r.headers.get('ratelimit-reset');
+    let t='HTTP '+r.status;
+    if(r.status===429) t+=' · limite de chamadas estourado';
+    else if(r.status>=500) t+=' · servidor da fonte com problema';
+    else if(r.ok) t+=' · respondeu, mas sem cotação utilizável';
+    if(lim!=null)   t+=' · cota '+(rest!=null?rest+'/'+lim:lim);
+    if(reset!=null) t+=' · zera em '+reset;
+    return t;
+  }catch(e){
+    return 'bloqueado pelo navegador (CORS) ou host fora do ar';
+  }
+}
+
 // Consulta TODAS as fontes ao mesmo tempo e mostra lado a lado, com a hora de cada
 // cotação. É o que permite ver na hora qual delas bate com xe.com / UOL / BRInvesting.
 async function fxCompareSources(){
@@ -8240,14 +8264,15 @@ async function fxCompareSources(){
   const res=await Promise.all(lista.map(async s=>{
     try{
       const r=await _fxComTimeout(s.get());
-      return r&&r.rate>1?{lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',tsMs:r.tsMs||null,detalhe:r.detalhe||''}:{lbl:s.lbl,key:s.key,erro:true};
-    }catch(e){ return {lbl:s.lbl,key:s.key,erro:true}; }
+      if(r&&r.rate>1) return {lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',tsMs:r.tsMs||null,detalhe:r.detalhe||''};
+      return {lbl:s.lbl,key:s.key,erro:true,motivo:await _fxDiagnostico(s)};
+    }catch(e){ return {lbl:s.lbl,key:s.key,erro:true,motivo:await _fxDiagnostico(s)}; }
   }));
   const atual=S.fx||0;
   const pref=S.fxSource||'auto';
   const linhas=res.map(r=>{
     if(r.erro) return `<tr><td style="padding:6px 8px;color:var(--text3)">${r.lbl}</td>
-      <td colspan="4" style="padding:6px 8px;color:var(--red);font-size:11px">sem resposta</td></tr>`;
+      <td colspan="4" style="padding:6px 8px;color:var(--red);font-size:11px">${esc(r.motivo||'sem resposta')}</td></tr>`;
     const dif=r.rate-atual;
     const cor=Math.abs(dif)<0.0005?'var(--text3)':(dif>0?'var(--amber)':'var(--blue)');
     const emUso=pref===r.key;
