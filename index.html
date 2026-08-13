@@ -3243,7 +3243,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
         <label class="fl">USD/BRL — Tempo real</label>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <input type="text" class="fi" id="fxRate" value="5.2000" inputmode="decimal"
-            onchange="onFxRateManualEdit();applyFxToAll();"
+            oninput="onFxRateManualEdit()" onchange="clearTimeout(_fxEditTimer);applyFxToAll()"
             style="font-family:var(--disp);font-size:22px;font-weight:800;color:var(--green);max-width:140px;font-family:monospace;padding:8px 12px">
           <div id="fxLiveIndicator" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text3);font-weight:500">
             <span id="fxDot" style="width:8px;height:8px;border-radius:50%;background:var(--text3);display:inline-block"></span>
@@ -3555,7 +3555,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.13-2';
+const APP_VERSION='2026.08.13-3';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -7870,10 +7870,12 @@ function setFxHeaderColor(color){
 // O ticker do topo espelha o câmbio EM USO (S.fx) — inclusive o digitado à mão —
 // e não a última cotação da API. A cor diz se ele está sincronizado com o ao vivo:
 // verde acompanha a cotação, vermelho é valor manual divergente.
-function _fxAtualizaHeader(){
+function _fxAtualizaHeader(valorDigitado){
   const fxH=document.getElementById('fxHeaderLbl');
   const el=document.getElementById('fxRate');
-  const emUso=+S.fx||0;
+  // Durante a digitação o valor ainda não foi para S.fx — o ticker mostra o que
+  // está sendo digitado, mas quem manda no estado continua sendo applyFxToAll.
+  const emUso=valorDigitado!=null?valorDigitado:(+S.fx||0);
   const manual=el&&el.dataset.manual==='1';
   const desync=!!(manual&&_fxLiveRate&&Math.abs(emUso-_fxLiveRate)>0.001);
   if(fxH){
@@ -7885,12 +7887,18 @@ function _fxAtualizaHeader(){
   setFxHeaderColor(desync?'red':'green');
 }
 
+let _fxEditTimer=null;
+
+// Chamado a cada tecla no campo de câmbio das Configurações.
 function onFxRateManualEdit(){
-  // Chamado quando usuário edita o campo fxRate nas configurações.
-  // applyFxToAll() (mesmo onchange) já gravou o valor em S.fx; aqui só refletimos
-  // no ticker, sem esperar o próximo tick de 30s.
-  document.getElementById('fxRate').dataset.manual='1';
-  _fxAtualizaHeader();
+  const el=document.getElementById('fxRate');
+  if(el) el.dataset.manual='1';
+  // Ticker acompanha a digitação em tempo real — é só texto e cor, custa nada.
+  _fxAtualizaHeader(fxVal());
+  // Já o recálculo do BRL de todas as MPs de todas as fábricas, mais o save,
+  // espera a digitação parar: senão "5,45" seria aplicado como 5 → 5,4 → 5,45.
+  clearTimeout(_fxEditTimer);
+  _fxEditTimer=setTimeout(applyFxToAll,400);
 }
 
 // Volta ao câmbio ao vivo. É o que o botão "Ressincronizar" das Configurações e
@@ -8248,6 +8256,7 @@ function applyFxToAll(){
   S.fabs.forEach(f=>f.mats.forEach(m=>{ m.costBRL=parseFloat((m.costUSD*rate).toFixed(2)); }));
   renderMatSelGrid();
   if(document.getElementById('pg-mats').style.display!=='none') renderMatCards();
+  _fxAtualizaHeader();   // ticker assenta no valor efetivamente gravado
   sched();
 }
 
