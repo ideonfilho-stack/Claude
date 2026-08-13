@@ -7956,12 +7956,27 @@ const FX_SOURCES=[
   // referência que xe.com e portais de mercado publicam, e atualiza continuamente
   // enquanto o câmbio negocia (24h, dias úteis).
   {key:'yahoo', lbl:'Yahoo Finance (spot ao vivo)', get:async function(){
-    const r=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/USDBRL=X?interval=1m&range=1d',{cache:'no-store'});
-    const d=await r.json();
-    const meta=d&&d.chart&&d.chart.result&&d.chart.result[0]&&d.chart.result[0].meta;
-    const rate=meta?parseFloat(meta.regularMarketPrice):null;
-    if(rate>1) return {rate,source:'Yahoo Finance (spot)',
-      ts:meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleString('pt-BR'):''};
+    // A Yahoo não manda cabeçalho CORS, então a chamada direta do browser falha.
+    // Tenta direto (funciona fora do browser / se um dia liberarem) e, em seguida,
+    // por repassadores públicos que só reemitem a resposta com CORS aberto.
+    const alvo='https://query1.finance.yahoo.com/v8/finance/chart/USDBRL=X?interval=1m&range=1d';
+    const vias=[
+      alvo,
+      'https://api.allorigins.win/raw?url='+encodeURIComponent(alvo),
+      'https://corsproxy.io/?url='+encodeURIComponent(alvo),
+    ];
+    for(let i=0;i<vias.length;i++){
+      try{
+        const r=await fetch(vias[i],{cache:'no-store'});
+        if(!r.ok) continue;
+        const d=await r.json();
+        const meta=d&&d.chart&&d.chart.result&&d.chart.result[0]&&d.chart.result[0].meta;
+        const rate=meta?parseFloat(meta.regularMarketPrice):null;
+        if(rate>1) return {rate,source:'Yahoo Finance (spot)',
+          ts:meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleString('pt-BR'):'',
+          detalhe:i===0?'':'via repassador CORS'};
+      }catch(e){}
+    }
     return null;
   }},
   // FXRatesAPI — mid-market, sem chave no plano aberto
