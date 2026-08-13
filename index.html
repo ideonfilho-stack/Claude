@@ -7952,6 +7952,26 @@ function fetchRateJsonp(){
 // fixing oficial do dia, congelado após o fechamento (~13h), não o spot.
 // Cada get() devolve {rate, source, ts} — ts é a hora da cotação, que denuncia atraso.
 const FX_SOURCES=[
+  // Yahoo Finance — spot USDBRL=X ao vivo, taxa média do interbancário. É a mesma
+  // referência que xe.com e portais de mercado publicam, e atualiza continuamente
+  // enquanto o câmbio negocia (24h, dias úteis).
+  {key:'yahoo', lbl:'Yahoo Finance (spot ao vivo)', get:async function(){
+    const r=await fetch('https://query1.finance.yahoo.com/v8/finance/chart/USDBRL=X?interval=1m&range=1d',{cache:'no-store'});
+    const d=await r.json();
+    const meta=d&&d.chart&&d.chart.result&&d.chart.result[0]&&d.chart.result[0].meta;
+    const rate=meta?parseFloat(meta.regularMarketPrice):null;
+    if(rate>1) return {rate,source:'Yahoo Finance (spot)',
+      ts:meta.regularMarketTime?new Date(meta.regularMarketTime*1000).toLocaleString('pt-BR'):''};
+    return null;
+  }},
+  // FXRatesAPI — mid-market, sem chave no plano aberto
+  {key:'fxrates', lbl:'FXRatesAPI (médio)', get:async function(){
+    const r=await fetch('https://api.fxratesapi.com/latest?base=USD&currencies=BRL',{cache:'no-store'});
+    const d=await r.json();
+    const rate=d&&d.rates?parseFloat(d.rates.BRL):null;
+    if(rate>1) return {rate,source:'FXRatesAPI (médio)',ts:d.timestamp?new Date(d.timestamp*1000).toLocaleString('pt-BR'):(d.date||'')};
+    return null;
+  }},
   {key:'awesome', lbl:'AwesomeAPI (médio)', get:async function(){
     const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
     const d=await r.json();
