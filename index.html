@@ -3261,8 +3261,15 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
         <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
         Ressincronizar
       </button>
+      <label style="font-size:11px;color:var(--text3);font-weight:600">Fonte</label>
+      <select id="fxSourceSel" onchange="fxSetSource(this.value)"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;font-size:12px">
+        <option value="auto">Automático (melhor disponível)</option>
+      </select>
+      <button class="btn btn-sm" onclick="fxCompareSources()" title="Consultar todas as fontes agora">Comparar fontes</button>
       <span id="fxStatus" style="font-size:12px;color:var(--text3);font-weight:500"></span>
     </div>
+    <div id="fxCompareBox"></div>
     <div class="alert alert-ok" style="font-size:12px;margin-top:1rem">
       <svg class="icon" viewBox="0 0 24 24" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>
       <span>Câmbio atualizado automaticamente a cada 60s, pela taxa média de mercado (mid-market, mesma referência do xe.com) · BRL = USD × câmbio em todas as fábricas · Digitar um valor aqui desliga o automático até você clicar em Ressincronizar</span>
@@ -7939,52 +7946,63 @@ function fetchRateJsonp(){
   });
 }
 
+// Fontes de câmbio, na ordem de preferência do modo automático. A referência de
+// mercado (xe.com, UOL, BRInvesting) é o mid-market, por isso cada fonte devolve a
+// média quando publica os dois lados. A PTAX fica por último de propósito: é o
+// fixing oficial do dia, congelado após o fechamento (~13h), não o spot.
+// Cada get() devolve {rate, source, ts} — ts é a hora da cotação, que denuncia atraso.
+const FX_SOURCES=[
+  {key:'awesome', lbl:'AwesomeAPI (médio)', get:async function(){
+    const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
+    const d=await r.json();
+    const u=d.USDBRL; if(!u) return null;
+    const rate=_fxMid(u.bid,u.ask);
+    if(rate>1) return {rate,source:'AwesomeAPI (médio)',ts:u.create_date||'',detalhe:'bid '+u.bid+' / ask '+u.ask};
+    return null;
+  }},
+  {key:'awesomejsonp', lbl:'AwesomeAPI (JSONP)', oculta:true, get:function(){ return fetchRateJsonp(); }},
+  {key:'erapi', lbl:'Open ER-API', get:async function(){
+    const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
+    const d=await r.json();
+    if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API',ts:d.time_last_update_utc||''};
+    return null;
+  }},
+  {key:'fawaz', lbl:'Fawazahmed0', get:async function(){
+    const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
+    const d=await r.json();
+    if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0',ts:d.date||''};
+    return null;
+  }},
+  {key:'ptax', lbl:'BCB/PTAX (fixing do dia)', get:async function(){
+    const t=new Date();
+    const d2=String(t.getDate()).padStart(2,'0');
+    const m2=String(t.getMonth()+1).padStart(2,'0');
+    const y2=t.getFullYear();
+    const url='https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/'
+      +'CotacaoDolarDia(dataCotacao=@d)?@d=%27'+m2+'%2D'+d2+'%2D'+y2
+      +'%27&%24top=1&%24orderby=dataHoraCotacao%20desc&%24format=json&%24select=cotacaoCompra,cotacaoVenda,dataHoraCotacao';
+    const r=await fetch(url,{cache:'no-store'});
+    const d=await r.json();
+    const v=d.value&&d.value[0]; if(!v) return null;
+    const rate=_fxMid(v.cotacaoCompra,v.cotacaoVenda);
+    if(rate>1) return {rate,source:'BCB/PTAX (fixing do dia)',ts:v.dataHoraCotacao||''};
+    return null;
+  }},
+];
+
+// Ordem efetiva: a fonte fixada pelo usuário vem primeiro; as demais seguem de reserva.
+function _fxOrdem(){
+  const pref=S.fxSource||'auto';
+  if(pref==='auto') return FX_SOURCES;
+  return FX_SOURCES.filter(s=>s.key===pref).concat(FX_SOURCES.filter(s=>s.key!==pref));
+}
+
 async function fetchRate(){
-  // Ordem por proximidade da referência de mercado (xe.com publica o mid-market).
-  // A PTAX fica por último de propósito: é o fixing oficial do dia, congelado após
-  // o fechamento (~13h), então durante a tarde diverge do spot em vários centavos.
-  const SOURCES=[
-    // 1. AwesomeAPI via fetch — dólar comercial, média bid/ask
-    async function(){
-      const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
-      const d=await r.json();
-      const rate=d.USDBRL?_fxMid(d.USDBRL.bid,d.USDBRL.ask):null;
-      if(rate>1) return {rate,source:'AwesomeAPI (médio)'};
-    },
-    // 2. AwesomeAPI via JSONP (funciona com file://)
-    function(){ return fetchRateJsonp(); },
-    // 3. Open ER-API — mid-market
-    async function(){
-      const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
-      const d=await r.json();
-      if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API'};
-    },
-    // 4. Fawazahmed0 CDN
-    async function(){
-      const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
-      const d=await r.json();
-      if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0'};
-    },
-    // 5. Banco Central — PTAX. Último recurso: fixing oficial, não é spot.
-    async function(){
-      const t=new Date();
-      const d2=String(t.getDate()).padStart(2,'0');
-      const m2=String(t.getMonth()+1).padStart(2,'0');
-      const y2=t.getFullYear();
-      const url='https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/'
-        +'CotacaoDolarDia(dataCotacao=@d)?@d=%27'+m2+'%2D'+d2+'%2D'+y2
-        +'%27&%24top=1&%24orderby=dataHoraCotacao%20desc&%24format=json&%24select=cotacaoCompra,cotacaoVenda';
-      const r=await fetch(url,{cache:'no-store'});
-      const d=await r.json();
-      const v=d.value&&d.value[0];
-      const rate=v?_fxMid(v.cotacaoCompra,v.cotacaoVenda):null;
-      if(rate>1) return {rate,source:'BCB/PTAX (fixing do dia)'};
-    },
-  ];
+  const SOURCES=_fxOrdem();
 
   let result=null;
   for(let i=0;i<SOURCES.length;i++){
-    try{ result=await SOURCES[i](); if(result&&result.rate>1) break; }catch(e){}
+    try{ result=await SOURCES[i].get(); if(result&&result.rate>1) break; }catch(e){}
   }
 
   const dot=document.getElementById('fxDot');
@@ -8066,6 +8084,63 @@ async function fetchRate(){
     }
   }
   _fxLastRate=newRate;
+}
+
+function _fxPopulaSeletorFonte(){
+  const sel=document.getElementById('fxSourceSel');
+  if(!sel) return;
+  const pref=S.fxSource||'auto';
+  sel.innerHTML='<option value="auto">Automático (melhor disponível)</option>'
+    +FX_SOURCES.filter(s=>!s.oculta).map(s=>`<option value="${s.key}">${s.lbl}</option>`).join('');
+  sel.value=pref;
+}
+
+// Fixa (ou solta) a fonte usada pelo câmbio automático.
+function fxSetSource(key){
+  S.fxSource=key||'auto';
+  sched();
+  fetchRate();
+}
+
+// Consulta TODAS as fontes ao mesmo tempo e mostra lado a lado, com a hora de cada
+// cotação. É o que permite ver na hora qual delas bate com xe.com / UOL / BRInvesting.
+async function fxCompareSources(){
+  const box=document.getElementById('fxCompareBox');
+  if(!box) return;
+  box.innerHTML='<div style="font-size:12px;color:var(--text3);padding:8px 0">Consultando fontes…</div>';
+  const lista=FX_SOURCES.filter(s=>!s.oculta);
+  const res=await Promise.all(lista.map(async s=>{
+    try{
+      const r=await Promise.race([s.get(),new Promise(ok=>setTimeout(()=>ok(null),8000))]);
+      return r&&r.rate>1?{lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',detalhe:r.detalhe||''}:{lbl:s.lbl,key:s.key,erro:true};
+    }catch(e){ return {lbl:s.lbl,key:s.key,erro:true}; }
+  }));
+  const atual=S.fx||0;
+  const pref=S.fxSource||'auto';
+  const linhas=res.map(r=>{
+    if(r.erro) return `<tr><td style="padding:6px 8px;color:var(--text3)">${r.lbl}</td>
+      <td colspan="3" style="padding:6px 8px;color:var(--red);font-size:11px">sem resposta</td></tr>`;
+    const dif=r.rate-atual;
+    const cor=Math.abs(dif)<0.0005?'var(--text3)':(dif>0?'var(--amber)':'var(--blue)');
+    const emUso=pref===r.key;
+    return `<tr style="${emUso?'background:rgba(168,255,83,.06)':''}">
+      <td style="padding:6px 8px;font-weight:${emUso?800:600};color:${emUso?'#A8FF53':'var(--text)'}">${r.lbl}${emUso?' ·  fixada':''}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700">R$ ${r.rate.toFixed(4)}</td>
+      <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:${cor};font-size:11px">${dif>=0?'+':''}${dif.toFixed(4)}</td>
+      <td style="padding:6px 8px;color:var(--text3);font-size:10px">${esc(r.ts||'—')}${r.detalhe?'<br>'+esc(r.detalhe):''}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML=`<div style="overflow-x:auto;margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--surface2);color:var(--text3);font-size:10px;text-transform:uppercase">
+        <th style="text-align:left;padding:7px 8px">Fonte</th>
+        <th style="text-align:right;padding:7px 8px">Cotação</th>
+        <th style="text-align:right;padding:7px 8px">vs. em uso</th>
+        <th style="text-align:left;padding:7px 8px">Hora da cotação</th>
+      </tr></thead>
+      <tbody>${linhas}</tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:6px">Compare com a sua referência e fixe a fonte mais próxima no seletor acima. "Hora da cotação" mostra o atraso de cada fonte.</div>`;
 }
 
 function startFxLive(){
@@ -9419,6 +9494,7 @@ async function initApp(){
     if(st){ st.textContent='Chave configurada'; st.style.color='var(--green)'; }
   }
   document.getElementById('fxRate').value=(S.fx||5.20).toFixed(4);
+  _fxPopulaSeletorFonte();
   renderAll();
   renderMatCards();
   renderPDFHistPanel();
