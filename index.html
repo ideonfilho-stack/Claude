@@ -3243,7 +3243,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
         <label class="fl">USD/BRL — Tempo real</label>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <input type="text" class="fi" id="fxRate" value="5.2000" inputmode="decimal"
-            oninput="onFxRateManualEdit();applyFxToAll();"
+            onchange="onFxRateManualEdit();applyFxToAll();"
             style="font-family:var(--disp);font-size:22px;font-weight:800;color:var(--green);max-width:140px;font-family:monospace;padding:8px 12px">
           <div id="fxLiveIndicator" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text3);font-weight:500">
             <span id="fxDot" style="width:8px;height:8px;border-radius:50%;background:var(--text3);display:inline-block"></span>
@@ -3265,7 +3265,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     </div>
     <div class="alert alert-ok" style="font-size:12px;margin-top:1rem">
       <svg class="icon" viewBox="0 0 24 24" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>
-      <span>Câmbio atualizado automaticamente a cada 10s · BRL = USD × câmbio em todas as fábricas</span>
+      <span>Câmbio atualizado automaticamente a cada 60s, pela taxa média de mercado (mid-market, mesma referência do xe.com) · BRL = USD × câmbio em todas as fábricas · Digitar um valor aqui desliga o automático até você clicar em Ressincronizar</span>
     </div>
   </div>
 
@@ -7906,6 +7906,14 @@ function propFxResync(){
 // ═══════════════════════════════════════════════════════════════
 // EXPORT JPEG DO RESULTADO (canvas) — DEPRECATED em V11
 // A nova Proposta é multi-item; export usará rota diferente
+// Taxa média (mid-market) a partir de bid/ask — é o que o xe.com publica.
+// Usar só o bid deixa a cotação sistematicamente abaixo da referência de mercado.
+function _fxMid(bid,ask){
+  const b=parseFloat(bid), a=parseFloat(ask);
+  if(b>1&&a>1) return (b+a)/2;
+  return b>1?b:(a>1?a:null);
+}
+
 // Busca câmbio via script tag (JSONP) — funciona com file://
 function fetchRateJsonp(){
   return new Promise(function(resolve){
@@ -7917,8 +7925,8 @@ function fetchRateJsonp(){
     window[cbName]=function(data){
       clearTimeout(timeout);
       try{
-        const rate=parseFloat(data.USDBRL?data.USDBRL.bid:null);
-        if(rate>1) resolve({rate,source:'AwesomeAPI'});
+        const rate=data.USDBRL?_fxMid(data.USDBRL.bid,data.USDBRL.ask):null;
+        if(rate>1) resolve({rate,source:'AwesomeAPI (médio)'});
         else resolve(null);
       }catch(e){resolve(null);}
       try{delete window[cbName];}catch(e){}
@@ -7932,8 +7940,32 @@ function fetchRateJsonp(){
 }
 
 async function fetchRate(){
+  // Ordem por proximidade da referência de mercado (xe.com publica o mid-market).
+  // A PTAX fica por último de propósito: é o fixing oficial do dia, congelado após
+  // o fechamento (~13h), então durante a tarde diverge do spot em vários centavos.
   const SOURCES=[
-    // 1. Banco Central do Brasil — PTAX oficial
+    // 1. AwesomeAPI via fetch — dólar comercial, média bid/ask
+    async function(){
+      const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
+      const d=await r.json();
+      const rate=d.USDBRL?_fxMid(d.USDBRL.bid,d.USDBRL.ask):null;
+      if(rate>1) return {rate,source:'AwesomeAPI (médio)'};
+    },
+    // 2. AwesomeAPI via JSONP (funciona com file://)
+    function(){ return fetchRateJsonp(); },
+    // 3. Open ER-API — mid-market
+    async function(){
+      const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
+      const d=await r.json();
+      if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API'};
+    },
+    // 4. Fawazahmed0 CDN
+    async function(){
+      const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
+      const d=await r.json();
+      if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0'};
+    },
+    // 5. Banco Central — PTAX. Último recurso: fixing oficial, não é spot.
     async function(){
       const t=new Date();
       const d2=String(t.getDate()).padStart(2,'0');
@@ -7941,31 +7973,12 @@ async function fetchRate(){
       const y2=t.getFullYear();
       const url='https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/'
         +'CotacaoDolarDia(dataCotacao=@d)?@d=%27'+m2+'%2D'+d2+'%2D'+y2
-        +'%27&%24top=1&%24orderby=dataHoraCotacao%20desc&%24format=json&%24select=cotacaoVenda';
+        +'%27&%24top=1&%24orderby=dataHoraCotacao%20desc&%24format=json&%24select=cotacaoCompra,cotacaoVenda';
       const r=await fetch(url,{cache:'no-store'});
       const d=await r.json();
-      if(d.value&&d.value.length>0&&d.value[0].cotacaoVenda>1)
-        return {rate:d.value[0].cotacaoVenda,source:'BCB/PTAX'};
-    },
-        // 2. AwesomeAPI via JSONP (funciona com file://)
-    function(){ return fetchRateJsonp(); },
-    // 3. AwesomeAPI via fetch
-    async function(){
-      const r=await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL',{cache:'no-store'});
-      const d=await r.json();
-      if(d.USDBRL&&d.USDBRL.bid) return {rate:parseFloat(d.USDBRL.bid),source:'AwesomeAPI'};
-    },
-    // 4. Open ER-API
-    async function(){
-      const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
-      const d=await r.json();
-      if(d.rates&&d.rates.BRL) return {rate:d.rates.BRL,source:'Open ER-API'};
-    },
-    // 5. Fawazahmed0 CDN
-    async function(){
-      const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
-      const d=await r.json();
-      if(d.usd&&d.usd.brl) return {rate:d.usd.brl,source:'Fawazahmed0'};
+      const v=d.value&&d.value[0];
+      const rate=v?_fxMid(v.cotacaoCompra,v.cotacaoVenda):null;
+      if(rate>1) return {rate,source:'BCB/PTAX (fixing do dia)'};
     },
   ];
 
@@ -8027,25 +8040,32 @@ async function fetchRate(){
     fxRateEl.dataset.manual='0';
     setFxHeaderColor('green');
   } else {
-    // Divergência — manter valor manual mas sinalizar vermelho
+    // Divergência — manter valor manual, mas dizer com todas as letras que o
+    // automático está desligado. Só o ponto vermelho passava despercebido.
     setFxHeaderColor('red');
+    if(dotLbl) dotLbl.innerHTML='<b>Manual</b> — ao vivo: R$ '+newRate.toFixed(4)+' · use Ressincronizar';
+    if(fxH) fxH.textContent='R$ '+currentManual.toFixed(4);
   }
 
   // Sincroniza prop-fx badge SEMPRE (independente de mudança)
   propFxSetSynced(newRate);
 
-  // Recalcula MPs só se a taxa mudou de forma relevante (>0.5 centavo)
-  // e sem destruir grades com input em foco; ticks automáticos não salvam estado
-  if(_fxLastRate==null||Math.abs(newRate-_fxLastRate)>0.005){
+  // S.fx é o câmbio que TODO o app usa para calcular. Ele acompanha sempre o valor
+  // exibido — antes só era atualizado em variações acima de meio centavo, então a
+  // tela mostrava uma taxa e a cotação calculava com outra.
+  // Em modo manual o valor digitado manda: o tick não sobrescreve S.fx.
+  if(!isDesync){
+    const mudou=_fxLastRate==null||Math.abs(newRate-_fxLastRate)>0.0001;
     S.fx=newRate;
     S.fabs.forEach(function(f){f.mats.forEach(function(m){m.costBRL=parseFloat((m.costUSD*newRate).toFixed(2));});});
+    // Re-render só quando muda de fato e sem destruir grade com input em foco
     const focused=document.activeElement&&document.activeElement.tagName==='INPUT';
-    if(!focused){
+    if(mudou&&!focused){
       renderMatSelGrid();
       if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none') renderMatCards();
     }
-    _fxLastRate=newRate;
   }
+  _fxLastRate=newRate;
 }
 
 function startFxLive(){
