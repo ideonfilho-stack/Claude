@@ -7946,11 +7946,38 @@ function fetchRateJsonp(){
   });
 }
 
+// Converte a hora de cotação de cada fonte em epoch ms. Os formatos variam, e o
+// "YYYY-MM-DD HH:mm:ss" (AwesomeAPI, PTAX) é rejeitado pelo Safari sem o T — o
+// separador precisa ser trocado antes de entregar ao Date.
+function _fxTsMs(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return v>1e12?v:v*1000;   // segundos ou milissegundos
+  const s=String(v).trim();
+  let d=new Date(s.indexOf(' ')>0&&s.indexOf(',')<0?s.replace(' ','T'):s);
+  if(isNaN(d.getTime())) d=new Date(s);
+  return isNaN(d.getTime())?null:d.getTime();
+}
+
+// "há 3 min" — idade da cotação em linguagem direta.
+function _fxIdade(tsMs){
+  if(!tsMs) return '';
+  const seg=Math.max(0,Math.round((Date.now()-tsMs)/1000));
+  if(seg<90) return 'agora';
+  const min=Math.round(seg/60);
+  if(min<60) return 'há '+min+' min';
+  const hr=Math.floor(min/60);
+  if(hr<24) return 'há '+hr+'h'+(min%60?' '+(min%60)+'min':'');
+  const dias=Math.floor(hr/24);
+  return 'há '+dias+(dias===1?' dia':' dias');
+}
+// Acima disto a cotação deixa de ser "ao vivo" e o app avisa
+const FX_IDADE_ALERTA=15*60*1000;
+
 // Fontes de câmbio, na ordem de preferência do modo automático. A referência de
 // mercado (xe.com, UOL, BRInvesting) é o mid-market, por isso cada fonte devolve a
 // média quando publica os dois lados. A PTAX fica por último de propósito: é o
 // fixing oficial do dia, congelado após o fechamento (~13h), não o spot.
-// Cada get() devolve {rate, source, ts} — ts é a hora da cotação, que denuncia atraso.
+// Cada get() devolve {rate, source, ts, tsMs} — a hora da cotação denuncia o atraso.
 const FX_SOURCES=[
   // FXRatesAPI — mid-market ao vivo, sem chave. Primeira da fila: das fontes que
   // respondem do browser, é a única de cotação contínua (as demais são o comercial
@@ -7961,7 +7988,8 @@ const FX_SOURCES=[
     const r=await fetch('https://api.fxratesapi.com/latest?base=USD&currencies=BRL',{cache:'no-store'});
     const d=await r.json();
     const rate=d&&d.rates?parseFloat(d.rates.BRL):null;
-    if(rate>1) return {rate,source:'FXRatesAPI (médio)',ts:d.timestamp?new Date(d.timestamp*1000).toLocaleString('pt-BR'):(d.date||'')};
+    const tsMs=_fxTsMs(d.timestamp||d.date);
+    if(rate>1) return {rate,source:'FXRatesAPI (médio)',tsMs,ts:tsMs?new Date(tsMs).toLocaleString('pt-BR'):''};
     return null;
   }},
   {key:'awesome', lbl:'AwesomeAPI (médio)', get:async function(){
@@ -7969,20 +7997,20 @@ const FX_SOURCES=[
     const d=await r.json();
     const u=d.USDBRL; if(!u) return null;
     const rate=_fxMid(u.bid,u.ask);
-    if(rate>1) return {rate,source:'AwesomeAPI (médio)',ts:u.create_date||'',detalhe:'bid '+u.bid+' / ask '+u.ask};
+    if(rate>1) return {rate,source:'AwesomeAPI (médio)',ts:u.create_date||'',tsMs:_fxTsMs(u.create_date),detalhe:'bid '+u.bid+' / ask '+u.ask};
     return null;
   }},
   {key:'awesomejsonp', lbl:'AwesomeAPI (JSONP)', oculta:true, get:function(){ return fetchRateJsonp(); }},
   {key:'erapi', lbl:'Open ER-API', get:async function(){
     const r=await fetch('https://open.er-api.com/v6/latest/USD',{cache:'no-store'});
     const d=await r.json();
-    if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API',ts:d.time_last_update_utc||''};
+    if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API',ts:d.time_last_update_utc||'',tsMs:_fxTsMs(d.time_last_update_utc)};
     return null;
   }},
   {key:'fawaz', lbl:'Fawazahmed0', get:async function(){
     const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
     const d=await r.json();
-    if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0',ts:d.date||''};
+    if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0',ts:d.date||'',tsMs:_fxTsMs(d.date)};
     return null;
   }},
   {key:'ptax', lbl:'BCB/PTAX (fixing do dia)', get:async function(){
@@ -7997,7 +8025,7 @@ const FX_SOURCES=[
     const d=await r.json();
     const v=d.value&&d.value[0]; if(!v) return null;
     const rate=_fxMid(v.cotacaoCompra,v.cotacaoVenda);
-    if(rate>1) return {rate,source:'BCB/PTAX (fixing do dia)',ts:v.dataHoraCotacao||''};
+    if(rate>1) return {rate,source:'BCB/PTAX (fixing do dia)',ts:v.dataHoraCotacao||'',tsMs:_fxTsMs(v.dataHoraCotacao)};
     return null;
   }},
 ];
@@ -8044,7 +8072,15 @@ async function fetchRate(){
   }
   const now=new Date();
   const hhmm=now.toTimeString().slice(0,8);
-  if(dotLbl) dotLbl.textContent='Atualizado '+hhmm;
+  // Mostra a IDADE DA COTAÇÃO, não só a hora da consulta: a fonte pode responder
+  // agora com um preço de minutos atrás, e é essa defasagem que interessa saber.
+  const idade=_fxIdade(result.tsMs);
+  const velha=result.tsMs&&(Date.now()-result.tsMs)>FX_IDADE_ALERTA;
+  if(dotLbl){
+    dotLbl.innerHTML='Consultado '+hhmm
+      +(idade?' · cotação <b style="color:'+(velha?'var(--amber)':'var(--text2)')+'">'+idade+'</b>':'');
+  }
+  if(velha&&dot) dot.style.background='var(--amber)';
   if(fxH){fxH.textContent='R$ '+newRate.toFixed(4);fxH.style.color='var(--green)';}
   if(chip) chip.textContent=_dd+'/'+_mm+'/'+_yy+' · $1 = R$'+newRate.toFixed(4);
 
@@ -8126,14 +8162,14 @@ async function fxCompareSources(){
   const res=await Promise.all(lista.map(async s=>{
     try{
       const r=await Promise.race([s.get(),new Promise(ok=>setTimeout(()=>ok(null),8000))]);
-      return r&&r.rate>1?{lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',detalhe:r.detalhe||''}:{lbl:s.lbl,key:s.key,erro:true};
+      return r&&r.rate>1?{lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',tsMs:r.tsMs||null,detalhe:r.detalhe||''}:{lbl:s.lbl,key:s.key,erro:true};
     }catch(e){ return {lbl:s.lbl,key:s.key,erro:true}; }
   }));
   const atual=S.fx||0;
   const pref=S.fxSource||'auto';
   const linhas=res.map(r=>{
     if(r.erro) return `<tr><td style="padding:6px 8px;color:var(--text3)">${r.lbl}</td>
-      <td colspan="3" style="padding:6px 8px;color:var(--red);font-size:11px">sem resposta</td></tr>`;
+      <td colspan="4" style="padding:6px 8px;color:var(--red);font-size:11px">sem resposta</td></tr>`;
     const dif=r.rate-atual;
     const cor=Math.abs(dif)<0.0005?'var(--text3)':(dif>0?'var(--amber)':'var(--blue)');
     const emUso=pref===r.key;
@@ -8141,6 +8177,7 @@ async function fxCompareSources(){
       <td style="padding:6px 8px;font-weight:${emUso?800:600};color:${emUso?'#A8FF53':'var(--text)'}">${r.lbl}${emUso?' ·  fixada':''}</td>
       <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700">R$ ${r.rate.toFixed(4)}</td>
       <td style="padding:6px 8px;text-align:right;font-family:var(--mono);color:${cor};font-size:11px">${dif>=0?'+':''}${dif.toFixed(4)}</td>
+      <td style="padding:6px 8px;font-size:11px;font-weight:700;color:${r.tsMs&&(Date.now()-r.tsMs)>FX_IDADE_ALERTA?'var(--amber)':'var(--text2)'}">${esc(_fxIdade(r.tsMs)||'—')}</td>
       <td style="padding:6px 8px;color:var(--text3);font-size:10px">${esc(r.ts||'—')}${r.detalhe?'<br>'+esc(r.detalhe):''}</td>
     </tr>`;
   }).join('');
@@ -8150,11 +8187,12 @@ async function fxCompareSources(){
         <th style="text-align:left;padding:7px 8px">Fonte</th>
         <th style="text-align:right;padding:7px 8px">Cotação</th>
         <th style="text-align:right;padding:7px 8px">vs. em uso</th>
+        <th style="text-align:left;padding:7px 8px">Idade</th>
         <th style="text-align:left;padding:7px 8px">Hora da cotação</th>
       </tr></thead>
       <tbody>${linhas}</tbody>
     </table></div>
-    <div style="font-size:10px;color:var(--text3);margin-top:6px">Compare com a sua referência e fixe a fonte mais próxima no seletor acima. "Hora da cotação" mostra o atraso de cada fonte.</div>`;
+    <div style="font-size:10px;color:var(--text3);margin-top:6px">Compare com a sua referência e fixe a fonte mais próxima no seletor acima. "Idade" é há quanto tempo aquele preço foi publicado — uma fonte pode responder na hora com uma cotação velha.</div>`;
 }
 
 function startFxLive(){
