@@ -3555,7 +3555,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.13-3';
+const APP_VERSION='2026.08.13-4';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -8057,10 +8057,34 @@ const FX_SOURCES=[
     if(d.rates&&d.rates.BRL>1) return {rate:d.rates.BRL,source:'Open ER-API',ts:d.time_last_update_utc||'',tsMs:_fxTsMs(d.time_last_update_utc)};
     return null;
   }},
+  // Coinbase — sem chave, CORS liberado, atualiza com frequência
+  {key:'coinbase', lbl:'Coinbase', get:async function(){
+    const r=await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD',{cache:'no-store'});
+    const d=await r.json();
+    const rate=d&&d.data&&d.data.rates?parseFloat(d.data.rates.BRL):null;
+    if(rate>1) return {rate,source:'Coinbase',ts:'',tsMs:null};
+    return null;
+  }},
   {key:'fawaz', lbl:'Fawazahmed0', get:async function(){
     const r=await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',{cache:'no-store'});
     const d=await r.json();
     if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0',ts:d.date||'',tsMs:_fxTsMs(d.date)};
+    return null;
+  }},
+  // Mesmo dado da Fawazahmed0 por outro host — cobre queda do jsDelivr
+  {key:'fawazmirror', lbl:'Fawazahmed0 (espelho)', get:async function(){
+    const r=await fetch('https://latest.currency-api.pages.dev/v1/currencies/usd.json',{cache:'no-store'});
+    const d=await r.json();
+    if(d.usd&&d.usd.brl>1) return {rate:d.usd.brl,source:'Fawazahmed0 (espelho)',ts:d.date||'',tsMs:_fxTsMs(d.date)};
+    return null;
+  }},
+  // Frankfurter — referência do BCE, uma vez por dia útil. Não é spot, mas é a
+  // fonte gratuita mais estável que existe; entra antes da PTAX como rede.
+  {key:'frankfurter', lbl:'Frankfurter (BCE, diária)', get:async function(){
+    const r=await fetch('https://api.frankfurter.app/latest?from=USD&to=BRL',{cache:'no-store'});
+    const d=await r.json();
+    const rate=d&&d.rates?parseFloat(d.rates.BRL):null;
+    if(rate>1) return {rate,source:'Frankfurter (BCE)',ts:d.date||'',tsMs:_fxTsMs(d.date)};
     return null;
   }},
   {key:'ptax', lbl:'BCB/PTAX (fixing do dia)', get:async function(){
@@ -8080,6 +8104,13 @@ const FX_SOURCES=[
   }},
 ];
 
+// Limite de tempo por fonte. Sem isso, uma fonte fora do ar que só pendura a
+// conexão segura toda a cascata — foi o que a Yahoo fazia antes de sair.
+const FX_TIMEOUT_MS=6000;
+function _fxComTimeout(p){
+  return Promise.race([p,new Promise(ok=>setTimeout(()=>ok(null),FX_TIMEOUT_MS))]);
+}
+
 // Ordem efetiva: a fonte fixada pelo usuário vem primeiro; as demais seguem de reserva.
 function _fxOrdem(){
   const pref=S.fxSource||'auto';
@@ -8092,7 +8123,7 @@ async function fetchRate(){
 
   let result=null;
   for(let i=0;i<SOURCES.length;i++){
-    try{ result=await SOURCES[i].get(); if(result&&result.rate>1) break; }catch(e){}
+    try{ result=await _fxComTimeout(SOURCES[i].get()); if(result&&result.rate>1) break; }catch(e){}
   }
 
   const dot=document.getElementById('fxDot');
@@ -8208,7 +8239,7 @@ async function fxCompareSources(){
   const lista=FX_SOURCES.filter(s=>!s.oculta);
   const res=await Promise.all(lista.map(async s=>{
     try{
-      const r=await Promise.race([s.get(),new Promise(ok=>setTimeout(()=>ok(null),8000))]);
+      const r=await _fxComTimeout(s.get());
       return r&&r.rate>1?{lbl:s.lbl,key:s.key,rate:r.rate,ts:r.ts||'',tsMs:r.tsMs||null,detalhe:r.detalhe||''}:{lbl:s.lbl,key:s.key,erro:true};
     }catch(e){ return {lbl:s.lbl,key:s.key,erro:true}; }
   }));
