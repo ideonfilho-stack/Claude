@@ -2297,8 +2297,8 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
   <div class="topbar-r">
     <div style="display:flex;align-items:center;gap:6px">
       <div id="fxDot" style="width:9px;height:9px;border-radius:50%;background:var(--green);flex-shrink:0"></div>
-      <span id="fxHeaderLbl" style="font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;cursor:pointer" title="Clique para atualizar câmbio" onclick="fetchRate()">R$ 5.20</span>
-      <button onclick="fetchRate()" title="Atualizar câmbio" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--text3);font-size:14px;line-height:1;border-radius:4px" id="fxRefreshBtn">↻</button>
+      <span id="fxHeaderLbl" style="font-size:13px;font-weight:700;color:var(--green);white-space:nowrap;cursor:pointer" title="Câmbio em uso" onclick="fxRateResync()">R$ 5.20</span>
+      <button onclick="fxRateResync()" title="Ressincronizar com a cotação ao vivo" style="background:none;border:none;cursor:pointer;padding:2px 4px;color:var(--text3);font-size:14px;line-height:1;border-radius:4px" id="fxRefreshBtn">↻</button>
     </div>
     <div class="date-chip" id="dateChip"></div>
   </div>
@@ -3555,7 +3555,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.13-1';
+const APP_VERSION='2026.08.13-2';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -7867,24 +7867,44 @@ function setFxHeaderColor(color){
   }
 }
 
-function onFxRateManualEdit(){
-  // Chamado quando usuário edita o campo fxRate nas configurações
-  document.getElementById('fxRate').dataset.manual='1';
-  if(_fxLiveRate){
-    const cur=fxVal();
-    const desync=Math.abs(cur-_fxLiveRate)>0.001;
-    setFxHeaderColor(desync?'red':'green');
+// O ticker do topo espelha o câmbio EM USO (S.fx) — inclusive o digitado à mão —
+// e não a última cotação da API. A cor diz se ele está sincronizado com o ao vivo:
+// verde acompanha a cotação, vermelho é valor manual divergente.
+function _fxAtualizaHeader(){
+  const fxH=document.getElementById('fxHeaderLbl');
+  const el=document.getElementById('fxRate');
+  const emUso=+S.fx||0;
+  const manual=el&&el.dataset.manual==='1';
+  const desync=!!(manual&&_fxLiveRate&&Math.abs(emUso-_fxLiveRate)>0.001);
+  if(fxH){
+    fxH.textContent='R$ '+emUso.toFixed(4);
+    fxH.title=desync
+      ? 'Câmbio manual em uso · ao vivo R$ '+_fxLiveRate.toFixed(4)+' — clique em ↻ para ressincronizar'
+      : 'Câmbio sincronizado com a cotação ao vivo · clique em ↻ para atualizar agora';
   }
+  setFxHeaderColor(desync?'red':'green');
 }
 
+function onFxRateManualEdit(){
+  // Chamado quando usuário edita o campo fxRate nas configurações.
+  // applyFxToAll() (mesmo onchange) já gravou o valor em S.fx; aqui só refletimos
+  // no ticker, sem esperar o próximo tick de 30s.
+  document.getElementById('fxRate').dataset.manual='1';
+  _fxAtualizaHeader();
+}
+
+// Volta ao câmbio ao vivo. É o que o botão "Ressincronizar" das Configurações e
+// o ↻ do topo executam — os dois precisam fazer exatamente a mesma coisa.
 function fxRateResync(){
-  // Ressincronizar com valor ao vivo
   if(_fxLiveRate){
     const el=document.getElementById('fxRate');
-    el.value=_fxLiveRate.toFixed(4);
-    el.dataset.manual='0';
-    setFxHeaderColor('green');
+    if(el){ el.value=_fxLiveRate.toFixed(4); el.dataset.manual='0'; }
     S.fx=_fxLiveRate;
+    // BRL das MPs precisa acompanhar, senão fica preso no câmbio manual anterior
+    S.fabs.forEach(function(f){f.mats.forEach(function(m){m.costBRL=parseFloat((m.costUSD*_fxLiveRate).toFixed(2));});});
+    _fxAtualizaHeader();
+    renderMatSelGrid();
+    if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none') renderMatCards();
     sched();
   } else {
     fetchRate();
@@ -8103,7 +8123,6 @@ async function fetchRate(){
       +(idade?' · cotação <b style="color:'+(velha?'var(--amber)':'var(--text2)')+'">'+idade+'</b>':'');
   }
   if(velha&&dot) dot.style.background='var(--amber)';
-  if(fxH){fxH.textContent='R$ '+newRate.toFixed(4);fxH.style.color='var(--green)';}
   if(chip) chip.textContent=_dd+'/'+_mm+'/'+_yy+' · $1 = R$'+newRate.toFixed(4);
 
   // Variação
@@ -8126,13 +8145,10 @@ async function fetchRate(){
     // Sem divergência — atualizar campo e indicadores
     fxRateEl.value=newRate.toFixed(4);
     fxRateEl.dataset.manual='0';
-    setFxHeaderColor('green');
   } else {
     // Divergência — manter valor manual, mas dizer com todas as letras que o
     // automático está desligado. Só o ponto vermelho passava despercebido.
-    setFxHeaderColor('red');
-    if(dotLbl) dotLbl.innerHTML='<b>Manual</b> — ao vivo: R$ '+newRate.toFixed(4)+' · use Ressincronizar';
-    if(fxH) fxH.textContent='R$ '+currentManual.toFixed(4);
+    if(dotLbl) dotLbl.innerHTML='<b>Manual</b> — ao vivo: R$ '+newRate.toFixed(4)+' · use ↻ para ressincronizar';
   }
 
   // Sincroniza prop-fx badge SEMPRE (independente de mudança)
@@ -8154,6 +8170,7 @@ async function fetchRate(){
     }
   }
   _fxLastRate=newRate;
+  _fxAtualizaHeader();
 }
 
 function _fxPopulaSeletorFonte(){
@@ -9570,6 +9587,7 @@ async function initApp(){
   document.getElementById('fxRate').value=(S.fx||5.20).toFixed(4);
   _fxPopulaSeletorFonte();
   _renderAppVersion();
+  _fxAtualizaHeader();   // ticker já nasce mostrando o câmbio salvo, não o placeholder
   renderAll();
   renderMatCards();
   renderPDFHistPanel();
