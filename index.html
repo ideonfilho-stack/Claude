@@ -2194,10 +2194,9 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <div class="fg"><label class="fl">Ativo</label><select class="fi" id="m-active"><option value="1">Sim</option><option value="0">Não</option></select></div>
     </div>
     <div class="frow c2">
-      <div class="fg"><label class="fl">Custo USD ($/t)</label><input type="number" class="fi" id="m-costUSD" value="0" min="0" step="0.01"
-        oninput="document.getElementById('m-costBRL').value=parseFloat((+this.value*S.fx).toFixed(2))"></div>
-      <div class="fg"><label class="fl">BRL R$/t <span style="font-weight:400;color:var(--text3);font-size:10px">(USD × câmbio)</span></label>
-        <input type="number" class="fi" id="m-costBRL" readonly style="color:var(--green);font-weight:700;cursor:default" title="Calculado automaticamente"></div>
+      <div class="fg"><label class="fl">Lista U$ ($/t)</label><input type="number" class="fi" id="m-costUSD" value="0" min="0" step="0.01"></div>
+      <div class="fg"><label class="fl">Lista R$ (R$/t) <span style="font-weight:400;color:var(--text3);font-size:10px">(em branco = sem preço na lista em reais)</span></label>
+        <input type="number" class="fi" id="m-costBRL" min="0" step="0.01" placeholder="—"></div>
     </div>
     <div class="sec-lbl" style="margin-top:.5rem">Composição (%)</div>
     <div class="frow c4">
@@ -3618,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.13-6';
+const APP_VERSION='2026.08.14-1';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -3747,6 +3746,7 @@ async function loadS(){
       if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
       if(!S.crm) S.crm={clientes:[],leads:[]};
   if(!S.cfr) S.cfr={registros:[]};
+  _migrarMoedaDupla();
     } else {
       initFabs();
     }
@@ -3770,6 +3770,7 @@ function _applyRemoteState(state,ts){
   if(!S.tratamentos) S.tratamentos={fertigranP:false,superNPro:false,uhf:false};
   if(!S.crm) S.crm={clientes:[],leads:[]};
   if(!S.cfr) S.cfr={registros:[]};
+  _migrarMoedaDupla();
   window._stateBaseTs=ts;
   _dirty=false;
   try{ renderAll(); }catch(_){ }
@@ -3880,7 +3881,48 @@ function mats(){ return fab().mats; }
 function restr(){ return fab().restr||[]; }
 function getRestr(name){ return restr().find(r=>r.name===name)||{min:0,max:1000}; }
 function setRestr(name,f,v){ let r=restr().find(r=>r.name===name); if(!r){r={name,min:0,max:1000};fab().restr.push(r);} r[f]=v; sched(); }
-function cost(m){ return S.cur==='USD'?m.costUSD:m.costBRL; }
+// ── MOEDA DUPLA ─────────────────────────────────────────────────────────────
+// Cada MP carrega dois preços de lista independentes: costUSD (lista em dólar)
+// e costBRL (lista em reais). Um NÃO deriva mais do outro — exceção: micros,
+// que só existem na lista R$ e têm o lado U$ derivado pelo deflator.
+//   m.brlSrc==='lista'  → costBRL é preço de lista (nunca sobrescrito pelo câmbio)
+//   m.usdSrc==='deriv'  → costUSD é derivado do costBRL pelo deflator (micros)
+//   sem flag            → lado em branco (sem preço naquela lista)
+const MICRO_DEFLATOR=0.8;
+function brlLista(m){ return (m.brlSrc==='lista'&&m.costBRL>0)?m.costBRL:null; }
+function costCur(m,cur){ return cur==='BRL' ? (brlLista(m)||0) : (m.costUSD>0?m.costUSD:0); }
+function cost(m){ return costCur(m,S.cur); }
+// Recalcula o lado U$ das MPs derivadas (micros) — chamado quando o câmbio muda
+function _recalcDerivados(){
+  (S.fabs||[]).forEach(f=>(f.mats||[]).forEach(m=>{
+    if(m.usdSrc==='deriv'){
+      const brl=brlLista(m);
+      m.costUSD=brl?parseFloat(((brl*MICRO_DEFLATOR)/(S.fx*0.99)).toFixed(2)):0;
+    }
+  }));
+}
+function _matEhMicro(m){
+  const temMacro=['N','P','K','S','Cl','Ca','Mg'].some(k=>(m[k]||0)>0);
+  const temMicro=['B','Cu','Zn','Mn','Fe','Mo'].some(k=>(m[k]||0)>0);
+  return !temMacro&&temMicro;
+}
+// Migra base antiga (costBRL era sempre USD×câmbio, sem valor de informação):
+// micros ganham o preço de lista R$ implícito reconstruído pelo deflator inverso;
+// as demais ficam com o lado R$ em branco até a lista em reais ser importada.
+function _migrarMoedaDupla(){
+  if(S._moedaDuplaV1) return;
+  S._moedaDuplaV1=true;
+  const fx=S.fx||5.2;
+  (S.fabs||[]).forEach(f=>(f.mats||[]).forEach(m=>{
+    if(m.brlSrc||m.usdSrc) return;
+    if(_matEhMicro(m)&&m.costUSD>0){
+      m.costBRL=parseFloat((m.costUSD*fx*0.99/MICRO_DEFLATOR).toFixed(2));
+      m.brlSrc='lista'; m.usdSrc='deriv';
+    } else {
+      m.costBRL=0;
+    }
+  }));
+}
 // Escapa dados do usuário antes de interpolar em innerHTML (texto e atributos)
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 // Lê o campo de câmbio aceitando vírgula decimal (pt-BR) — usar SEMPRE este helper
@@ -3925,14 +3967,14 @@ function aplicarTratamentos(matsArr){
     if(S.tratamentos.fertigranP && _fabSupportsFertigranP()){
       if(mat.name==='MAP'){
         mat.name='MAP Fertigran P'; mat.N=10.6; mat.P=50.3;
-        mat.costUSD=(mat.costUSD||0)+100; mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+        mat.costUSD=(mat.costUSD||0)+100; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
       } else if(mat.name==='TSP'){
         mat.name='TSP FP'; mat.N=0; mat.P=44.5; mat.Ca=10;
-        mat.costUSD=(mat.costUSD||0)+100; mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+        mat.costUSD=(mat.costUSD||0)+100; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
       }
     }
     if(S.tratamentos.superNPro && mat.name==='Ureia'){
-      mat.costUSD=(mat.costUSD||0)+50; mat.costBRL=(mat.costBRL||0)+(50*S.fx);
+      mat.costUSD=(mat.costUSD||0)+50; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(50*S.fx);
     }
     return mat;
   });
@@ -3944,7 +3986,7 @@ function autoDeactivateByPrice(){
   S.fabs.forEach(fab=>{
     fab.mats.forEach(m=>{
       // Só desativa se custo for 0 — nunca força ativação
-      if(m.costUSD<=0 && m.active){
+      if(m.costUSD<=0 && !brlLista(m) && m.active){
         m.active=false;
         changed++;
       }
@@ -4128,10 +4170,28 @@ function _fabGridHTML(){
 <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:${lc};letter-spacing:.03em">
 <span style="width:5px;height:5px;border-radius:50%;background:${lc};flex-shrink:0"></span>${act?'Ativo':'Inativo'}</span>
 </div>
-<input type="number" value="${m.costUSD}" min="0" step="0.01" placeholder="0.00"
-style="width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-size:11px;font-family:var(--mono);text-align:right;transition:border-color .15s;box-sizing:border-box"
-onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--border2)'"
-onchange="toggleMatFabPrice(${fi},${jmp},+this.value)">
+${(function(){
+  const INP='flex:1;min-width:0;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-size:11px;font-family:var(--mono);text-align:right;transition:border-color .15s;box-sizing:border-box';
+  const LBL='width:20px;flex-shrink:0;font-size:9px;font-weight:800;letter-spacing:.02em';
+  const deriv=m.usdSrc==='deriv';
+  const brl=brlLista(m);
+  const usdRow='<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">'
+    +'<span style="'+LBL+';color:var(--green)">U$</span>'
+    +'<input type="number" value="'+(m.costUSD||'')+'" min="0" step="0.01" placeholder="—" '
+    +(deriv?'readonly title="Derivado da lista R$ pelo deflator: R$ × 0,8 ÷ (câmbio × 0,99). Acompanha o câmbio." style="'+INP+';color:var(--text3);cursor:default;border-style:dashed" ':'style="'+INP+'" ')
+    +'onfocus="this.style.borderColor=\'var(--green)\'" onblur="this.style.borderColor=\'var(--border2)\'" '
+    +'onchange="setMatFabPrice('+fi+','+jmp+',\'USD\',+this.value)">'
+    +'</div>';
+  const brlRow='<div style="display:flex;align-items:center;gap:5px">'
+    +'<span style="'+LBL+';color:var(--amber)">R$</span>'
+    +'<input type="number" value="'+(brl!=null?brl:'')+'" min="0" step="0.01" placeholder="sem lista" '
+    +'title="'+(brl!=null?'Preço da lista em reais':'Sem preço na lista em reais — em branco, esta MP fica fora da fórmula em R$')+'" '
+    +'style="'+INP+(brl==null?';border-style:dashed;color:var(--text3)':'')+'" '
+    +'onfocus="this.style.borderColor=\'var(--amber)\'" onblur="this.style.borderColor=\'var(--border2)\'" '
+    +'onchange="setMatFabPrice('+fi+','+jmp+',\'BRL\',+this.value)">'
+    +'</div>';
+  return usdRow+brlRow+(deriv?'<div style="font-size:8.5px;color:var(--text3);margin-top:3px;text-align:right">U$ via deflator</div>':'');
+})()}
 </td>`;
     });
     h+=`</tr>`;
@@ -4252,19 +4312,28 @@ function addMatToFab(fabIdx, mpName){
   let ref=null;
   for(const f of S.fabs){ ref=(f.mats||[]).find(x=>x.name===mpName); if(ref) break; }
   if(!ref) return;
-  alvo.mats.push({...JSON.parse(JSON.stringify(ref)),costUSD:0,costBRL:0,active:false});
+  alvo.mats.push({...JSON.parse(JSON.stringify(ref)),costUSD:0,costBRL:0,brlSrc:undefined,active:false});
   renderMatSelGrid(); renderMatCards(); renderRestrGrid(); sched();
 }
-function toggleMatFabPrice(fabIdx, mpName, val){
+function setMatFabPrice(fabIdx, mpName, cur, val){
   const m=S.fabs[fabIdx].mats.find(x=>x.name===mpName);
   if(!m) return;
-  m.costUSD=val;
-  m.costBRL=parseFloat((val*S.fx).toFixed(2));
-  if(val<=0) m.active=false;
+  val=+val||0;
+  if(cur==='BRL'){
+    m.costBRL=val;
+    if(val>0){ m.brlSrc='lista'; }
+    else { delete m.brlSrc; }
+    if(m.usdSrc==='deriv') _recalcDerivados();
+  } else {
+    m.costUSD=val;
+    delete m.usdSrc;   // valor digitado à mão vence a derivação pelo deflator
+  }
+  if(!(m.costUSD>0)&&!brlLista(m)) m.active=false;
   renderMatSelGrid(); renderMatCards(); renderRestrGrid(); sched();
 }
+function toggleMatFabPrice(fabIdx, mpName, val){ setMatFabPrice(fabIdx,mpName,'USD',val); }
 function toggleAllMatsAllFabs(val){
-  S.fabs.forEach(fab=>fab.mats.forEach(m=>{ if(m.costUSD>0||!val) m.active=val; }));
+  S.fabs.forEach(fab=>fab.mats.forEach(m=>{ if(m.costUSD>0||brlLista(m)||!val) m.active=val; }));
   renderMatSelGrid(); renderRestrGrid(); sched();
 }
 function toggleMat(i){
@@ -4276,16 +4345,8 @@ function toggleMat(i){
   sched();
 }
 function setMatPrice(i,field,val){
-  mats()[i][field]=val;
-  if(field==='costUSD'){
-    mats()[i].costBRL=parseFloat((val*S.fx).toFixed(2));
-    // Auto-desativar apenas se custo zerar — não reativa se usuário desativou manualmente
-    if(val<=0) mats()[i].active=false;
-  }
-  renderMatSelGrid();
-  renderRestrGrid();
-  if(document.getElementById('pg-mats').style.display!=='none') renderMatCards();
-  sched();
+  setMatFabPrice(S.fac, mats()[i].name, field==='costBRL'?'BRL':'USD', val);
+  return; // delegado — mantém uma regra só de escrita de preço
 }
 
 
@@ -4342,18 +4403,23 @@ function openModal(idx){
   const m=idx===-1?{name:'',costUSD:0,costBRL:0,active:true}:mats()[idx];
   document.getElementById('m-name').value=m.name||'';
   document.getElementById('m-costUSD').value=m.costUSD||0;
-  document.getElementById('m-costBRL').value=m.costBRL||0;
+  document.getElementById('m-costBRL').value=brlLista(m)||'';
   document.getElementById('m-active').value=m.active?'1':'0';
   NKEYS.forEach(k=>{const e=document.getElementById('m-'+k);if(e)e.value=m[k]||0;});
   document.getElementById('matModal').classList.add('open');
 }
 function closeModal(){ document.getElementById('matModal').classList.remove('open'); }
 function saveMat(){
-  const usd=+document.getElementById('m-costUSD').value;
+  const usd=+document.getElementById('m-costUSD').value||0;
+  const brl=+document.getElementById('m-costBRL').value||0;
+  const antigo=_editIdx>=0?mats()[_editIdx]:null;
   const m={
     name:document.getElementById('m-name').value.trim()||'Material',
     costUSD:usd,
-    costBRL:parseFloat((usd*S.fx).toFixed(2)),
+    costBRL:brl,
+    brlSrc:brl>0?'lista':undefined,
+    // micro derivado continua derivado se o campo U$ não foi mexido
+    usdSrc:(antigo&&antigo.usdSrc==='deriv'&&usd===antigo.costUSD)?'deriv':undefined,
     active:document.getElementById('m-active').value==='1',
   };
   NKEYS.forEach(k=>{const e=document.getElementById('m-'+k);m[k]=e?+e.value:0;});
@@ -4365,7 +4431,7 @@ function saveMat(){
     S.fabs.forEach((f,i)=>{
       if(i===S.fac) return;
       if((f.mats||[]).some(x=>x.name===m.name)) return;
-      f.mats.push({...JSON.parse(JSON.stringify(m)),costUSD:0,costBRL:0,active:false});
+      f.mats.push({...JSON.parse(JSON.stringify(m)),costUSD:0,costBRL:0,brlSrc:undefined,active:false});
     });
   }
   else Object.assign(mats()[_editIdx],m);
@@ -4678,7 +4744,7 @@ function applyAllPDFPrices(){
       const mat = fabMats.find(m=>m.name===p.mpSistema);
       if(!mat){skipped++;return;}
       mat.costUSD = p.usd;
-      mat.costBRL = parseFloat((p.usd*S.fx).toFixed(2));
+      delete mat.usdSrc;   // preço de lista U$ vence derivação anterior
       applied++;
     });
   });
@@ -5070,7 +5136,7 @@ async function importMicroPDF(input){
       let mat=fab.mats.find(m=>m.name===nome);
       if(!mat){
         // Cria nova MP com zeros de nutrientes (usuário edita depois)
-        mat={name:nome,costUSD:usd,costBRL:parseFloat((usd*cambio).toFixed(2)),active:true,
+        mat={name:nome,costUSD:usd,costBRL:brl,brlSrc:'lista',usdSrc:'deriv',active:true,
           N:0,P:0,K:0,
           S:+(micro.S||0),Cl:0,Ca:0,
           Mg:+(micro.Mg||0),
@@ -5084,13 +5150,15 @@ async function importMicroPDF(input){
         S.fabs.forEach((f2,i2)=>{
           if(i2===fi) return;
           if(!f2.mats.find(m=>m.name===nome)){
-            f2.mats.push({...JSON.parse(JSON.stringify(mat)),costUSD:0,costBRL:0,active:false});
+            f2.mats.push({...JSON.parse(JSON.stringify(mat)),costUSD:0,costBRL:0,brlSrc:undefined,active:false});
           }
         });
         added++;
       } else {
         mat.costUSD=usd;
-        mat.costBRL=parseFloat((usd*cambio).toFixed(2));
+        mat.costBRL=brl;          // preço de lista em reais, puro
+        mat.brlSrc='lista';
+        mat.usdSrc='deriv';       // lado U$ segue o deflator quando o câmbio muda
         if(usd>0) mat.active=true;
         // Atualiza teores se vieram na resposta
         if(micro.B!==undefined) mat.B=+(micro.B||0);
@@ -5434,7 +5502,7 @@ function solveExact(materials, reqs, restrArr, qty){
   const MIN_KG=qty>0?50/qty:0.05;
   const TOL=0.01;
   const MACRO_SET=new Set(['N','P','K','S','Ca','Mg','Cl']);
-  const active=materials.filter(m=>m.active&&m.costUSD>0);
+  const active=materials.filter(m=>m.active&&cost(m)>0);
   if(!active.length) return null;
   const reqsOn=reqs.filter(r=>r.on&&r.min>0);
   const reqsCap=reqs.filter(r=>r.on&&r.max<100);
@@ -5548,7 +5616,7 @@ function solve(materials, reqs, restrArr, qty){
   const _startTime=Date.now();
   function timeUp(){return Date.now()-_startTime>TIMEOUT_MS;}
 
-  const active=materials.filter(m=>m.active&&m.costUSD>0);
+  const active=materials.filter(m=>m.active&&cost(m)>0);
   if(!active.length) return null;
 
   const reqsOn=reqs.filter(r=>r.on&&r.min>0);
@@ -6072,14 +6140,14 @@ function getWorker(){
   // Worker gerado a partir das funções reais (fonte única — nunca diverge do main thread)
   const workerCode=[
     'const NKEYS='+JSON.stringify(NKEYS)+';',
-    'function cost(m){ return m._workerCost||m.costUSD||0; }',
+    'function cost(m){ return (m._workerCost!=null?m._workerCost:m.costUSD)||0; }',
     _lpSolve.toString(),
     solveExact.toString(),
     solve.toString(),
     solveWithMicros.toString(),
     'self.onmessage=function(e){',
     '  const {materials,reqs,restrArr,cur,qty}=e.data;',
-    "  materials.forEach(function(m){m._workerCost=cur==='BRL'?m.costBRL:m.costUSD;});",
+    "  materials.forEach(function(m){m._workerCost=cur==='BRL'?((m.brlSrc==='lista'&&m.costBRL>0)?m.costBRL:0):(m.costUSD||0);});",
     '  try{ var res=solveWithMicros(materials,reqs,restrArr,qty||1000); self.postMessage({ok:true,res:res}); }',
     '  catch(err){ self.postMessage({ok:false,error:err.message}); }',
     '};'
@@ -6099,7 +6167,7 @@ function diagnoseFail(materials, reqs, restrArr, qty){
   const MIN_KG_ABS=50;
 
   // 1. Sem materiais ativos com preço
-  const active=materials.filter(m=>m.active&&m.costUSD>0);
+  const active=materials.filter(m=>m.active&&cost(m)>0);
   if(!active.length){
     msgs.push('⚠️ Nenhuma matéria-prima ativa com preço cadastrado nesta fábrica.');
     return msgs;
@@ -7975,7 +8043,7 @@ function fxRateResync(){
     if(el){ el.value=_fxLiveRate.toFixed(4); el.dataset.manual='0'; }
     S.fx=_fxLiveRate;
     // BRL das MPs precisa acompanhar, senão fica preso no câmbio manual anterior
-    S.fabs.forEach(function(f){f.mats.forEach(function(m){m.costBRL=parseFloat((m.costUSD*_fxLiveRate).toFixed(2));});});
+    _recalcDerivados();   // só o lado U$ dos micros deriva do câmbio; preço de lista fica intocado
     _fxAtualizaHeader();
     renderMatSelGrid();
     if(document.getElementById('pg-mats')&&document.getElementById('pg-mats').style.display!=='none') renderMatCards();
@@ -8266,7 +8334,7 @@ async function fetchRate(){
   if(!isDesync){
     const mudou=_fxLastRate==null||Math.abs(newRate-_fxLastRate)>0.0001;
     S.fx=newRate;
-    S.fabs.forEach(function(f){f.mats.forEach(function(m){m.costBRL=parseFloat((m.costUSD*newRate).toFixed(2));});});
+    _recalcDerivados();   // preços de lista (USD e BRL) não acompanham o tick — só os derivados
     // Re-render só quando muda de fato e sem destruir grade com input em foco
     const focused=document.activeElement&&document.activeElement.tagName==='INPUT';
     if(mudou&&!focused){
@@ -8375,7 +8443,7 @@ function applyFxToAll(){
   if(!rate||rate<1) return;
   S.fx=rate;
   // Always recalc BRL for all factories: BRL = USD × rate
-  S.fabs.forEach(f=>f.mats.forEach(m=>{ m.costBRL=parseFloat((m.costUSD*rate).toFixed(2)); }));
+  _recalcDerivados();   // câmbio manual também não sobrescreve preço de lista
   renderMatSelGrid();
   if(document.getElementById('pg-mats').style.display!=='none') renderMatCards();
   _fxAtualizaHeader();   // ticker assenta no valor efetivamente gravado
@@ -8436,18 +8504,18 @@ function atualizarMPsAddMP(){
   // Todas as MPs, inclusive inativas (usuário pode cotar qualquer uma)
   const ms=(S.fabs[fabIdx]?.mats||[]);
   mpSel.innerHTML=ms.map((m,i)=>{
-    const c=S.cur==='USD' ? (m.costUSD||0) : (m.costBRL||0);
+    const c=costCur(m,S.cur);
     return `<option value="${i}">${esc(m.name)} — ${S.cur==='USD'?'$':'R$'}${c.toFixed(2)}/t</option>`;
   }).join('');
   if(ms.length){
     const m0=ms[0];
-    const c=S.cur==='USD' ? (m0.costUSD||0) : (m0.costBRL||0);
+    const c=costCur(m0,S.cur);
     document.getElementById('addMP-cost').placeholder=c.toFixed(2);
   }
   mpSel.onchange=function(){
     const m=ms[+mpSel.value];
     if(m){
-      const c=S.cur==='USD' ? (m.costUSD||0) : (m.costBRL||0);
+      const c=costCur(m,S.cur);
       document.getElementById('addMP-cost').placeholder=c.toFixed(2);
     }
   };
@@ -13846,8 +13914,8 @@ function cfrAplicarNaFabrica(id){
   if(!casadas.length){ alert('Nenhuma MP desta fábrica tem preço neste registro.'); return; }
   if(!confirm('Aplicar os preços de '+cfrFmtData(r.data)+' em '+casadas.length+' MP(s) da fábrica '+alvo.name+'?\n\nIsto sobrescreve o custo atual dessas MPs.')) return;
   casadas.forEach(function(m){
+    if(m.usdSrc==='deriv') return;   // micro precificado pela lista R$ — CFR não se aplica
     m.costUSD=r.precos[m.name];
-    m.costBRL=parseFloat((m.costUSD*S.fx).toFixed(2));
   });
   sched();
   renderMatSelGrid();
