@@ -2572,7 +2572,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <button class="btn" style="border-color:var(--green);color:var(--green);background:rgba(168,255,83,.08)" onclick="document.getElementById('xlsxInput').click()">Excel</button>
       <button class="btn" style="border-color:var(--blue);color:var(--blue);background:rgba(77,142,240,.08)" onclick="document.getElementById('imgInput').click()">Imagem</button>
       <button class="btn" style="border-color:var(--red);color:var(--red);background:rgba(240,82,82,.08)" onclick="document.getElementById('pdfFileInput').click()">PDF</button>
-      <button class="btn" style="border-color:var(--purple);color:var(--purple);background:rgba(167,139,250,.08)" onclick="openMicroImport()">Micros PDF</button>
+      <button class="btn" style="border-color:var(--purple);color:var(--purple);background:rgba(167,139,250,.08)" onclick="openMicroImport()">Lista R$</button>
       <button class="btn btn-green btn-sm" onclick="openModal(-1)">+ Nova MP</button>
     </div>
   </div>
@@ -2589,13 +2589,13 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
   <div id="microPanel" style="display:none;margin-bottom:1rem">
     <div style="background:var(--surface);border:1px solid var(--purple);border-radius:var(--radius);padding:1rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;flex-wrap:wrap;gap:8px">
-        <div style="font-size:13px;font-weight:700;color:var(--purple)">Importar Micronutrientes via PDF</div>
+        <div style="font-size:13px;font-weight:700;color:var(--purple)">Importar Lista em R$ (PDF)</div>
         <button onclick="document.getElementById('microPanel').style.display='none'" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px">✕</button>
       </div>
       <div style="font-size:11px;color:var(--text2);line-height:1.8;margin-bottom:.75rem">
-        Fórmula: <strong>USD = (R$ × 0,8) ÷ (Câmbio × 0,99)</strong><br>
-        Câmbio atual: <span id="microCambioLabel">—</span><br>
-        <span style="color:var(--text3)">Lê apenas a seção Micro Elementos da lista. Preços R$ → USD automaticamente.</span>
+        Lê a lista completa em reais: <strong>Linha Convencional, Linha Diferenciada e Micro Elementos</strong>.<br>
+        Macros recebem o preço de lista R$ (o U$ continua vindo da lista em dólar). Micros derivam o U$ por <strong>(R$ × 0,8) ÷ (Câmbio × 0,99)</strong> · Câmbio atual: <span id="microCambioLabel">—</span><br>
+        <span style="color:var(--text3)">Fertigran P Evolve, Super N Pro e UHF entram como preços de tratamento em R$ — usados quando o tratamento está marcado na formulação.</span>
       </div>
       <input type="hidden" id="microDeflator" value="0.8">
       <button class="btn" style="border-color:var(--purple);color:var(--purple)" onclick="document.getElementById('microPdfInput').click()">
@@ -3617,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-2';
+const APP_VERSION='2026.08.14-3';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -3967,14 +3967,23 @@ function aplicarTratamentos(matsArr){
     if(S.tratamentos.fertigranP && _fabSupportsFertigranP()){
       if(mat.name==='MAP'){
         mat.name='MAP Fertigran P'; mat.N=10.6; mat.P=50.3;
-        mat.costUSD=(mat.costUSD||0)+100; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+        mat.costUSD=(mat.costUSD||0)+100;
+        // Em R$ o produto tratado tem preço PRÓPRIO na lista (Fertigran P Map Evolve);
+        // só cai para a sobretaxa convertida se a lista não trouxe esse preço.
+        if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
+        else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
       } else if(mat.name==='TSP'){
         mat.name='TSP FP'; mat.N=0; mat.P=44.5; mat.Ca=10;
-        mat.costUSD=(mat.costUSD||0)+100; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+        mat.costUSD=(mat.costUSD||0)+100;
+        if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
+        else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
       }
     }
     if(S.tratamentos.superNPro && mat.name==='Ureia'){
-      mat.costUSD=(mat.costUSD||0)+50; if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(50*S.fx);
+      mat.costUSD=(mat.costUSD||0)+50;
+      // Super N Pro tem preço próprio na lista R$ (não é Ureia + sobretaxa)
+      if(mat.brlSuperNPro>0){ mat.costBRL=mat.brlSuperNPro; mat.brlSrc='lista'; }
+      else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(50*S.fx);
     }
     return mat;
   });
@@ -5082,18 +5091,16 @@ async function importMicroPDF(input){
 
   status.innerHTML='Enviando para Gemini…';
 
-  const prompt='Analise a lista de precos de fertilizantes e extraia APENAS os produtos da secao Micro Elementos (micronutrientes).\n'
-    +'Produtos a extrair: BR 12, Boro 5%, Boro 10%, Cobre 5%, Cobre 10%, Zinco 5%, Zinco 10%, Zinco 25%, Manganes 5%, Magnesio 30%, MIB Micro I, MIB 204, Mastergran BR 12, Mastergran Zinco, Enxofre Bentonita.\n'
-    +'Para cada produto extraia:\n'
-    +'1) Precos em R$ de Uberaba, Catalao e Paranagua (traco ou vazio = null). Remova pontos de milhar e converta virgula para ponto: 3.108,55 vira 3108.55\n'
-    +'2) Teores dos nutrientes presentes nas colunas da tabela (B, Zn, Cu, Mn, Mg, S — valores numericos percentuais). Coluna sem valor = 0.\n'
-    +'Exemplos da lista:\n'
-    +'BR 12: B=1, Zn=5 (nao tem), Cu=0, Mn=2, Mg=0, S=0\n'
-    +'Boro 5%: B=5, outros=0\n'
-    +'Enxofre Bentonita: S=90, outros=0\n'
-    +'MIB 204: B=5, Zn=6, Cu=5, Mn=6, outros=0\n'
+  const prompt='Analise a imagem da lista de precos de fertilizantes em REAIS. Ela tem tres secoes: Linha Convencional, Linha Diferenciada e Micro Elementos.\n'
+    +'Extraia TODOS os produtos das TRES secoes. Para cada produto:\n'
+    +'1) nome: exatamente como esta escrito na lista (ex: "KCL Gr.", "Fertigran P Map Evolve", "Fertigran P Tsp Evolve - UBERABA", "Super N Pro", "UHF", "Boro 10%").\n'
+    +'2) secao: "convencional", "diferenciada" ou "micros".\n'
+    +'3) Precos em R$ das colunas Uberaba, Catalao e Paranagua. Traco, vazio ou -R$ = null. Remova pontos de milhar e converta virgula para ponto: 3.875,00 vira 3875.00\n'
+    +'4) Teores percentuais das colunas de nutrientes quando existirem (N, P, K, Ca, S, Mg, B, Zn, Cu, Mn). Coluna sem valor = 0.\n'
+    +'Exemplos: KCL Gr.: K=60 · Sam Gr.: N=20.5, S=23 · BR 12: B=1, Zn=5, Mn=2 · Enxofre Bentonita: S=90\n'
+    +'A linha UHF costuma trazer um valor grande (ex: 325.000,00) — extraia como esta.\n'
     +'Retorne APENAS JSON valido sem markdown:\n'
-    +'{"micros":[{"nome":"BR 12","B":1,"Zn":5,"Cu":0,"Mn":2,"Mg":0,"S":0,"uberaba":3108.55,"catalao":3134.87,"paranagua":null}]}';
+    +'{"produtos":[{"nome":"KCL Gr.","secao":"convencional","N":0,"P":0,"K":60,"Ca":0,"S":0,"Mg":0,"B":0,"Zn":0,"Cu":0,"Mn":0,"uberaba":3875,"catalao":3890,"paranagua":3625}]}';
 
   const microLog=(msg,color)=>{ status.innerHTML=color?'<span style="color:'+color+'">'+msg+'</span>':msg; };
   let data;
@@ -5111,73 +5118,108 @@ async function importMicroPDF(input){
   let parsed;
   try{ parsed=JSON.parse(raw); }catch(e){ status.innerHTML='Erro ao interpretar JSON: '+e.message; return; }
 
-  const micros=parsed.micros||[];
-  if(!micros.length){ status.innerHTML='Nenhum micronutriente encontrado.'; return; }
-
-  // Mapeamento fábrica → índice
-  const fabMap={'uberaba':null,'catalao':null,'paranagua':null};
-  S.fabs.forEach((f,i)=>{
-    const n=f.name.toLowerCase();
-    if(n.includes('uberaba')) fabMap.uberaba=i;
-    else if(n.includes('catal')) fabMap.catalao=i;
-    else if(n.includes('parana')) fabMap.paranagua=i;
-  });
-
-  let added=0, updated=0;
-  micros.forEach(micro=>{
-    const nome=micro.nome;
-    // Para cada fábrica, converte BRL→USD e cadastra/atualiza
-    [['uberaba',fabMap.uberaba],['catalao',fabMap.catalao],['paranagua',fabMap.paranagua]].forEach(([key,fi])=>{
-      if(fi===null||fi===undefined) return;
-      const brl=micro[key];
-      if(!brl||brl<=0) return;
-      const usd=parseFloat(((brl*deflator)/fxAdj).toFixed(2));
-      const fab=S.fabs[fi];
-      let mat=fab.mats.find(m=>m.name===nome);
-      if(!mat){
-        // Cria nova MP com zeros de nutrientes (usuário edita depois)
-        mat={name:nome,costUSD:usd,costBRL:brl,brlSrc:'lista',usdSrc:'deriv',active:true,
-          N:0,P:0,K:0,
-          S:+(micro.S||0),Cl:0,Ca:0,
-          Mg:+(micro.Mg||0),
-          B:+(micro.B||0),
-          Cu:+(micro.Cu||0),
-          Zn:+(micro.Zn||0),
-          Mn:+(micro.Mn||0),
-          Fe:0,Mo:0};
-        fab.mats.push(mat);
-        // Também adiciona nas outras fábricas se não existir
-        S.fabs.forEach((f2,i2)=>{
-          if(i2===fi) return;
-          if(!f2.mats.find(m=>m.name===nome)){
-            f2.mats.push({...JSON.parse(JSON.stringify(mat)),costUSD:0,costBRL:0,brlSrc:undefined,active:false});
-          }
-        });
-        added++;
-      } else {
-        mat.costUSD=usd;
-        mat.costBRL=brl;          // preço de lista em reais, puro
-        mat.brlSrc='lista';
-        mat.usdSrc='deriv';       // lado U$ segue o deflator quando o câmbio muda
-        if(usd>0) mat.active=true;
-        // Atualiza teores se vieram na resposta
-        if(micro.B!==undefined) mat.B=+(micro.B||0);
-        if(micro.Zn!==undefined) mat.Zn=+(micro.Zn||0);
-        if(micro.Cu!==undefined) mat.Cu=+(micro.Cu||0);
-        if(micro.Mn!==undefined) mat.Mn=+(micro.Mn||0);
-        if(micro.Mg!==undefined) mat.Mg=+(micro.Mg||0);
-        if(micro.S!==undefined) mat.S=+(micro.S||0);
-        updated++;
-      }
-    });
-  });
+  const produtos=parsed.produtos||parsed.micros||[];
+  if(!produtos.length){ status.innerHTML='Nenhum produto encontrado na lista.'; return; }
+  const resumo=_aplicarListaBRL(produtos,{deflator,fxAdj});
 
   autoDeactivateByPrice();
   renderMatCards(); renderMatSelGrid(); renderRestrGrid(); sched();
 
-  status.innerHTML='<span style="color:var(--green)">'+added+' MPs adicionadas, '+updated+' atualizadas.</span> '
-    +'Deflator: '+deflator+' · Câmbio: R$'+cambio.toFixed(4)+' · Fator: ÷'+fxAdj.toFixed(4)
-    +'<br><small style="color:var(--text3)">Teores (B, Zn, Cu, Mn, Mg, S) importados automaticamente da lista.</small>';
+  status.innerHTML='<span style="color:var(--green)">'+resumo.updated+' preço(s) R$ aplicados, '+resumo.added+' MP(s) criadas.</span> '
+    +(resumo.trat.length?'Tratamentos: '+resumo.trat.join(' · ')+'. ':'')
+    +'Micros → U$ pelo deflator '+deflator+' (câmbio R$'+cambio.toFixed(4)+')'
+    +(resumo.semMatch.length?'<br><small style="color:var(--amber)">Sem correspondência no cadastro (criadas do zero): '+resumo.semMatch.join(', ')+'</small>':'');
+}
+
+// ── Aplicação da lista em R$ ────────────────────────────────────────────────
+// Nomes da lista → nomes do app (normalizados sem acento/pontuação)
+function _brlNorm(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9%]+/g,'');}
+const BRL_NOME_MAP={
+  kclgr:'KCL',kcl:'KCL',ureiagr:'Ureia',ureia:'Ureia',nam:'NAM',samgr:'SAM',sam:'SAM',
+  mapgr:'MAP',map:'MAP',tspgr:'TSP',tsp:'TSP',
+  '0020gr':'00-20','0020':'00-20','0021gr':'00-21','0021':'00-21',
+  npk151515:'NPK 15-15-15',np0840:'NP 08-40',
+};
+function _aplicarListaBRL(produtos,cfg){
+  const deflator=cfg.deflator||0.8, fxAdj=cfg.fxAdj||(S.fx*0.99);
+  const fabMap={uberaba:null,catalao:null,paranagua:null};
+  S.fabs.forEach((f,i)=>{
+    const n=_brlNorm(f.name);
+    if(n.includes('uberaba')) fabMap.uberaba=i;
+    else if(n.includes('catal')) fabMap.catalao=i;
+    else if(n.includes('parana')) fabMap.paranagua=i;
+  });
+  const COLS=[['uberaba',fabMap.uberaba],['catalao',fabMap.catalao],['paranagua',fabMap.paranagua]];
+  let added=0,updated=0; const trat=[],semMatch=[];
+
+  produtos.forEach(prod=>{
+    const norm=_brlNorm(prod.nome);
+    const preco=key=>{const v=+prod[key];return v>0?v:null;};
+
+    // ── Linhas especiais: viram preço de tratamento na MP base ──
+    // Fertigran P Map Evolve → MAP.brlFertigranP · Fertigran P Tsp Evolve → TSP.brlFertigranP
+    // Super N Pro → Ureia.brlSuperNPro · UHF → S.uhfBRL (sobretaxa R$/t)
+    if(norm.startsWith('uhf')){
+      const v=preco('uberaba')||preco('catalao')||preco('paranagua');
+      if(v){ S.uhfBRL=v>1000?Math.round(v/1000):v; trat.push('UHF +R$'+S.uhfBRL+'/t'); }
+      return;
+    }
+    let alvoNome=null,campo=null,lbl=null;
+    if(norm.includes('supernpro')){ alvoNome='Ureia'; campo='brlSuperNPro'; lbl='Super N Pro'; }
+    else if(norm.includes('fertigranpmap')||norm.includes('fertigranmap')){ alvoNome='MAP'; campo='brlFertigranP'; lbl='Fertigran P (MAP)'; }
+    else if(norm.includes('fertigranptsp')||norm.includes('fertigrantsp')){ alvoNome='TSP'; campo='brlFertigranP'; lbl='Fertigran P (TSP)'; }
+    if(alvoNome){
+      let aplicou=false;
+      COLS.forEach(([key,fi])=>{
+        if(fi==null) return;
+        const brl=preco(key); if(!brl) return;
+        const m=S.fabs[fi].mats.find(x=>x.name===alvoNome);
+        if(m){ m[campo]=brl; aplicou=true; }
+      });
+      if(aplicou&&!trat.includes(lbl)) trat.push(lbl);
+      return;
+    }
+
+    // ── Produto comum (convencional, diferenciada restante ou micro) ──
+    const nomeApp=BRL_NOME_MAP[norm]||prod.nome;
+    // Micro: sem macro e com micro nos teores, ou seção declarada
+    const teores={N:+(prod.N||0),P:+(prod.P||0),K:+(prod.K||0),Ca:+(prod.Ca||0),S:+(prod.S||0),Mg:+(prod.Mg||0),
+                  B:+(prod.B||0),Zn:+(prod.Zn||0),Cu:+(prod.Cu||0),Mn:+(prod.Mn||0)};
+    const ehMicro=(prod.secao==='micros')||
+      (!['N','P','K','Ca','S','Mg'].some(k=>teores[k]>0)&&['B','Zn','Cu','Mn'].some(k=>teores[k]>0));
+    let criadaAqui=false;
+    COLS.forEach(([key,fi])=>{
+      if(fi==null) return;
+      const brl=preco(key); if(!brl) return;
+      const fabA=S.fabs[fi];
+      let mat=fabA.mats.find(m=>m.name===nomeApp);
+      if(!mat){
+        mat={name:nomeApp,costUSD:0,costBRL:0,active:true,
+          N:teores.N,P:teores.P,K:teores.K,S:teores.S,Cl:0,Ca:teores.Ca,Mg:teores.Mg,
+          B:teores.B,Cu:teores.Cu,Zn:teores.Zn,Mn:teores.Mn,Fe:0,Mo:0};
+        fabA.mats.push(mat);
+        S.fabs.forEach((f2,i2)=>{
+          if(i2===fi) return;
+          if(!f2.mats.find(m=>m.name===nomeApp))
+            f2.mats.push({...JSON.parse(JSON.stringify(mat)),costUSD:0,costBRL:0,brlSrc:undefined,active:false});
+        });
+        added++; criadaAqui=true;
+      }
+      mat.costBRL=brl;
+      mat.brlSrc='lista';
+      if(ehMicro){
+        // micro: U$ derivado pelo deflator, segue o câmbio
+        mat.usdSrc='deriv';
+        mat.costUSD=parseFloat(((brl*deflator)/fxAdj).toFixed(2));
+        ['B','Zn','Cu','Mn','Mg','S'].forEach(k=>{ if(prod[k]!==undefined) mat[k]=+(prod[k]||0); });
+        if(mat.costUSD>0) mat.active=true;
+      }
+      // macro: costUSD é da lista em dólar — não tocar
+      updated++;
+    });
+    if(criadaAqui&&!BRL_NOME_MAP[norm]) semMatch.push(nomeApp);
+  });
+  return {added,updated,trat,semMatch};
 }
 
 async function importPricePDF(input){
@@ -6255,11 +6297,12 @@ function _processResult(res, qty, lote, resAlt, altCur){
     const treated=aplicarTratamentos(mats());
     if(res.mats) res.mats=res.mats.map(wm=>treated.find(m=>m.name===wm.name)||wm);
     if(resAlt&&resAlt.mats) resAlt.mats=resAlt.mats.map(wm=>treated.find(m=>m.name===wm.name)||wm);
-    // UHF é sobretaxa em U$: no resultado em R$ entra convertida
+    // UHF: +U$50/t no caminho dólar; no caminho R$ vale o valor da lista (R$325/t por padrão)
     const uhf=S.tratamentos&&S.tratamentos.uhf;
-    if(uhf) res.cpt=(res.cpt||0)+(S.cur==='BRL'?50*S.fx:50);
-    if(uhf&&resAlt) resAlt.cpt=(resAlt.cpt||0)+(altCur==='BRL'?50*S.fx:50);
-    if(res.nt) res.nt.cost=(res.nt.cost||0)+(uhf?(S.cur==='BRL'?50*S.fx:50):0);
+    const uhfBRL=S.uhfBRL||325;
+    if(uhf) res.cpt=(res.cpt||0)+(S.cur==='BRL'?uhfBRL:50);
+    if(uhf&&resAlt) resAlt.cpt=(resAlt.cpt||0)+(altCur==='BRL'?uhfBRL:50);
+    if(res.nt) res.nt.cost=(res.nt.cost||0)+(uhf?(S.cur==='BRL'?uhfBRL:50):0);
     S.lastRes={res,resAlt,altCur,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur,tratamentos:Object.assign({},S.tratamentos)};
     S.hist=S.hist||[];
     const _gradeBase=fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K);
