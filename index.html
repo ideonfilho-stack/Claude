@@ -2522,16 +2522,28 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
         <div>Vá para a aba <strong style="color:var(--green)"><svg class="icon" viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>Formulação</strong> e clique em Calcular</div>
       </div>
       <div id="resContent" style="display:none">
-        <div class="result-box" style="margin-bottom:1.5rem">
-          <div class="res-hd">
-            <span>Formulação Ótima</span>
-            <span class="grade-badge" id="gradeLabel">—</span>
-            <span id="costBadge" class="badge bg-blue" style="margin-left:auto"></span>
+        <div id="tratBadges" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.6rem"></div>
+        <div id="resDivergeAviso" style="display:none;margin-bottom:.75rem"></div>
+        <!-- Duas formulações ótimas lado a lado: cada lista tem sua mistura ideal -->
+        <div id="resDual" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-bottom:1.5rem;align-items:start">
+          <div class="result-box" id="resColUSD" style="margin:0;border-color:rgba(91,140,255,.35)">
+            <div class="res-hd">
+              <span style="color:var(--blue)">Ótima pela lista U$</span>
+              <span class="grade-badge" id="gradeLabel">—</span>
+              <span id="costBadge" class="badge bg-blue" style="margin-left:auto"></span>
+            </div>
+            <div id="ingBars"></div>
+            <div class="chips" id="resChips"></div>
           </div>
-          <div id="tratBadges" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:.5rem"></div>
-
-          <div id="ingBars"></div>
-          <div class="chips" id="resChips"></div>
+          <div class="result-box" id="resColBRL" style="margin:0;border-color:rgba(248,181,62,.35)">
+            <div class="res-hd">
+              <span style="color:var(--amber)">Ótima pela lista R$</span>
+              <span class="grade-badge" id="gradeLabelB">—</span>
+              <span id="costBadgeB" class="badge" style="margin-left:auto;background:rgba(248,181,62,.18);color:var(--amber)"></span>
+            </div>
+            <div id="ingBarsB"></div>
+            <div class="chips" id="resChipsB"></div>
+          </div>
         </div>
         <div class="charts-row">
           <div class="chart-box"><div class="chart-title">Ingredientes (%)</div><div style="position:relative;height:clamp(160px,38vw,210px)"><canvas id="cResPie" role="img" aria-label="Ingredientes"></canvas></div></div>
@@ -3617,7 +3629,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-7';
+const APP_VERSION='2026.08.14-8';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -6530,6 +6542,112 @@ function _resCustoBRL(res){
   return null;                          // sem fórmula em R$: mostra —
 }
 
+// Par de resultados do último cálculo: a ótima de cada lista. O solver roda nas
+// duas moedas, então cada lado é uma mistura de verdade — não uma conversão.
+function _resPar(res){
+  const lr=S.lastRes;
+  if(lr&&lr.res===res){
+    const cur=lr.cur||'USD';
+    return cur==='USD'
+      ? {resU:res, resB:(lr.altCur==='BRL'?lr.resAlt:null)}
+      : {resB:res, resU:(lr.altCur==='USD'?lr.resAlt:null)};
+  }
+  return {resU:res, resB:null};
+}
+// Uma coluna de resultado. sufixo '' = lista U$, 'B' = lista R$.
+function _renderResCol(res,qty,cur,sufixo){
+  const gEl=document.getElementById('gradeLabel'+sufixo);
+  const cbEl=document.getElementById('costBadge'+sufixo);
+  const barEl=document.getElementById('ingBars'+sufixo);
+  const chEl=document.getElementById('resChips'+sufixo);
+  const col=document.getElementById(cur==='BRL'?'resColBRL':'resColUSD');
+  if(!res){
+    // Sem fórmula nesta lista — normalmente falta preço de lista para as MPs
+    if(gEl) gEl.textContent='—';
+    if(cbEl) cbEl.textContent='';
+    if(barEl) barEl.innerHTML='<div style="font-size:12px;color:var(--text3);padding:1.25rem .25rem;line-height:1.7">'
+      +'Sem formulação viável pela lista '+(cur==='BRL'?'R$':'U$')+'.<br>'
+      +'<span style="color:var(--text3)">Verifique se as MPs necessárias têm preço nessa lista — sem preço, a MP fica fora da mistura.</span></div>';
+    if(chEl) chEl.innerHTML='';
+    if(col) col.style.opacity='.55';
+    return;
+  }
+  if(col) col.style.opacity='1';
+  const N=res.nt;
+  const _npk=NUTS.slice(0,3);
+  const _extras=NUTS.slice(3).filter(n=>(N[n.k]||0)>0.01);
+  const _sep='<span style="color:var(--text3)">-</span>';
+  const _plus='<span style="color:var(--text3)"> + </span>';
+  const _npkHTML=_npk.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'</span>').join(_sep);
+  const _extHTML=_extras.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join(_plus);
+  const _sufStr=tratamentoSuffix(null,res.mats);
+  const _sufHTML=_sufStr?'<span style="font-size:12px;font-weight:600;color:var(--text2);margin-left:6px">'+_sufStr+'</span>':'';
+  if(gEl) gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'')+_sufHTML;
+  if(cbEl) cbEl.textContent=fmtMoney(res.cpt,cur)+'/t';
+
+  const kgsArr=fracsToKg(res.fracs,qty);
+  if(barEl) barEl.innerHTML=res.mats.map((m,i)=>{
+    const kg=kgsArr[i];
+    const pct=fl2(res.fracs[i]*100);
+    const barW=(res.fracs[i]*100).toFixed(1);
+    const contrib=NKEYS.filter(k=>(m[k]||0)>0).map(k=>{
+      const aporte=(res.fracs[i]*(m[k]||0)).toFixed(2);
+      const nut=NUTS.find(n=>n.k===k);
+      return '<span style="color:'+(nut?nut.color:'var(--text2)')+'">'+k+':'+aporte+'%</span>';
+    }).join(' ');
+    return '<div class="bar-row" style="flex-wrap:wrap;cursor:pointer" onclick="toggleMpDetail(this)">'
+      +'<span class="bar-lbl" title="'+esc(m.name)+'" style="color:'+PCOLS[i%PCOLS.length]+'">'+esc(m.name)+'</span>'
+      +'<div class="bar-track"><div class="bar-fill" style="width:'+barW+'%;background:'+PCOLS[i%PCOLS.length]+'"></div></div>'
+      +'<span class="bar-pct" style="width:70px;font-size:13px;font-weight:700">'+kg+' kg</span>'
+      +'<span class="bar-kg" style="color:var(--text3)">'+pct+'%</span>'
+      +'<div class="mp-detail" style="display:none;width:100%;font-size:11px;padding:4px 0 2px 0;gap:6px;flex-wrap:wrap">'+contrib+'</div>'
+      +'</div>';
+  }).join('');
+
+  const onNuts=NUTS.filter(n=>(N[n.k]||0)>0);
+  const corCusto=cur==='BRL'?'var(--amber)':'var(--blue)';
+  const chips=[
+    ...onNuts.map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0)+'%',col:n.color,big:false})),
+    {lbl:'Custo/ton '+(cur==='BRL'?'R$':'U$'),val:fmtMoney(res.cpt,cur),col:corCusto,big:true},
+    {lbl:'Qtd total',val:(qty/1000).toFixed(1)+' ton',col:'var(--text2)',big:false},
+  ];
+  if(chEl) chEl.innerHTML=chips.map(c=>
+    '<div class="chip" style="--accent:'+c.col+';--glow:'+c.col+'1a;'+(c.big?'border-color:'+c.col+';background:'+c.col+'18':'')+'">'
+    +'<div class="chip-lbl">'+c.lbl+'</div>'
+    +'<div class="chip-val" style="color:'+c.col+';font-size:'+(c.big?'22px':'14px')+'">'+c.val+'</div>'
+    +'</div>').join('');
+}
+// Aviso comparativo: diz se as duas listas chegaram à mesma mistura e, quando
+// divergem, quais MPs entram só em um lado — é onde erro de preço aparece.
+function _renderResDiverge(par,qty){
+  const el=document.getElementById('resDivergeAviso');
+  if(!el) return;
+  const {resU,resB}=par;
+  if(!resU||!resB){ el.style.display='none'; return; }
+  const nomes=r=>r.mats.map(m=>m.name);
+  const nU=nomes(resU), nB=nomes(resB);
+  const soU=nU.filter(n=>nB.indexOf(n)<0);
+  const soB=nB.filter(n=>nU.indexOf(n)<0);
+  // Mesma composição? compara nome+kg arredondado
+  const kU=fracsToKg(resU.fracs,qty), kB=fracsToKg(resB.fracs,qty);
+  const assinatura=(ns,ks)=>ns.map((n,i)=>n+':'+Math.round(ks[i])).sort().join('|');
+  const igual=assinatura(nU,kU)===assinatura(nB,kB);
+  el.style.display='';
+  if(igual){
+    el.innerHTML='<div style="font-size:11.5px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px">'
+      +'✓ As duas listas levam à <strong style="color:var(--text2)">mesma mistura</strong> — os custos ao lado são da mesma fórmula, comparáveis diretamente.</div>';
+    return;
+  }
+  const difs=[];
+  if(soU.length) difs.push('<span style="color:var(--blue)">só na U$: '+soU.map(esc).join(', ')+'</span>');
+  if(soB.length) difs.push('<span style="color:var(--amber)">só na R$: '+soB.map(esc).join(', ')+'</span>');
+  if(!difs.length) difs.push('mesmas MPs em proporções diferentes');
+  el.innerHTML='<div style="font-size:11.5px;color:var(--text2);background:rgba(248,181,62,.08);border:1px solid rgba(248,181,62,.35);border-radius:var(--radius-sm);padding:8px 12px;line-height:1.7">'
+    +'<strong style="color:var(--amber)">⚠ As listas produzem misturas diferentes.</strong> '
+    +difs.join(' · ')
+    +'<br><span style="color:var(--text3)">Cada coluna é a melhor mistura possível na sua lista. Divergência grande costuma indicar preço faltando ou errado em uma delas.</span></div>';
+}
+
 function renderRes(res,qty,lote){
   const N=res.nt;
   const empty=document.getElementById('resEmpty');
@@ -6537,22 +6655,12 @@ function renderRes(res,qty,lote){
   if(empty) empty.style.display='none';
   if(resContent) resContent.style.display='';
 
-  // N-P-K sempre exibido separados por traço; demais só se > 0 com %Label
-  const _npk=NUTS.slice(0,3);
-  const _extras=NUTS.slice(3).filter(n=>(N[n.k]||0)>0.01);
-  const _sep='<span style="color:var(--text3)">-</span>';
-  const _plus='<span style="color:var(--text3)"> + </span>';
-  const _npkHTML=_npk.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'</span>').join(_sep);
-  const _extHTML=_extras.map(n=>'<span style="color:'+n.color+'">'+fl2(N[n.k]||0)+'%'+n.lbl+'</span>').join(_plus);
-  const _gEl=document.getElementById('gradeLabel');
-  const _sufStr=tratamentoSuffix(null,res.mats);
-  const _sufHTML=_sufStr?'<span style="font-size:12px;font-weight:600;color:var(--text2);margin-left:6px">'+_sufStr+'</span>':'';
-  if(_gEl) _gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'')+_sufHTML;
-
-  // Custo destacado — as duas listas
-  const _cU=_resCustoUSD(res), _cB=_resCustoBRL(res);
-  const _cbEl=document.getElementById('costBadge');
-  if(_cbEl) _cbEl.textContent=fmtMoney(_cU,'USD')+'/t'+(_cB!=null?'  ·  '+fmtMoney(_cB,'BRL')+'/t':'');
+  // Duas formulações ótimas lado a lado — uma por lista de preço
+  const onNuts=NUTS.filter(n=>(N[n.k]||0)>0);   // usado pelos gráficos abaixo
+  const _par=_resPar(res);
+  _renderResCol(_par.resU,qty,'USD','');
+  _renderResCol(_par.resB,qty,'BRL','B');
+  _renderResDiverge(_par,qty);
 
   // Badges de tratamentos ativos
   const _trat=S.lastRes&&S.lastRes.tratamentos?S.lastRes.tratamentos:(S.tratamentos||{});
@@ -6564,45 +6672,6 @@ function renderRes(res,qty,lote){
   if(_tbEl) _tbEl.innerHTML=_tratLabels.length
     ? _tratLabels.map(t=>'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+t.col+'22;color:'+t.col+';border:1px solid '+t.col+'55">'+t.lbl+'</span>').join('')
     : '';
-
-  // Barras — mostrar KG em vez de %
-  const kgsArr=fracsToKg(res.fracs, qty);
-  document.getElementById('ingBars').innerHTML=res.mats.map((m,i)=>{
-    const kg=kgsArr[i];
-    const pct=fl2(res.fracs[i]*100);
-    const barW=(res.fracs[i]*100).toFixed(1);
-    // Contribuição de nutrientes desta MP
-    const contrib=NKEYS.filter(k=>(m[k]||0)>0).map(k=>{
-      const aporte=(res.fracs[i]*(m[k]||0)).toFixed(2);
-      const nut=NUTS.find(n=>n.k===k);
-      return '<span style="color:'+(nut?nut.color:'var(--text2)')+'">'+k+':'+aporte+'%</span>';
-    }).join(' ');
-    return '<div class="bar-row" style="flex-wrap:wrap;cursor:pointer" onclick="toggleMpDetail(this)">'
-      +'<span class="bar-lbl" title="'+m.name+'" style="color:'+PCOLS[i%PCOLS.length]+'">'+m.name+'</span>'
-      +'<div class="bar-track"><div class="bar-fill" style="width:'+barW+'%;background:'+PCOLS[i%PCOLS.length]+'"></div></div>'
-      +'<span class="bar-pct" style="width:70px;font-size:13px;font-weight:700">'+kg+' kg</span>'
-      +'<span class="bar-kg" style="color:var(--text3)">'+pct+'%</span>'
-      +'<div class="mp-detail" style="display:none;width:100%;font-size:11px;padding:4px 0 2px 0;gap:6px;flex-wrap:wrap;display:none">'+contrib+'</div>'
-      +'</div>';
-  }).join('');
-
-  const onNuts=NUTS.filter(n=>(N[n.k]||0)>0);
-
-  // Chips — custo em destaque maior
-  const chips=[
-    ...onNuts.map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0)+'%',col:n.color,big:false})),
-    {lbl:'Custo/ton U$',val:fmtMoney(_resCustoUSD(res),'USD'), col:'var(--blue)',  big:true},
-    {lbl:'Custo/ton R$',val:_resCustoBRL(res)!=null?fmtMoney(_resCustoBRL(res),'BRL'):'—',
-                        col:'var(--amber)', big:true},
-    {lbl:'Qtd total',  val:(qty/1000).toFixed(1)+' ton',            col:'var(--text2)', big:false},
-
-  ];
-  document.getElementById('resChips').innerHTML=chips.map(c=>
-    '<div class="chip" style="--accent:'+c.col+';--glow:'+c.col+'1a;'+(c.big?'border-color:'+c.col+';background:'+c.col+'18':'')+'">'
-    +'<div class="chip-lbl">'+c.lbl+'</div>'
-    +'<div class="chip-val" style="color:'+c.col+';font-size:'+(c.big?'22px':'14px')+'">'+c.val+'</div>'
-    +'</div>'
-  ).join('');
 
   // Botão incluir na cotação
   const inc=document.getElementById('btnIncluirCot');
