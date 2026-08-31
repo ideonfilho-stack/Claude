@@ -3617,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-3';
+const APP_VERSION='2026.08.14-4';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -5099,15 +5099,16 @@ async function importMicroPDF(input){
     +'4) Teores percentuais das colunas de nutrientes quando existirem (N, P, K, Ca, S, Mg, B, Zn, Cu, Mn). Coluna sem valor = 0.\n'
     +'Exemplos: KCL Gr.: K=60 · Sam Gr.: N=20.5, S=23 · BR 12: B=1, Zn=5, Mn=2 · Enxofre Bentonita: S=90\n'
     +'A linha UHF costuma trazer um valor grande (ex: 325.000,00) — extraia como esta.\n'
+    +'IMPORTANTE: para a resposta ficar curta, OMITA os campos de teor com valor 0 e omita precos null — inclua apenas o que existe.\n'
     +'Retorne APENAS JSON valido sem markdown:\n'
-    +'{"produtos":[{"nome":"KCL Gr.","secao":"convencional","N":0,"P":0,"K":60,"Ca":0,"S":0,"Mg":0,"B":0,"Zn":0,"Cu":0,"Mn":0,"uberaba":3875,"catalao":3890,"paranagua":3625}]}';
+    +'{"produtos":[{"nome":"KCL Gr.","secao":"convencional","K":60,"uberaba":3875,"catalao":3890,"paranagua":3625},{"nome":"Boro 10%","secao":"micros","B":10,"uberaba":5398.03,"catalao":5424.34}]}';
 
   const microLog=(msg,color)=>{ status.innerHTML=color?'<span style="color:'+color+'">'+msg+'</span>':msg; };
   let data;
   try{
     data=await geminiCallWithRetry(apiKey,{
       contents:[{parts:[{inline_data:{mime_type:'image/jpeg',data:base64}},{text:prompt}]}],
-      generationConfig:{temperature:0,maxOutputTokens:4096,responseMimeType:'application/json'}
+      generationConfig:{temperature:0,maxOutputTokens:16384,responseMimeType:'application/json'}
     },microLog);
   }catch(e){ microLog('Erro: '+e.message,'var(--red)'); return; }
 
@@ -5116,7 +5117,17 @@ async function importMicroPDF(input){
   raw=raw.replace(/```json|```/g,'').trim();
 
   let parsed;
-  try{ parsed=JSON.parse(raw); }catch(e){ status.innerHTML='Erro ao interpretar JSON: '+e.message; return; }
+  try{ parsed=JSON.parse(raw); }
+  catch(e){
+    // Resposta truncada no meio de um objeto: corta no último produto completo
+    // e fecha o array — melhor importar N-1 produtos do que nenhum.
+    const corte=raw.lastIndexOf('},');
+    if(corte>0){
+      try{ parsed=JSON.parse(raw.slice(0,corte+1)+']}'); }catch(e2){ parsed=null; }
+    }
+    if(!parsed){ status.innerHTML='Erro ao interpretar JSON: '+e.message; return; }
+    status.innerHTML='<span style="color:var(--amber)">Resposta veio truncada — importando os produtos completos recebidos…</span>';
+  }
 
   const produtos=parsed.produtos||parsed.micros||[];
   if(!produtos.length){ status.innerHTML='Nenhum produto encontrado na lista.'; return; }
