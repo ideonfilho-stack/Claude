@@ -3617,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-4';
+const APP_VERSION='2026.08.14-5';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -3747,6 +3747,7 @@ async function loadS(){
       if(!S.crm) S.crm={clientes:[],leads:[]};
   if(!S.cfr) S.cfr={registros:[]};
   _migrarMoedaDupla();
+  _limparDuplicatasLista();
     } else {
       initFabs();
     }
@@ -3771,6 +3772,7 @@ function _applyRemoteState(state,ts){
   if(!S.crm) S.crm={clientes:[],leads:[]};
   if(!S.cfr) S.cfr={registros:[]};
   _migrarMoedaDupla();
+  _limparDuplicatasLista();
   window._stateBaseTs=ts;
   _dirty=false;
   try{ renderAll(); }catch(_){ }
@@ -5146,11 +5148,59 @@ async function importMicroPDF(input){
 // Nomes da lista → nomes do app (normalizados sem acento/pontuação)
 function _brlNorm(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9%]+/g,'');}
 const BRL_NOME_MAP={
-  kclgr:'KCL',kcl:'KCL',ureiagr:'Ureia',ureia:'Ureia',nam:'NAM',samgr:'SAM',sam:'SAM',
+  kclgr:'KCL',kcl:'KCL',ureiagr:'Ureia',ureia:'Ureia',namgr:'NAM',nam:'NAM',samgr:'SAM',sam:'SAM',
   mapgr:'MAP',map:'MAP',tspgr:'TSP',tsp:'TSP',
   '0020gr':'00-20','0020':'00-20','0021gr':'00-21','0021':'00-21',
   npk151515:'NPK 15-15-15',np0840:'NP 08-40',
 };
+// Casa o nome vindo da lista com uma MP do app: tabela fixa primeiro (com e sem o
+// sufixo "Gr.") e, faltando, o próprio cadastro — assim "Nam gr." encontra o NAM
+// existente em vez de virar MP nova. null = sem correspondência.
+function _brlNomeApp(nome){
+  const n=_brlNorm(nome);
+  const semGr=n.replace(/gr$/,'');
+  if(BRL_NOME_MAP[n]) return BRL_NOME_MAP[n];
+  if(BRL_NOME_MAP[semGr]) return BRL_NOME_MAP[semGr];
+  for(const f of (S.fabs||[])) for(const m of (f.mats||[])){
+    const mn=_brlNorm(m.name), mnSemGr=mn.replace(/gr$/,'');
+    if(mn===n||mn===semGr||mnSemGr===n||mnSemGr===semGr) return m.name;
+  }
+  return null;
+}
+// Limpeza única: funde duplicatas que a importação criou antes do casamento
+// tolerante ("Nam gr." ao lado de "NAM"). Só funde quando a duplicata é
+// claramente artefato de importação (sem preço U$ próprio); em dúvida, não mexe.
+function _limparDuplicatasLista(){
+  if(S._dedupListaV1) return;
+  S._dedupListaV1=true;
+  let mudou=false;
+  (S.fabs||[]).forEach(f=>{
+    const porChave={};
+    (f.mats||[]).forEach(m=>{
+      const k=_brlNorm(m.name).replace(/gr$/,'');
+      (porChave[k]=porChave[k]||[]).push(m);
+    });
+    Object.values(porChave).forEach(grupo=>{
+      if(grupo.length<2) return;
+      // canônico: quem tem preço U$ de lista própria (não derivado); senão o primeiro
+      const canon=grupo.find(m=>m.costUSD>0&&m.usdSrc!=='deriv')||grupo[0];
+      grupo.forEach(dup=>{
+        if(dup===canon) return;
+        const artefato=!(dup.costUSD>0&&dup.usdSrc!=='deriv');
+        if(!artefato) return;
+        if(brlLista(dup)&&!brlLista(canon)){
+          canon.costBRL=dup.costBRL; canon.brlSrc='lista';
+          if(dup.usdSrc==='deriv'){ canon.usdSrc='deriv'; canon.costUSD=dup.costUSD; }
+        }
+        if(dup.brlFertigranP>0&&!canon.brlFertigranP) canon.brlFertigranP=dup.brlFertigranP;
+        if(dup.brlSuperNPro>0&&!canon.brlSuperNPro) canon.brlSuperNPro=dup.brlSuperNPro;
+        f.mats.splice(f.mats.indexOf(dup),1);
+        mudou=true;
+      });
+    });
+  });
+  if(mudou){ sched(); }
+}
 function _aplicarListaBRL(produtos,cfg){
   const deflator=cfg.deflator||0.8, fxAdj=cfg.fxAdj||(S.fx*0.99);
   const fabMap={uberaba:null,catalao:null,paranagua:null};
@@ -5192,7 +5242,8 @@ function _aplicarListaBRL(produtos,cfg){
     }
 
     // ── Produto comum (convencional, diferenciada restante ou micro) ──
-    const nomeApp=BRL_NOME_MAP[norm]||prod.nome;
+    const casado=_brlNomeApp(prod.nome);
+    const nomeApp=casado||prod.nome;
     // Micro: sem macro e com micro nos teores, ou seção declarada
     const teores={N:+(prod.N||0),P:+(prod.P||0),K:+(prod.K||0),Ca:+(prod.Ca||0),S:+(prod.S||0),Mg:+(prod.Mg||0),
                   B:+(prod.B||0),Zn:+(prod.Zn||0),Cu:+(prod.Cu||0),Mn:+(prod.Mn||0)};
@@ -5228,7 +5279,7 @@ function _aplicarListaBRL(produtos,cfg){
       // macro: costUSD é da lista em dólar — não tocar
       updated++;
     });
-    if(criadaAqui&&!BRL_NOME_MAP[norm]) semMatch.push(nomeApp);
+    if(criadaAqui&&!casado) semMatch.push(nomeApp);
   });
   return {added,updated,trat,semMatch};
 }
