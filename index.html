@@ -3617,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-5';
+const APP_VERSION='2026.08.14-6';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -8605,7 +8605,7 @@ function incluirNaCotacao(){
     mats: (()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})(),
     nt: NUTS.filter(n=>['N','P','K'].includes(n.k)||(N[n.k]||0)>0.01).map(n=>({lbl:n.lbl, val:fl2(N[n.k]||0)})),
     // Parâmetros por item (V11.1)
-    params: { taxa:1.6, prazo:1, com:0, frete:0, qtd:1, embalagem:'bag', cur:'USD', cliente:'' }
+    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:150, qtd:1, embalagem:'bag', cur:'USD', cliente:'' }
   });
   sched();
   recalcCotacao();
@@ -8681,7 +8681,7 @@ function confirmarAddMP(){
     mats: [{name:m.name, kg:qty*1000, pct:100}],
     nt: NUTS.filter(n=>(m[n.k]||0)>0).map(n=>({lbl:n.lbl, val:fl2(m[n.k]||0)})),
     // Parâmetros por item (V11.1)
-    params: { taxa:1.6, prazo:1, com:0, frete:0, qtd:qty, embalagem:'bag', cur:'USD', cliente:'' }
+    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:150, qtd:qty, embalagem:'bag', cur:'USD', cliente:'' }
   });
   sched();
   fecharAddMP();
@@ -8706,6 +8706,7 @@ function buildCotHTML(){
       prazo:     p.prazo     != null ? p.prazo     : 1,
       com:       p.com       != null ? p.com       : 0,
       frete:     p.frete     != null ? p.frete     : 0,
+      mo:        p.mo        != null ? p.mo        : 150,
       qtd:       p.qtd       != null ? p.qtd       : 1,
       embalagem: p.embalagem || 'bag',
       cur:       p.cur       || 'USD',
@@ -9371,7 +9372,7 @@ function removerItemCot(i){
 
 function _cotP_of(item){
   const p=item.params||{};
-  return {desc:p.desc!=null?p.desc:0,taxa:p.taxa!=null?p.taxa:1.6,prazo:p.prazo!=null?p.prazo:1,com:p.com!=null?p.com:0,frete:p.frete!=null?p.frete:0,qtd:p.qtd!=null?p.qtd:1,embalagem:p.embalagem||'bag',cur:p.cur||'USD',cliente:p.cliente||''};
+  return {desc:p.desc!=null?p.desc:0,taxa:p.taxa!=null?p.taxa:1.6,prazo:p.prazo!=null?p.prazo:1,com:p.com!=null?p.com:0,frete:p.frete!=null?p.frete:0,mo:p.mo!=null?p.mo:150,qtd:p.qtd!=null?p.qtd:1,embalagem:p.embalagem||'bag',cur:p.cur||'USD',cliente:p.cliente||''};
 }
 function _cotCalcVenda(custoUSD,p){
   const fxAdj=S.fx*0.99;
@@ -9399,50 +9400,85 @@ function _cotCustoItem(item,cur){
   if(item.custo!=null) return {base:item.custo,nativo:true};
   return {base:(item.custoBRL||0)/(S.fx||1),nativo:false};
 }
-// Venda na moeda pedida. Desc e granel são definidos em U$ (cabeçalho da tabela)
-// e convertem no caminho R$; o frete é digitado em R$ e converte no caminho U$.
+// Venda por caminho de lista.
+// U$: custo − desc − granel → juros → comissão → + frete÷(câmbio×0,99).
+// R$: custo de lista × 0,8 (deflator) − mão de obra (R$/t) → juros → comissão
+//     → + frete direto em R$. Desconto e granel não se aplicam ao caminho R$ —
+//     o deflator e a MO fazem esse papel na regra comercial da lista em reais.
 function _cotVendaNative(base,P,cur){
-  const fxAdj=S.fx*0.99;
-  const granelUSD=P.embalagem==='granel'?8:0;
-  const descUSD=P.desc||0;
   const taxa=P.taxa||0, prazo=P.prazo||0, com=P.com||0;
-  let custoEff, freteVal, granelDesc, desc;
+  let custoEff, freteVal, granelDesc=0, desc=0, deflatorVal=0, mo=0;
   if(cur==='BRL'){
-    granelDesc=granelUSD*S.fx; desc=descUSD*S.fx;
-    custoEff=base-desc-granelDesc;
+    mo=P.mo!=null?P.mo:150;
+    deflatorVal=base*0.2;
+    custoEff=base*0.8-mo;
     freteVal=P.frete||0;                        // frete já é R$/t
   } else {
-    granelDesc=granelUSD; desc=descUSD;
+    granelDesc=P.embalagem==='granel'?8:0;
+    desc=P.desc||0;
     custoEff=base-desc-granelDesc;
+    const fxAdj=S.fx*0.99;
     freteVal=fxAdj>0?(P.frete||0)/fxAdj:0;      // R$ → U$ com spread de 1%
   }
   const comJuros=custoEff*Math.pow(1+taxa/100,prazo);
   const comCom=com>0?comJuros/(1-com/100):comJuros;
-  return {venda:comCom+freteVal,custoEff,comJuros,jurosVal:comJuros-custoEff,comissaoVal:comCom-comJuros,freteUSD:freteVal,granelDesc,desc};
+  return {venda:comCom+freteVal,custoEff,comJuros,jurosVal:comJuros-custoEff,comissaoVal:comCom-comJuros,freteUSD:freteVal,granelDesc,desc,deflatorVal,mo};
 }
-// Cálculo completo do item: moeda ativa + a outra, lado a lado
+// Cálculo completo do item.
+// A moeda do item escolhe como FECHAR a conta da lista U$: em USD mostra a venda
+// U$; em BRL mostra a MESMA venda × câmbio (conversão no fim, sem refazer a conta).
+// Em paralelo, SEMPRE, roda a cotação pela lista R$ (deflator 0,8 − MO); sem preço
+// de lista R$, o paralelo é a venda U$ × câmbio, marcado como convertido.
 function _cotItemCalc(item,P){
   const cur=P.cur==='BRL'?'BRL':'USD';
-  const outra=cur==='USD'?'BRL':'USD';
-  const ci=_cotCustoItem(item,cur), co=_cotCustoItem(item,outra);
-  return {cur,outra,ci,co,calc:_cotVendaNative(ci.base,P,cur),calcAlt:_cotVendaNative(co.base,P,outra)};
+  const cUSD=_cotCustoItem(item,'USD');
+  const vUSD=_cotVendaNative(cUSD.base,P,'USD');
+  const temBRL=item.custoBRL!=null;
+  const k=S.fx||1;
+  const escalar=(v,f)=>({venda:v.venda*f,custoEff:v.custoEff*f,comJuros:v.comJuros*f,jurosVal:v.jurosVal*f,comissaoVal:v.comissaoVal*f,freteUSD:v.freteUSD*f,granelDesc:v.granelDesc*f,desc:v.desc*f,deflatorVal:0,mo:0});
+  const vBRL=temBRL?_cotVendaNative(item.custoBRL,P,'BRL'):escalar(vUSD,k);
+  const esc=cur==='BRL'?k:1;
+  return {
+    cur, outra:'BRL',
+    usdNativo:cUSD.nativo, brlNativo:temBRL, temBRL,
+    ci:{base:cUSD.base*esc,nativo:cUSD.nativo},
+    co:{base:temBRL?item.custoBRL:cUSD.base*k,nativo:temBRL},
+    vUSD,
+    calc:esc===1?vUSD:escalar(vUSD,k),
+    calcAlt:vBRL,
+  };
 }
-// Valor principal grande + o da outra moeda pequeno embaixo (≈ quando convertido)
+// Linha principal (conta da lista U$, fechada na moeda do item) + linha da
+// cotação pela lista R$ logo abaixo (≈ quando não há preço de lista R$)
 function _cotDualHTML(vMain,vAlt,cc,color,size,peso){
-  return '<span style="font-size:'+size+'px;font-weight:'+(peso||800)+';color:'+color+'">'+fmtMoney(vMain,cc.cur)+'</span>'
-    +'<div style="font-size:10px;color:var(--text3);font-weight:600;line-height:1.5" title="'+(cc.co.nativo?'Pela lista em '+(cc.outra==='BRL'?'reais':'dólar'):'Convertido pelo câmbio — sem preço de lista nesta moeda')+'">'
-    +(cc.co.nativo?'':'≈ ')+fmtMoney(vAlt,cc.outra)+'</div>';
+  const tMain=cc.cur==='BRL'?'Conta da lista U$ fechada em reais (venda U$ × câmbio)':'Venda pela lista U$';
+  const tAlt=cc.brlNativo?'Cotação pela lista R$: custo × 0,8 (deflator) − MO, depois juros/comissão/frete em reais':'Sem preço na lista R$ — venda U$ × câmbio';
+  return '<span title="'+tMain+'" style="font-size:'+size+'px;font-weight:'+(peso||800)+';color:'+color+'">'+fmtMoney(vMain,cc.cur)+'</span>'
+    +'<div style="font-size:10px;color:'+(cc.brlNativo?'var(--amber)':'var(--text3)')+';font-weight:600;line-height:1.5" title="'+tAlt+'">'
+    +'lista R$ '+(cc.brlNativo?'':'≈ ')+fmtMoney(vAlt,'BRL')+'</div>';
 }
 function _cotDetalheItems(P,cc){
   const F=v=>fmtMoney(v,cc.cur);
-  const c=cc.calc;
-  return [['Custo base'+(cc.ci.nativo?'':' (≈ conv.)'),F(cc.ci.base)]]
+  const FB=v=>fmtMoney(v,'BRL');
+  const c=cc.calc, a=cc.calcAlt;
+  const linhaUSD=[['Custo base'+(cc.ci.nativo?'':' (≈ conv.)'),F(cc.ci.base)]]
     .concat(P.desc>0?[['(−) Desc. Y','−'+F(c.desc)]]:[])
     .concat(P.embalagem==='granel'?[['(−) Granel','−'+F(c.granelDesc)]]:[])
     .concat([['Custo efetivo',F(c.custoEff)]])
     .concat([['(+) Juros '+(P.prazo||0)+'m','+'+F(c.jurosVal)]])
     .concat(P.com>0?[['(+) Com. '+P.com+'%','+'+F(c.comissaoVal)]]:[])
     .concat(P.frete>0?[['(+) Frete','+'+F(c.freteUSD)]]:[]);
+  // Conta paralela da lista R$ (só quando há preço de lista)
+  const linhaBRL=cc.brlNativo?[
+    ['Lista R$ custo',FB(cc.co.base)],
+    ['×0,8 (deflator)','−'+FB(a.deflatorVal)],
+    ['(−) MO','−'+FB(a.mo)],
+    ['(+) Juros '+(P.prazo||0)+'m','+'+FB(a.jurosVal)]]
+    .concat(P.com>0?[['(+) Com. '+P.com+'%','+'+FB(a.comissaoVal)]]:[])
+    .concat(P.frete>0?[['(+) Frete','+'+FB(a.freteUSD)]]:[])
+    .concat([['= Venda lista R$',FB(a.venda)]])
+   :[];
+  return linhaUSD.concat(linhaBRL);
 }
 
 function recalcCotacao(){
@@ -9492,6 +9528,7 @@ function recalcCotacao(){
       prazo:     p.prazo     != null ? p.prazo     : 1,
       com:       p.com       != null ? p.com       : 0,
       frete:     p.frete     != null ? p.frete     : 0,
+      mo:        p.mo        != null ? p.mo        : 150,
       qtd:       p.qtd       != null ? p.qtd       : 1,
       embalagem: p.embalagem || 'bag',
       cur:       p.cur       || 'USD',
@@ -9514,6 +9551,7 @@ function recalcCotacao(){
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Prazo</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Com %</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Frete R$/t</th>'
+    +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap" title="Mão de obra — só entra na cotação pela lista R$ (custo ×0,8 − MO)">MO R$/t</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Desc U$/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Custo/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Preço/t</th>'
@@ -9573,6 +9611,7 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('prazo',P.prazo,'1',45)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('com',P.com,'0.1',45)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('frete',P.frete,'0.01',60)+'</td>'
+        +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('mo',P.mo,'1',55)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('desc',P.desc,'0.01',55)+'</td>'
         +'<td id="cot-rc-'+i+'" style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'+_cotDualHTML(cc.ci.base,cc.co.base,cc,'var(--text2)',12,600)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
@@ -9622,12 +9661,12 @@ function recalcCotacao(){
   let totalTons=0, totalUSD=0, totalBRL=0, convU=0, convB=0;
   itens.forEach(item=>{
     const P = P_of(item);
-    const cU=_cotCustoItem(item,'USD'), cB=_cotCustoItem(item,'BRL');
+    const cc=_cotItemCalc(item,P);
     totalTons += P.qtd;
-    totalUSD  += _cotVendaNative(cU.base,P,'USD').venda * P.qtd;
-    totalBRL  += _cotVendaNative(cB.base,P,'BRL').venda * P.qtd;
-    if(!cU.nativo) convU++;
-    if(!cB.nativo) convB++;
+    totalUSD  += cc.vUSD.venda * P.qtd;
+    totalBRL  += cc.calcAlt.venda * P.qtd;
+    if(!cc.usdNativo) convU++;
+    if(!cc.brlNativo) convB++;
   });
 
   // Cliente do resumo: pega o primeiro cliente não-vazio entre os itens
@@ -9648,7 +9687,7 @@ function recalcCotacao(){
       +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'
-      +'<div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--text3);font-weight:600">'+(cc.co.nativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,cc.outra)+'/t</span></div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--amber);font-weight:600">lista R$ '+(cc.brlNativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,'BRL')+'/t</span></div>'
       +'<div style="font-size:11px;color:var(--amber)">'+fmtMoney(cc.calc.venda*P.qtd,cc.cur)+'</div>'
       +'</div>'
       +'</div>';
@@ -9720,12 +9759,12 @@ function setItemParamLive(idx, key, value){
   let totT=0,totU=0,totB=0,convU=0,convB=0;
   itens.forEach(item=>{
     const P=_cotP_of(item);
-    const cU=_cotCustoItem(item,'USD'), cB=_cotCustoItem(item,'BRL');
+    const cc=_cotItemCalc(item,P);
     totT+=P.qtd;
-    totU+=_cotVendaNative(cU.base,P,'USD').venda*P.qtd;
-    totB+=_cotVendaNative(cB.base,P,'BRL').venda*P.qtd;
-    if(!cU.nativo)convU++;
-    if(!cB.nativo)convB++;
+    totU+=cc.vUSD.venda*P.qtd;
+    totB+=cc.calcAlt.venda*P.qtd;
+    if(!cc.usdNativo)convU++;
+    if(!cc.brlNativo)convB++;
   });
   const cli=itens.map(it=>_cotP_of(it).cliente).filter(Boolean)[0]||'';
   let r='<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:.25rem">COTAÇÃO</div>';
@@ -9733,7 +9772,7 @@ function setItemParamLive(idx, key, value){
   r+='<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
   r+=itens.map((item,i)=>{
     const P=_cotP_of(item);const cc=_cotItemCalc(item,P);
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--text3);font-weight:600">'+(cc.co.nativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,cc.outra)+'/t</span></div><div style="font-size:11px;color:var(--amber)">'+fmtMoney(cc.calc.venda*P.qtd,cc.cur)+'</div></div></div>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--amber);font-weight:600">lista R$ '+(cc.brlNativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,'BRL')+'/t</span></div><div style="font-size:11px;color:var(--amber)">'+fmtMoney(cc.calc.venda*P.qtd,cc.cur)+'</div></div></div>';
   }).join('');
   r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totU,'USD')+(convU>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+convU+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista U$</div><div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:6px">'+fmtMoney(totB,'BRL')+(convB>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+convB+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista R$</div></div></div>';
   tc.innerHTML=r;
