@@ -3617,7 +3617,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-6';
+const APP_VERSION='2026.08.14-7';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -6510,6 +6510,26 @@ if(typeof Chart!=='undefined'){
   Chart.defaults.elements.bar.borderSkipped=false;
 }
 
+// Custo/t do resultado em cada lista. O solver roda nas duas moedas: res é a
+// moeda ativa e resAlt a outra, então basta escolher o que bate com cada uma.
+function _resCustoUSD(res){
+  const lr=S.lastRes;
+  if(lr&&lr.res===res){
+    if((lr.cur||'USD')==='USD') return res.cpt;
+    if(lr.resAlt&&lr.altCur==='USD') return lr.resAlt.cpt;
+    return res.cpt/(S.fx||1);          // sem fórmula em U$: converte
+  }
+  return res.cpt;
+}
+function _resCustoBRL(res){
+  const lr=S.lastRes;
+  if(lr&&lr.res===res){
+    if((lr.cur||'USD')==='BRL') return res.cpt;
+    if(lr.resAlt&&lr.altCur==='BRL') return lr.resAlt.cpt;
+  }
+  return null;                          // sem fórmula em R$: mostra —
+}
+
 function renderRes(res,qty,lote){
   const N=res.nt;
   const empty=document.getElementById('resEmpty');
@@ -6529,8 +6549,10 @@ function renderRes(res,qty,lote){
   const _sufHTML=_sufStr?'<span style="font-size:12px;font-weight:600;color:var(--text2);margin-left:6px">'+_sufStr+'</span>':'';
   if(_gEl) _gEl.innerHTML=_npkHTML+(_extHTML?_plus+_extHTML:'')+_sufHTML;
 
-  // Custo destacado
-  document.getElementById('costBadge').textContent=fmt(res.cpt)+'/t';
+  // Custo destacado — as duas listas
+  const _cU=_resCustoUSD(res), _cB=_resCustoBRL(res);
+  const _cbEl=document.getElementById('costBadge');
+  if(_cbEl) _cbEl.textContent=fmtMoney(_cU,'USD')+'/t'+(_cB!=null?'  ·  '+fmtMoney(_cB,'BRL')+'/t':'');
 
   // Badges de tratamentos ativos
   const _trat=S.lastRes&&S.lastRes.tratamentos?S.lastRes.tratamentos:(S.tratamentos||{});
@@ -6569,8 +6591,9 @@ function renderRes(res,qty,lote){
   // Chips — custo em destaque maior
   const chips=[
     ...onNuts.map(n=>({lbl:n.lbl,val:fl2(N[n.k]||0)+'%',col:n.color,big:false})),
-    {lbl:'Custo/ton',  val:fmt(res.cpt),             col:'var(--blue)',  big:true},
-    {lbl:'Custo total',val:fmt(res.cpt*qty/1000),     col:'var(--amber)', big:true},
+    {lbl:'Custo/ton U$',val:fmtMoney(_resCustoUSD(res),'USD'), col:'var(--blue)',  big:true},
+    {lbl:'Custo/ton R$',val:_resCustoBRL(res)!=null?fmtMoney(_resCustoBRL(res),'BRL'):'—',
+                        col:'var(--amber)', big:true},
     {lbl:'Qtd total',  val:(qty/1000).toFixed(1)+' ton',            col:'var(--text2)', big:false},
 
   ];
@@ -8605,7 +8628,7 @@ function incluirNaCotacao(){
     mats: (()=>{const kgs=fracsToKg(res.fracs,qty);return res.mats.map((m,i)=>({name:m.name,kg:kgs[i],pct:fl2(res.fracs[i]*100)}));})(),
     nt: NUTS.filter(n=>['N','P','K'].includes(n.k)||(N[n.k]||0)>0.01).map(n=>({lbl:n.lbl, val:fl2(N[n.k]||0)})),
     // Parâmetros por item (V11.1)
-    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:150, qtd:1, embalagem:'bag', cur:'USD', cliente:'' }
+    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:0, qtd:1, embalagem:'bag', cur:'USD', cliente:'' }
   });
   sched();
   recalcCotacao();
@@ -8681,7 +8704,7 @@ function confirmarAddMP(){
     mats: [{name:m.name, kg:qty*1000, pct:100}],
     nt: NUTS.filter(n=>(m[n.k]||0)>0).map(n=>({lbl:n.lbl, val:fl2(m[n.k]||0)})),
     // Parâmetros por item (V11.1)
-    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:150, qtd:qty, embalagem:'bag', cur:'USD', cliente:'' }
+    params: { taxa:1.6, prazo:1, com:0, frete:0, mo:0, qtd:qty, embalagem:'bag', cur:'USD', cliente:'' }
   });
   sched();
   fecharAddMP();
@@ -8706,7 +8729,7 @@ function buildCotHTML(){
       prazo:     p.prazo     != null ? p.prazo     : 1,
       com:       p.com       != null ? p.com       : 0,
       frete:     p.frete     != null ? p.frete     : 0,
-      mo:        p.mo        != null ? p.mo        : 150,
+      mo:        p.mo        != null ? p.mo        : 0,
       qtd:       p.qtd       != null ? p.qtd       : 1,
       embalagem: p.embalagem || 'bag',
       cur:       p.cur       || 'USD',
@@ -9372,7 +9395,7 @@ function removerItemCot(i){
 
 function _cotP_of(item){
   const p=item.params||{};
-  return {desc:p.desc!=null?p.desc:0,taxa:p.taxa!=null?p.taxa:1.6,prazo:p.prazo!=null?p.prazo:1,com:p.com!=null?p.com:0,frete:p.frete!=null?p.frete:0,mo:p.mo!=null?p.mo:150,qtd:p.qtd!=null?p.qtd:1,embalagem:p.embalagem||'bag',cur:p.cur||'USD',cliente:p.cliente||''};
+  return {desc:p.desc!=null?p.desc:0,taxa:p.taxa!=null?p.taxa:1.6,prazo:p.prazo!=null?p.prazo:1,com:p.com!=null?p.com:0,frete:p.frete!=null?p.frete:0,mo:p.mo!=null?p.mo:0,qtd:p.qtd!=null?p.qtd:1,embalagem:p.embalagem||'bag',cur:p.cur||'USD',cliente:p.cliente||''};
 }
 function _cotCalcVenda(custoUSD,p){
   const fxAdj=S.fx*0.99;
@@ -9383,6 +9406,22 @@ function _cotCalcVenda(custoUSD,p){
   const com=p.com||0;
   const comCom=com>0?comJuros/(1-com/100):comJuros;
   return {venda:comCom+freteUSD,custoEff,comJuros,jurosVal:comJuros-custoEff,comissaoVal:comCom-comJuros,freteUSD,granelDesc,desc:p.desc||0};
+}
+// Lista escolhida no resumo da cotação: 'USD' fecha pela lista em dólar,
+// 'BRL' pela lista em reais. Só afeta a apresentação do resumo.
+function _cotListaResumo(){ return (S.cotListaResumo==='BRL')?'BRL':'USD'; }
+function cotSetListaResumo(v){
+  S.cotListaResumo=(v==='BRL')?'BRL':'USD';
+  sched();
+  recalcCotacao();
+}
+function _cotSeletorListaHTML(){
+  const sel=_cotListaResumo();
+  const bt=(v,lbl,cor)=>'<button onclick="cotSetListaResumo(\''+v+'\')" style="flex:1;padding:6px 10px;font-size:11px;font-weight:800;border-radius:6px;cursor:pointer;border:1px solid '+(sel===v?cor:'var(--border2)')+';background:'+(sel===v?cor+'22':'transparent')+';color:'+(sel===v?cor:'var(--text3)')+';transition:.15s">'+lbl+'</button>';
+  return '<div style="margin-bottom:.85rem">'
+    +'<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Fechar pela lista</div>'
+    +'<div style="display:flex;gap:6px">'+bt('USD','Dólar (U$)','var(--green)')+bt('BRL','Reais (R$)','var(--amber)')+'</div>'
+    +'</div>';
 }
 function _cotFI(v,cur){return fmtMoney(v,cur==='BRL'?'BRL':'USD');}
 function _cotTC(v,cur){return cur==='BRL'?v*S.fx:v;}
@@ -9409,9 +9448,10 @@ function _cotVendaNative(base,P,cur){
   const taxa=P.taxa||0, prazo=P.prazo||0, com=P.com||0;
   let custoEff, freteVal, granelDesc=0, desc=0, deflatorVal=0, mo=0;
   if(cur==='BRL'){
-    mo=P.mo!=null?P.mo:150;
+    mo=P.mo||0;
+    granelDesc=P.embalagem==='granel'?40:0;     // granel na lista R$: −R$40/t
     deflatorVal=base*0.2;
-    custoEff=base*0.8-mo;
+    custoEff=base*0.8-mo-granelDesc;
     freteVal=P.frete||0;                        // frete já é R$/t
   } else {
     granelDesc=P.embalagem==='granel'?8:0;
@@ -9471,9 +9511,10 @@ function _cotDetalheItems(P,cc){
   // Conta paralela da lista R$ (só quando há preço de lista)
   const linhaBRL=cc.brlNativo?[
     ['Lista R$ custo',FB(cc.co.base)],
-    ['×0,8 (deflator)','−'+FB(a.deflatorVal)],
-    ['(−) MO','−'+FB(a.mo)],
-    ['(+) Juros '+(P.prazo||0)+'m','+'+FB(a.jurosVal)]]
+    ['×0,8 (deflator)','−'+FB(a.deflatorVal)]]
+    .concat(a.mo>0?[['(−) MO','−'+FB(a.mo)]]:[])
+    .concat(P.embalagem==='granel'?[['(−) Granel','−'+FB(a.granelDesc)]]:[])
+    .concat([['(+) Juros '+(P.prazo||0)+'m','+'+FB(a.jurosVal)]])
     .concat(P.com>0?[['(+) Com. '+P.com+'%','+'+FB(a.comissaoVal)]]:[])
     .concat(P.frete>0?[['(+) Frete','+'+FB(a.freteUSD)]]:[])
     .concat([['= Venda lista R$',FB(a.venda)]])
@@ -9528,7 +9569,7 @@ function recalcCotacao(){
       prazo:     p.prazo     != null ? p.prazo     : 1,
       com:       p.com       != null ? p.com       : 0,
       frete:     p.frete     != null ? p.frete     : 0,
-      mo:        p.mo        != null ? p.mo        : 150,
+      mo:        p.mo        != null ? p.mo        : 0,
       qtd:       p.qtd       != null ? p.qtd       : 1,
       embalagem: p.embalagem || 'bag',
       cur:       p.cur       || 'USD',
@@ -9553,9 +9594,7 @@ function recalcCotacao(){
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Frete R$/t</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap" title="Mão de obra — só entra na cotação pela lista R$ (custo ×0,8 − MO)">MO R$/t</th>'
     +'<th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Desc U$/t</th>'
-    +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Custo/t</th>'
     +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Preço/t</th>'
-    +'<th style="padding:8px 10px;text-align:right;font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Total</th>'
     +'<th style="padding:8px 10px"></th>'
     +'</tr></thead>';
 
@@ -9613,12 +9652,8 @@ function recalcCotacao(){
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('frete',P.frete,'0.01',60)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('mo',P.mo,'1',55)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center">'+numInp('desc',P.desc,'0.01',55)+'</td>'
-        +'<td id="cot-rc-'+i+'" style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'+_cotDualHTML(cc.ci.base,cc.co.base,cc,'var(--text2)',12,600)+'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
         +'<span id="cot-rv-'+i+'" style="display:inline-block">'+_cotDualHTML(calc.venda,cc.calcAlt.venda,cc,'var(--green)',14)+'</span>'
-        +'</td>'
-        +'<td style="padding:8px 10px;vertical-align:middle;text-align:right;white-space:nowrap">'
-        +'<span id="cot-rt-'+i+'" style="display:inline-block">'+_cotDualHTML(totalItem,cc.calcAlt.venda*P.qtd,cc,'var(--amber)',13,700)+'</span>'
         +'</td>'
         +'<td style="padding:8px 10px;vertical-align:middle;text-align:center;white-space:nowrap">'
         +'<button onclick="abrirCopiarParams('+i+')" style="background:none;border:none;cursor:pointer;color:var(--blue);padding:4px;border-radius:6px;font-size:13px" title="Copiar parâmetros para outra linha">📋</button>'
@@ -9636,7 +9671,7 @@ function recalcCotacao(){
       ).join('<span style="color:var(--border2);margin:0 4px">·</span>');
 
       const detailRow = '<tr style="background:'+rowBg+';border-bottom:2px solid var(--border2)">'
-        +'<td colspan="16" style="padding:4px 10px 8px 10px">'
+        +'<td colspan="14" style="padding:4px 10px 8px 10px">'
         +'<div id="cot-rd-'+i+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">'+detalheHTML+'</div>'
         +'</td>'
         +'</tr>';
@@ -9673,39 +9708,53 @@ function recalcCotacao(){
   const clientesItens = itens.map(it => P_of(it).cliente).filter(Boolean);
   const cliente = clientesItens.length ? clientesItens[0] : '';
 
+  const listaSel=_cotListaResumo();
   let resumo = '';
   resumo += '<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:.25rem">COTAÇÃO</div>';
   if(cliente) resumo += '<div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Cliente: <strong style="color:var(--text)">'+cliente+'</strong></div>';
+  resumo += _cotSeletorListaHTML();
   resumo += '<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
 
   resumo += itens.map((item,i)=>{
     const P = P_of(item);
     const cc = _cotItemCalc(item, P);
+    // Valor da lista escolhida no seletor
+    const usaBRL=listaSel==='BRL';
+    const vUnit=usaBRL?cc.calcAlt.venda:cc.vUSD.venda;
+    const cUnit=usaBRL?'BRL':'USD';
+    const aprox=usaBRL&&!cc.brlNativo;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
       +'<div style="min-width:0;flex:1">'
       +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
       +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'
-      +'<div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--amber);font-weight:600">lista R$ '+(cc.brlNativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,'BRL')+'/t</span></div>'
-      +'<div style="font-size:11px;color:var(--amber)">'+fmtMoney(cc.calc.venda*P.qtd,cc.cur)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+(usaBRL?'var(--amber)':'var(--green)')+'">'+(aprox?'≈ ':'')+fmtMoney(vUnit,cUnit)+'/t</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+fmtMoney(vUnit*P.qtd,cUnit)+'</div>'
       +'</div>'
       +'</div>';
   }).join('');
 
-  // Total geral: um fechamento por lista — a decisão da moeda compara os dois
+  // Total geral na lista escolhida, com a outra logo abaixo para comparação
+  const totSel=listaSel==='BRL'?totalBRL:totalUSD;
+  const totAlt=listaSel==='BRL'?totalUSD:totalBRL;
+  const curSel=listaSel==='BRL'?'BRL':'USD';
+  const curAlt=listaSel==='BRL'?'USD':'BRL';
+  const convSel=listaSel==='BRL'?convB:convU;
+  const convAlt=listaSel==='BRL'?convU:convB;
+  const corSel=listaSel==='BRL'?'var(--amber)':'var(--green)';
   resumo += '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px">'
     +'<div>'
     +'<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div>'
     +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totalTons.toFixed(1)+'t</div>'
     +'</div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totalUSD,'USD')
-    +(convU>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)" title="'+convU+' item(ns) sem preço na lista U$ — valor convertido pelo câmbio">≈'+convU+' conv.</span>':'')+'</div>'
-    +'<div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista U$</div>'
-    +'<div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:6px">'+fmtMoney(totalBRL,'BRL')
-    +(convB>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)" title="'+convB+' item(ns) sem preço na lista R$ — valor convertido pelo câmbio">≈'+convB+' conv.</span>':'')+'</div>'
-    +'<div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista R$</div>'
+    +'<div style="font-size:24px;font-weight:800;color:'+corSel+';letter-spacing:-0.02em">'+fmtMoney(totSel,curSel)
+    +(convSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)" title="'+convSel+' item(ns) sem preço nesta lista — valor convertido pelo câmbio">≈'+convSel+' conv.</span>':'')+'</div>'
+    +'<div style="font-size:9.5px;color:'+corSel+';font-weight:700;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'R$':'U$')+'</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(totAlt,curAlt)
+    +(convAlt>0?' <span style="font-size:9px;font-weight:600">≈'+convAlt+' conv.</span>':'')+'</div>'
+    +'<div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'U$':'R$')+' (comparação)</div>'
     +'</div>'
     +'</div>';
 
@@ -9741,13 +9790,9 @@ function setItemParamLive(idx, key, value){
   itens.forEach((item,i)=>{
     const P=_cotP_of(item);
     const cc=_cotItemCalc(item,P);
-    const rc=document.getElementById('cot-rc-'+i);
     const rv=document.getElementById('cot-rv-'+i);
-    const rt=document.getElementById('cot-rt-'+i);
     const rd=document.getElementById('cot-rd-'+i);
-    if(rc) rc.innerHTML=_cotDualHTML(cc.ci.base,cc.co.base,cc,'var(--text2)',12,600);
     if(rv) rv.innerHTML=_cotDualHTML(cc.calc.venda,cc.calcAlt.venda,cc,'var(--green)',14);
-    if(rt) rt.innerHTML=_cotDualHTML(cc.calc.venda*P.qtd,cc.calcAlt.venda*P.qtd,cc,'var(--amber)',13,700);
     if(rd){
       const det=_cotDetalheItems(P,cc);
       rd.innerHTML=det.map(([l,v])=>'<span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2)"><span style="color:var(--text3)">'+l+':</span><strong style="color:var(--text)">'+v+'</strong></span>').join(SEP);
@@ -9767,14 +9812,24 @@ function setItemParamLive(idx, key, value){
     if(!cc.brlNativo)convB++;
   });
   const cli=itens.map(it=>_cotP_of(it).cliente).filter(Boolean)[0]||'';
+  const listaSel=_cotListaResumo();
   let r='<div style="font-size:18px;font-weight:800;color:var(--text);margin-bottom:.25rem">COTAÇÃO</div>';
   if(cli) r+='<div style="font-size:14px;color:var(--text2);margin-bottom:1rem">Cliente: <strong style="color:var(--text)">'+cli+'</strong></div>';
+  r+=_cotSeletorListaHTML();
   r+='<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
   r+=itens.map((item,i)=>{
     const P=_cotP_of(item);const cc=_cotItemCalc(item,P);
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:var(--green)">'+fmtMoney(cc.calc.venda,cc.cur)+'/t <span style="font-size:10px;color:var(--amber);font-weight:600">lista R$ '+(cc.brlNativo?'':'≈ ')+fmtMoney(cc.calcAlt.venda,'BRL')+'/t</span></div><div style="font-size:11px;color:var(--amber)">'+fmtMoney(cc.calc.venda*P.qtd,cc.cur)+'</div></div></div>';
+    const usaBRL=listaSel==='BRL';
+    const vUnit=usaBRL?cc.calcAlt.venda:cc.vUSD.venda;
+    const cUnit=usaBRL?'BRL':'USD';
+    const apx=usaBRL&&!cc.brlNativo;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:'+(usaBRL?'var(--amber)':'var(--green)')+'">'+(apx?'≈ ':'')+fmtMoney(vUnit,cUnit)+'/t</div><div style="font-size:11px;color:var(--text3)">'+fmtMoney(vUnit*P.qtd,cUnit)+'</div></div></div>';
   }).join('');
-  r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totU,'USD')+(convU>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+convU+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista U$</div><div style="font-size:20px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:6px">'+fmtMoney(totB,'BRL')+(convB>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+convB+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">fechando pela lista R$</div></div></div>';
+  const tSel=listaSel==='BRL'?totB:totU, tAlt=listaSel==='BRL'?totU:totB;
+  const cSel=listaSel==='BRL'?'BRL':'USD', cAlt=listaSel==='BRL'?'USD':'BRL';
+  const nSel=listaSel==='BRL'?convB:convU, nAlt=listaSel==='BRL'?convU:convB;
+  const korSel=listaSel==='BRL'?'var(--amber)':'var(--green)';
+  r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:24px;font-weight:800;color:'+korSel+';letter-spacing:-0.02em">'+fmtMoney(tSel,cSel)+(nSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+nSel+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:'+korSel+';font-weight:700;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'R$':'U$')+'</div><div style="font-size:13px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(tAlt,cAlt)+(nAlt>0?' <span style="font-size:9px;font-weight:600">≈'+nAlt+' conv.</span>':'')+'</div><div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'U$':'R$')+' (comparação)</div></div></div>';
   tc.innerHTML=r;
 }
 // ── RESUMO DA COTAÇÃO — formatação comercial + copiar ────────────────────────
@@ -9884,7 +9939,7 @@ function _copyFallback(txt){
 
 // ── COPIAR PARÂMETROS ENTRE LINHAS ───────────────────────────────────────────
 let _copiarFromIdx = null;
-const PARAMS_COPIADOS = ['taxa','prazo','com','frete','embalagem','cur','cliente','desc'];
+const PARAMS_COPIADOS = ['taxa','prazo','com','frete','mo','embalagem','cur','cliente','desc'];
 
 function abrirCopiarParams(fromIdx){
   _copiarFromIdx = fromIdx;
