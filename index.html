@@ -2534,6 +2534,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
             </div>
             <div id="ingBars"></div>
             <div class="chips" id="resChips"></div>
+            <div style="margin-top:.9rem;border-top:1px solid var(--border);padding-top:.75rem"><div class="chart-title" style="margin-bottom:.35rem">Ingredientes (%)</div><div style="position:relative;height:200px"><canvas id="cResPie" role="img" aria-label="Ingredientes U$"></canvas></div><div class="chart-title" style="margin:.85rem 0 .35rem">Nutrientes obtidos vs. limites</div><div style="position:relative;height:200px"><canvas id="cResBar" role="img" aria-label="Nutrientes vs limites U$"></canvas></div></div>
           </div>
           <div class="result-box" id="resColBRL" style="margin:0;border-color:rgba(248,181,62,.35)">
             <div class="res-hd">
@@ -2543,11 +2544,8 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
             </div>
             <div id="ingBarsB"></div>
             <div class="chips" id="resChipsB"></div>
+            <div style="margin-top:.9rem;border-top:1px solid var(--border);padding-top:.75rem"><div class="chart-title" style="margin-bottom:.35rem">Ingredientes (%)</div><div style="position:relative;height:200px"><canvas id="cResPieB" role="img" aria-label="Ingredientes R$"></canvas></div><div class="chart-title" style="margin:.85rem 0 .35rem">Nutrientes obtidos vs. limites</div><div style="position:relative;height:200px"><canvas id="cResBarB" role="img" aria-label="Nutrientes vs limites R$"></canvas></div></div>
           </div>
-        </div>
-        <div class="charts-row">
-          <div class="chart-box"><div class="chart-title">Ingredientes (%)</div><div style="position:relative;height:clamp(160px,38vw,210px)"><canvas id="cResPie" role="img" aria-label="Ingredientes"></canvas></div></div>
-          <div class="chart-box"><div class="chart-title">Nutrientes obtidos vs. limites</div><div style="position:relative;height:clamp(160px,38vw,210px)"><canvas id="cResBar" role="img" aria-label="Nutrientes vs limites"></canvas></div></div>
         </div>
         <div style="margin-top:1.25rem">
           <button id="btnIncluirCot" onclick="incluirNaCotacao()" style="display:none;width:100%;padding:14px;font-size:15px;font-weight:700;border:2px solid var(--amber);border-radius:var(--radius-sm);background:rgba(240,165,0,.12);color:var(--amber);cursor:pointer;transition:.2s"
@@ -3629,7 +3627,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-8';
+const APP_VERSION='2026.08.14-9';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -6482,7 +6480,7 @@ function toggleMpDetail(row){
 }
 
 function dc(c){if(c){try{c.destroy();}catch(e){}}}
-let cResPie=null,cResBar=null;
+// gráficos do resultado agora vivem em _resCharts, um par por coluna
 
 // Paleta de cores moderna — alta separação visual, evita similares adjacentes
 const PCOLS=['#A8FF53','#5b8cff','#f8b53e','#b48dff','#ef5e5e','#3eddc7','#fb923c','#e879f9','#60a5fa','#34d399','#f87171','#c084fc'];
@@ -6540,6 +6538,182 @@ function _resCustoBRL(res){
     if(lr.resAlt&&lr.altCur==='BRL') return lr.resAlt.cpt;
   }
   return null;                          // sem fórmula em R$: mostra —
+}
+
+// Gráficos de uma coluna de resultado. Cada lista tem a sua receita, então cada
+// coluna precisa dos seus próprios gráficos — antes existia um par só, alimentado
+// pela moeda ativa, o que escondia a receita da outra lista.
+const _resCharts={'':{pie:null,bar:null},'B':{pie:null,bar:null}};
+function _renderResCharts(res,qty,sufixo){
+  const cvPie=document.getElementById('cResPie'+sufixo);
+  const cvBar=document.getElementById('cResBar'+sufixo);
+  const st=_resCharts[sufixo];
+  if(st.pie){st.pie.destroy();st.pie=null;}
+  if(st.bar){st.bar.destroy();st.bar=null;}
+  if(!res||!cvPie) return;
+  const N=res.nt;
+  const kgsForPie=fracsToKg(res.fracs, qty);
+
+  // === PIE/DONUT — Ingredientes com % nas fatias e total no centro ===
+  _resCharts[sufixo].pie=new Chart(cvPie,{
+    type:'doughnut',
+    data:{
+      labels:res.mats.map((m,i)=>m.name+' • '+kgsForPie[i]+'kg'),
+      datasets:[{
+        data:res.fracs.map(f=>+(f*100).toFixed(2)),
+        backgroundColor:PCOLS,
+        borderColor:'#0F1113',
+        borderWidth:3,
+        hoverBorderWidth:4,
+        hoverOffset:8
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:'62%',
+      animation:{animateRotate:true,animateScale:true,duration:800},
+      plugins:{
+        legend:{
+          position:'right',
+          labels:{color:'#8A9290',font:{size:11.5,weight:'500'},padding:10,usePointStyle:true,pointStyle:'circle',boxWidth:8,boxHeight:8}
+        },
+        tooltip:{
+          backgroundColor:'rgba(19,24,38,0.95)',
+          titleColor:'#F2F4F3',
+          bodyColor:'#8A9290',
+          padding:12,
+          cornerRadius:8,
+          borderColor:'rgba(255,255,255,0.08)',
+          borderWidth:1,
+          titleFont:{size:12,weight:'700'},
+          bodyFont:{size:12},
+          displayColors:true,
+          boxPadding:6,
+          callbacks:{
+            label:function(ctx){
+              return ' '+ctx.parsed.toFixed(1)+'% • '+kgsForPie[ctx.dataIndex]+' kg';
+            }
+          }
+        }
+      },
+      layout:{padding:8}
+    },
+    plugins:[{
+      id:'pieLabels',
+      afterDatasetsDraw(chart){
+        const {ctx,data}=chart;
+        chart.getDatasetMeta(0).data.forEach((arc,i)=>{
+          const pct=data.datasets[0].data[i];
+          if(pct<5) return;
+          const mid=arc.startAngle+(arc.endAngle-arc.startAngle)/2;
+          const r=(arc.outerRadius+arc.innerRadius)/2;
+          const x=arc.x+Math.cos(mid)*r;
+          const y=arc.y+Math.sin(mid)*r;
+          ctx.save();
+          ctx.fillStyle='#fff';
+          ctx.font='bold 11.5px -apple-system,Segoe UI,sans-serif';
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.shadowColor='rgba(0,0,0,0.5)';
+          ctx.shadowBlur=3;
+          ctx.fillText(pct.toFixed(1)+'%',x,y);
+          ctx.restore();
+        });
+        // Total no centro
+        const meta=chart.getDatasetMeta(0).data[0];
+        if(meta){
+          const totalKg = kgsForPie.reduce((a,b)=>a+b,0);
+          ctx.save();
+          ctx.fillStyle='#8A9290';
+          ctx.font='600 9.5px -apple-system,Segoe UI,sans-serif';
+          ctx.textAlign='center';
+          ctx.textBaseline='middle';
+          ctx.fillText('TOTAL',meta.x,meta.y-9);
+          ctx.fillStyle='#F2F4F3';
+          ctx.font='800 16px -apple-system,Segoe UI,sans-serif';
+          ctx.fillText(totalKg+'kg',meta.x,meta.y+8);
+          ctx.restore();
+        }
+      }
+    }]
+  });
+  const onNuts=NUTS.filter(n=>(N[n.k]||0)>0);
+  if(onNuts.length){
+    const reqL=onNuts.map(n=>S.reqs.find(r=>r.k===n.k));
+    // === BAR — Nutrientes obtidos vs limites com indicador OK/⚠ ===
+    _resCharts[sufixo].bar=new Chart(cvBar,{
+      type:'bar',
+      data:{
+        labels:onNuts.map(n=>n.lbl),
+        datasets:[
+          {label:'Obtido',data:onNuts.map(n=>+(fl2(N[n.k]||0))),backgroundColor:onNuts.map(n=>n.color),borderRadius:8,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.85},
+          {label:'Mín',data:reqL.map(r=>r.min),type:'line',borderColor:'#A8FF53',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#A8FF53',pointBorderColor:'#0F1113',pointBorderWidth:2,fill:false,borderDash:[5,4],tension:0},
+          {label:'Máx',data:reqL.map(r=>r.max),type:'line',borderColor:'#f8b53e',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#f8b53e',pointBorderColor:'#0F1113',pointBorderWidth:2,fill:false,borderDash:[5,4],tension:0},
+        ]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        animation:{duration:700,easing:'easeOutQuart'},
+        scales:{
+          y:{
+            beginAtZero:true,
+            ticks:{color:'#8A9290',font:{size:11},padding:6,callback:v=>v+'%'},
+            grid:{color:'rgba(255,255,255,.04)',drawTicks:false},
+            border:{display:false}
+          },
+          x:{
+            ticks:{color:'#8A9290',font:{size:12,weight:'600'},padding:6},
+            grid:{display:false},
+            border:{display:false}
+          }
+        },
+        plugins:{
+          legend:{labels:{color:'#8A9290',font:{size:11.5,weight:'500'},padding:12,usePointStyle:true,pointStyle:'circle',boxWidth:8,boxHeight:8}},
+          tooltip:{
+            backgroundColor:'rgba(19,24,38,0.95)',
+            titleColor:'#F2F4F3',
+            bodyColor:'#8A9290',
+            padding:12,
+            cornerRadius:8,
+            borderColor:'rgba(255,255,255,0.08)',
+            borderWidth:1,
+            titleFont:{size:12,weight:'700'},
+            bodyFont:{size:12},
+            callbacks:{
+              label:function(ctx){
+                const nut=onNuts[ctx.dataIndex];
+                const req=reqL[ctx.dataIndex];
+                if(ctx.dataset.label==='Obtido'){
+                  const ok=ctx.parsed.y>=req.min&&ctx.parsed.y<=req.max;
+                  return ' '+ctx.dataset.label+': '+ctx.parsed.y+'%  '+(ok?'✓':'⚠');
+                }
+                return ' '+ctx.dataset.label+': '+ctx.parsed.y+'%';
+              }
+            }
+          }
+        }
+      },
+      plugins:[{
+        id:'barValues',
+        afterDatasetsDraw(chart){
+          const {ctx}=chart;
+          const meta=chart.getDatasetMeta(0);
+          meta.data.forEach((bar,i)=>{
+            const val=chart.data.datasets[0].data[i];
+            ctx.save();
+            ctx.fillStyle='#F2F4F3';
+            ctx.font='700 11px -apple-system,Segoe UI,sans-serif';
+            ctx.textAlign='center';
+            ctx.textBaseline='bottom';
+            ctx.fillText(val.toFixed(1)+'%',bar.x,bar.y-4);
+            ctx.restore();
+          });
+        }
+      }]
+    });
+  }
 }
 
 // Par de resultados do último cálculo: a ótima de cada lista. O solver roda nas
@@ -6678,168 +6852,8 @@ function renderRes(res,qty,lote){
   if(inc) inc.style.display='';
   const bcrm=document.getElementById('btnSalvarCRM');
   if(bcrm) bcrm.style.display='';
-  dc(cResPie); dc(cResBar);
-  const kgsForPie=fracsToKg(res.fracs, qty);
-
-  // === PIE/DONUT — Ingredientes com % nas fatias e total no centro ===
-  cResPie=new Chart(document.getElementById('cResPie'),{
-    type:'doughnut',
-    data:{
-      labels:res.mats.map((m,i)=>m.name+' • '+kgsForPie[i]+'kg'),
-      datasets:[{
-        data:res.fracs.map(f=>+(f*100).toFixed(2)),
-        backgroundColor:PCOLS,
-        borderColor:'#0F1113',
-        borderWidth:3,
-        hoverBorderWidth:4,
-        hoverOffset:8
-      }]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      cutout:'62%',
-      animation:{animateRotate:true,animateScale:true,duration:800},
-      plugins:{
-        legend:{
-          position:'right',
-          labels:{color:'#8A9290',font:{size:11.5,weight:'500'},padding:10,usePointStyle:true,pointStyle:'circle',boxWidth:8,boxHeight:8}
-        },
-        tooltip:{
-          backgroundColor:'rgba(19,24,38,0.95)',
-          titleColor:'#F2F4F3',
-          bodyColor:'#8A9290',
-          padding:12,
-          cornerRadius:8,
-          borderColor:'rgba(255,255,255,0.08)',
-          borderWidth:1,
-          titleFont:{size:12,weight:'700'},
-          bodyFont:{size:12},
-          displayColors:true,
-          boxPadding:6,
-          callbacks:{
-            label:function(ctx){
-              return ' '+ctx.parsed.toFixed(1)+'% • '+kgsForPie[ctx.dataIndex]+' kg';
-            }
-          }
-        }
-      },
-      layout:{padding:8}
-    },
-    plugins:[{
-      id:'pieLabels',
-      afterDatasetsDraw(chart){
-        const {ctx,data}=chart;
-        chart.getDatasetMeta(0).data.forEach((arc,i)=>{
-          const pct=data.datasets[0].data[i];
-          if(pct<5) return;
-          const mid=arc.startAngle+(arc.endAngle-arc.startAngle)/2;
-          const r=(arc.outerRadius+arc.innerRadius)/2;
-          const x=arc.x+Math.cos(mid)*r;
-          const y=arc.y+Math.sin(mid)*r;
-          ctx.save();
-          ctx.fillStyle='#fff';
-          ctx.font='bold 11.5px -apple-system,Segoe UI,sans-serif';
-          ctx.textAlign='center';
-          ctx.textBaseline='middle';
-          ctx.shadowColor='rgba(0,0,0,0.5)';
-          ctx.shadowBlur=3;
-          ctx.fillText(pct.toFixed(1)+'%',x,y);
-          ctx.restore();
-        });
-        // Total no centro
-        const meta=chart.getDatasetMeta(0).data[0];
-        if(meta){
-          const totalKg = kgsForPie.reduce((a,b)=>a+b,0);
-          ctx.save();
-          ctx.fillStyle='#8A9290';
-          ctx.font='600 9.5px -apple-system,Segoe UI,sans-serif';
-          ctx.textAlign='center';
-          ctx.textBaseline='middle';
-          ctx.fillText('TOTAL',meta.x,meta.y-9);
-          ctx.fillStyle='#F2F4F3';
-          ctx.font='800 16px -apple-system,Segoe UI,sans-serif';
-          ctx.fillText(totalKg+'kg',meta.x,meta.y+8);
-          ctx.restore();
-        }
-      }
-    }]
-  });
-  if(onNuts.length){
-    const reqL=onNuts.map(n=>S.reqs.find(r=>r.k===n.k));
-    // === BAR — Nutrientes obtidos vs limites com indicador OK/⚠ ===
-    cResBar=new Chart(document.getElementById('cResBar'),{
-      type:'bar',
-      data:{
-        labels:onNuts.map(n=>n.lbl),
-        datasets:[
-          {label:'Obtido',data:onNuts.map(n=>+(fl2(N[n.k]||0))),backgroundColor:onNuts.map(n=>n.color),borderRadius:8,borderSkipped:false,barPercentage:0.65,categoryPercentage:0.85},
-          {label:'Mín',data:reqL.map(r=>r.min),type:'line',borderColor:'#A8FF53',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#A8FF53',pointBorderColor:'#0F1113',pointBorderWidth:2,fill:false,borderDash:[5,4],tension:0},
-          {label:'Máx',data:reqL.map(r=>r.max),type:'line',borderColor:'#f8b53e',borderWidth:2.5,pointRadius:5,pointBackgroundColor:'#f8b53e',pointBorderColor:'#0F1113',pointBorderWidth:2,fill:false,borderDash:[5,4],tension:0},
-        ]
-      },
-      options:{
-        responsive:true,
-        maintainAspectRatio:false,
-        animation:{duration:700,easing:'easeOutQuart'},
-        scales:{
-          y:{
-            beginAtZero:true,
-            ticks:{color:'#8A9290',font:{size:11},padding:6,callback:v=>v+'%'},
-            grid:{color:'rgba(255,255,255,.04)',drawTicks:false},
-            border:{display:false}
-          },
-          x:{
-            ticks:{color:'#8A9290',font:{size:12,weight:'600'},padding:6},
-            grid:{display:false},
-            border:{display:false}
-          }
-        },
-        plugins:{
-          legend:{labels:{color:'#8A9290',font:{size:11.5,weight:'500'},padding:12,usePointStyle:true,pointStyle:'circle',boxWidth:8,boxHeight:8}},
-          tooltip:{
-            backgroundColor:'rgba(19,24,38,0.95)',
-            titleColor:'#F2F4F3',
-            bodyColor:'#8A9290',
-            padding:12,
-            cornerRadius:8,
-            borderColor:'rgba(255,255,255,0.08)',
-            borderWidth:1,
-            titleFont:{size:12,weight:'700'},
-            bodyFont:{size:12},
-            callbacks:{
-              label:function(ctx){
-                const nut=onNuts[ctx.dataIndex];
-                const req=reqL[ctx.dataIndex];
-                if(ctx.dataset.label==='Obtido'){
-                  const ok=ctx.parsed.y>=req.min&&ctx.parsed.y<=req.max;
-                  return ' '+ctx.dataset.label+': '+ctx.parsed.y+'%  '+(ok?'✓':'⚠');
-                }
-                return ' '+ctx.dataset.label+': '+ctx.parsed.y+'%';
-              }
-            }
-          }
-        }
-      },
-      plugins:[{
-        id:'barValues',
-        afterDatasetsDraw(chart){
-          const {ctx}=chart;
-          const meta=chart.getDatasetMeta(0);
-          meta.data.forEach((bar,i)=>{
-            const val=chart.data.datasets[0].data[i];
-            ctx.save();
-            ctx.fillStyle='#F2F4F3';
-            ctx.font='700 11px -apple-system,Segoe UI,sans-serif';
-            ctx.textAlign='center';
-            ctx.textBaseline='bottom';
-            ctx.fillText(val.toFixed(1)+'%',bar.x,bar.y-4);
-            ctx.restore();
-          });
-        }
-      }]
-    });
-  }
+  _renderResCharts(_par.resU,qty,'');
+  _renderResCharts(_par.resB,qty,'B');
   renderDash();
 }
 
@@ -9488,9 +9502,24 @@ function _cotSeletorListaHTML(){
   const sel=_cotListaResumo();
   const bt=(v,lbl,cor)=>'<button onclick="cotSetListaResumo(\''+v+'\')" style="flex:1;padding:6px 10px;font-size:11px;font-weight:800;border-radius:6px;cursor:pointer;border:1px solid '+(sel===v?cor:'var(--border2)')+';background:'+(sel===v?cor+'22':'transparent')+';color:'+(sel===v?cor:'var(--text3)')+';transition:.15s">'+lbl+'</button>';
   return '<div style="margin-bottom:.85rem">'
-    +'<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Fechar pela lista</div>'
-    +'<div style="display:flex;gap:6px">'+bt('USD','Dólar (U$)','var(--green)')+bt('BRL','Reais (R$)','var(--amber)')+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Lista base da equação</div>'
+    +'<div style="display:flex;gap:6px">'+bt('USD','Lista U$','var(--green)')+bt('BRL','Lista R$','var(--amber)')+'</div>'
+    +'<div style="font-size:9.5px;color:var(--text3);margin-top:4px;line-height:1.5">A moeda de cada linha continua definindo em que moeda o valor é exibido.</div>'
     +'</div>';
+}
+
+// Valor do item conforme a lista base escolhida, exibido na moeda da linha.
+// Base U$ com linha em R$ = venda da equação em dólar × câmbio.
+// Base R$ com linha em U$ = venda da equação em reais ÷ câmbio.
+function _cotValorItem(cc,base){
+  const k=S.fx||1;
+  const exibe=cc.cur;                       // moeda da linha (coluna Moeda)
+  if(base==='BRL'){
+    const v=cc.calcAlt.venda;               // equação da lista R$, nativa em reais
+    return {valor:exibe==='BRL'?v:v/k, cur:exibe, aprox:!cc.brlNativo};
+  }
+  const v=cc.vUSD.venda;                    // equação da lista U$, nativa em dólar
+  return {valor:exibe==='BRL'?v*k:v, cur:exibe, aprox:false};
 }
 function _cotFI(v,cur){return fmtMoney(v,cur==='BRL'?'BRL':'USD');}
 function _cotTC(v,cur){return cur==='BRL'?v*S.fx:v;}
@@ -9767,8 +9796,8 @@ function recalcCotacao(){
     const P = P_of(item);
     const cc=_cotItemCalc(item,P);
     totalTons += P.qtd;
-    totalUSD  += cc.vUSD.venda * P.qtd;
-    totalBRL  += cc.calcAlt.venda * P.qtd;
+    totalUSD  += cc.vUSD.venda * P.qtd;      // total pela equação da lista U$
+    totalBRL  += cc.calcAlt.venda * P.qtd;   // total pela equação da lista R$
     if(!cc.usdNativo) convU++;
     if(!cc.brlNativo) convB++;
   });
@@ -9787,11 +9816,10 @@ function recalcCotacao(){
   resumo += itens.map((item,i)=>{
     const P = P_of(item);
     const cc = _cotItemCalc(item, P);
-    // Valor da lista escolhida no seletor
+    // Equação da lista base escolhida, exibida na moeda da linha
+    const vi=_cotValorItem(cc,listaSel);
+    const vUnit=vi.valor, cUnit=vi.cur, aprox=vi.aprox;
     const usaBRL=listaSel==='BRL';
-    const vUnit=usaBRL?cc.calcAlt.venda:cc.vUSD.venda;
-    const cUnit=usaBRL?'BRL':'USD';
-    const aprox=usaBRL&&!cc.brlNativo;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
       +'<div style="min-width:0;flex:1">'
       +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
@@ -9804,26 +9832,29 @@ function recalcCotacao(){
       +'</div>';
   }).join('');
 
-  // Total geral na lista escolhida, com a outra logo abaixo para comparação
-  const totSel=listaSel==='BRL'?totalBRL:totalUSD;
-  const totAlt=listaSel==='BRL'?totalUSD:totalBRL;
-  const curSel=listaSel==='BRL'?'BRL':'USD';
-  const curAlt=listaSel==='BRL'?'USD':'BRL';
-  const convSel=listaSel==='BRL'?convB:convU;
-  const convAlt=listaSel==='BRL'?convU:convB;
-  const corSel=listaSel==='BRL'?'var(--amber)':'var(--green)';
+  // Total da lista base, mostrado nas DUAS moedas (a mesma conta, convertida),
+  // e o total pela outra lista abaixo, como comparação de qual fechamento rende mais.
+  const k=S.fx||1;
+  const baseBRL=listaSel==='BRL';
+  const totBase=baseBRL?totalBRL:totalUSD;
+  const totBaseUSD=baseBRL?totBase/k:totBase;
+  const totBaseBRL=baseBRL?totBase:totBase*k;
+  const totOutra=baseBRL?totalUSD:totalBRL;
+  const curOutra=baseBRL?'USD':'BRL';
+  const convSel=baseBRL?convB:convU;
+  const corSel=baseBRL?'var(--amber)':'var(--green)';
   resumo += '<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px">'
     +'<div>'
     +'<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div>'
     +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totalTons.toFixed(1)+'t</div>'
+    +'<div style="font-size:10px;color:'+corSel+';font-weight:700;margin-top:4px">base: lista '+(baseBRL?'R$':'U$')+'</div>'
     +'</div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:24px;font-weight:800;color:'+corSel+';letter-spacing:-0.02em">'+fmtMoney(totSel,curSel)
-    +(convSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)" title="'+convSel+' item(ns) sem preço nesta lista — valor convertido pelo câmbio">≈'+convSel+' conv.</span>':'')+'</div>'
-    +'<div style="font-size:9.5px;color:'+corSel+';font-weight:700;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'R$':'U$')+'</div>'
-    +'<div style="font-size:13px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(totAlt,curAlt)
-    +(convAlt>0?' <span style="font-size:9px;font-weight:600">≈'+convAlt+' conv.</span>':'')+'</div>'
-    +'<div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'U$':'R$')+' (comparação)</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(totBaseUSD,'USD')
+    +(convSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)" title="'+convSel+' item(ns) sem preço na lista base — convertido pelo câmbio">≈'+convSel+' conv.</span>':'')+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:2px">'+fmtMoney(totBaseBRL,'BRL')+'</div>'
+    +'<div style="font-size:12px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(totOutra,curOutra)+'</div>'
+    +'<div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">se fechasse pela lista '+(baseBRL?'U$':'R$')+'</div>'
     +'</div>'
     +'</div>';
 
@@ -9888,17 +9919,18 @@ function setItemParamLive(idx, key, value){
   r+='<div style="border-top:1px solid var(--border);margin-bottom:.75rem"></div>';
   r+=itens.map((item,i)=>{
     const P=_cotP_of(item);const cc=_cotItemCalc(item,P);
+    const vi=_cotValorItem(cc,listaSel);
+    const vUnit=vi.valor, cUnit=vi.cur, apx=vi.aprox;
     const usaBRL=listaSel==='BRL';
-    const vUnit=usaBRL?cc.calcAlt.venda:cc.vUSD.venda;
-    const cUnit=usaBRL?'BRL':'USD';
-    const apx=usaBRL&&!cc.brlNativo;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px"><div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotResumoFmt(item)+'</div><div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:'+(usaBRL?'var(--amber)':'var(--green)')+'">'+(apx?'≈ ':'')+fmtMoney(vUnit,cUnit)+'/t</div><div style="font-size:11px;color:var(--text3)">'+fmtMoney(vUnit*P.qtd,cUnit)+'</div></div></div>';
   }).join('');
-  const tSel=listaSel==='BRL'?totB:totU, tAlt=listaSel==='BRL'?totU:totB;
-  const cSel=listaSel==='BRL'?'BRL':'USD', cAlt=listaSel==='BRL'?'USD':'BRL';
-  const nSel=listaSel==='BRL'?convB:convU, nAlt=listaSel==='BRL'?convU:convB;
-  const korSel=listaSel==='BRL'?'var(--amber)':'var(--green)';
-  r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div></div><div style="text-align:right"><div style="font-size:24px;font-weight:800;color:'+korSel+';letter-spacing:-0.02em">'+fmtMoney(tSel,cSel)+(nSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+nSel+' conv.</span>':'')+'</div><div style="font-size:9.5px;color:'+korSel+';font-weight:700;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'R$':'U$')+'</div><div style="font-size:13px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(tAlt,cAlt)+(nAlt>0?' <span style="font-size:9px;font-weight:600">≈'+nAlt+' conv.</span>':'')+'</div><div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">lista '+(listaSel==='BRL'?'U$':'R$')+' (comparação)</div></div></div>';
+  const kk=S.fx||1, bBRL=listaSel==='BRL';
+  const tBase=bBRL?totB:totU;
+  const tBaseU=bBRL?tBase/kk:tBase, tBaseB=bBRL?tBase:tBase*kk;
+  const tOutra=bBRL?totU:totB, cOutra=bBRL?'USD':'BRL';
+  const nSel=bBRL?convB:convU;
+  const korSel=bBRL?'var(--amber)':'var(--green)';
+  r+='<div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0 0;margin-top:6px;gap:10px"><div><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Total Geral</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+itens.length+' produto(s) · '+totT.toFixed(1)+'t</div><div style="font-size:10px;color:'+korSel+';font-weight:700;margin-top:4px">base: lista '+(bBRL?'R$':'U$')+'</div></div><div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--green);letter-spacing:-0.02em">'+fmtMoney(tBaseU,'USD')+(nSel>0?' <span style="font-size:10px;font-weight:600;color:var(--text3)">≈'+nSel+' conv.</span>':'')+'</div><div style="font-size:22px;font-weight:800;color:var(--amber);letter-spacing:-0.02em;margin-top:2px">'+fmtMoney(tBaseB,'BRL')+'</div><div style="font-size:12px;font-weight:700;color:var(--text3);margin-top:8px">'+fmtMoney(tOutra,cOutra)+'</div><div style="font-size:9px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">se fechasse pela lista '+(bBRL?'U$':'R$')+'</div></div></div>';
   tc.innerHTML=r;
 }
 // ── RESUMO DA COTAÇÃO — formatação comercial + copiar ────────────────────────
