@@ -3627,7 +3627,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-10';
+const APP_VERSION='2026.08.14-11';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -4873,22 +4873,59 @@ function getApiKey(){
 }
 
 // ── GEMINI CALL WITH RETRY + MODEL FALLBACK ─────────────────────────────────
-// Modelos em cascata. O Google aposenta modelo sem aviso — o gemini-1.5-flash
-// saiu do ar e devolvia 404, derrubando a importação inteira. Por isso: modelo
-// inexistente (404) apenas pula para o próximo, nunca aborta a cascata.
-const GEMINI_MODELOS=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite','gemini-2.5-pro'];
-let _geminiModeloOk=null;   // último que respondeu — tentado primeiro na próxima chamada
+// Modelos em cascata. Nomes fixos envelhecem: o Google aposenta modelo sem aviso
+// e cada conta enxerga um conjunto diferente, então a lista chutada dá 404. Em vez
+// de adivinhar, perguntamos ao próprio Google quais modelos a chave tem (ListModels)
+// e usamos essa lista; a fixa abaixo é só o palpite inicial da primeira chamada.
+const GEMINI_MODELOS=['gemini-2.5-flash','gemini-flash-latest','gemini-2.0-flash','gemini-2.5-pro'];
+let _geminiModeloOk=null;     // último que respondeu — tentado primeiro na próxima
+let _geminiDescobertos=null;  // lista real vinda do ListModels (cache da sessão)
+
+// Descarta o que não serve para ler a lista de preços (imagem → JSON)
+const _GEM_EXCLUI=/embedding|aqa|imagen|veo|tts|audio|live|learnlm|gemma/i;
+// Ordena por utilidade: flash antes de pro (rápido e barato basta), versão maior antes
+function _geminiScore(id){
+  let s=0;
+  if(/flash/i.test(id)) s+=100;
+  if(/pro/i.test(id))   s+=40;
+  const m=/gemini-(\d+)\.(\d+)/.exec(id);
+  if(m) s+=(+m[1])*10+(+m[2]);
+  if(/lite/i.test(id))    s-=15;   // serve, mas por último entre os flash
+  if(/preview|exp/i.test(id)) s-=30; // instáveis
+  if(/latest/i.test(id))  s+=5;
+  return s;
+}
+// Pergunta ao Google o que esta chave enxerga. Falhou? devolve null e seguimos com a lista fixa.
+async function _geminiDescobrirModelos(apiKey,logFn){
+  if(_geminiDescobertos) return _geminiDescobertos;
+  try{
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models?key='+apiKey+'&pageSize=200');
+    if(!r.ok) return null;
+    const d=await r.json();
+    const ids=(d.models||[])
+      .filter(m=>(m.supportedGenerationMethods||[]).indexOf('generateContent')>=0)
+      .map(m=>String(m.name||'').replace(/^models\//,''))
+      .filter(id=>id&&!_GEM_EXCLUI.test(id));
+    if(!ids.length) return null;
+    ids.sort((a,b)=>_geminiScore(b)-_geminiScore(a));
+    _geminiDescobertos=ids.slice(0,6);
+    if(logFn) logFn('Modelos disponíveis na sua chave: '+_geminiDescobertos.join(', '),'var(--text3)');
+    return _geminiDescobertos;
+  }catch(e){ return null; }
+}
 
 async function geminiCallWithRetry(apiKey, body, logFn){
   if(!logFn) logFn=()=>{};
+  // Lista real da conta quando disponível; senão o palpite fixo.
+  const base=(await _geminiDescobrirModelos(apiKey,logFn))||GEMINI_MODELOS;
   // Começa pelo que funcionou por último, sem perder os demais como reserva
-  const MODELS=_geminiModeloOk
-    ? [_geminiModeloOk].concat(GEMINI_MODELOS.filter(m=>m!==_geminiModeloOk))
-    : GEMINI_MODELOS.slice();
+  const MODELS=(_geminiModeloOk&&base.indexOf(_geminiModeloOk)>=0)
+    ? [_geminiModeloOk].concat(base.filter(m=>m!==_geminiModeloOk))
+    : base.slice();
   const DELAYS=[2000,5000,10000];
   const RETRYABLE=new Set([429,500,503]);   // sobrecarga: vale esperar e insistir
   const FATAIS=new Set([400,401,403]);      // chave inválida ou requisição ruim: insistir não resolve
-  let ultimoErro='';
+  let ultimoErro='', viu429=false;
   for(let mi=0;mi<MODELS.length;mi++){
     const model=MODELS[mi];
     const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey;
@@ -4916,8 +4953,10 @@ async function geminiCallWithRetry(apiKey, body, logFn){
       }
       if(resp.status===404){
         logFn(model+' indisponível nesta conta — pulando para o próximo…','var(--amber)');
+        if(_geminiDescobertos) _geminiDescobertos=_geminiDescobertos.filter(m=>m!==model);
         break;   // modelo não existe/não habilitado: próximo da lista
       }
+      if(resp.status===429) viu429=true;
       if(!RETRYABLE.has(resp.status)){
         logFn('HTTP '+resp.status+' em '+model+' — tentando outro modelo…','var(--amber)');
         break;
@@ -4926,8 +4965,11 @@ async function geminiCallWithRetry(apiKey, body, logFn){
       if(att>=DELAYS.length) break;
     }
   }
-  throw new Error('Gemini indisponível — todos os modelos falharam ('+ultimoErro+'). '
-    +'Costuma ser sobrecarga temporária do Google: espere alguns minutos e tente de novo.');
+  throw new Error(viu429
+    ? 'Limite de uso da chave Gemini atingido (HTTP 429). O plano gratuito tem cota por minuto e por dia — '
+      +'espere alguns minutos, ou verifique a cota em aistudio.google.com. Último: '+ultimoErro
+    : 'Gemini indisponível — todos os modelos falharam ('+ultimoErro+'). '
+      +'Costuma ser sobrecarga temporária do Google: espere alguns minutos e tente de novo.');
 }
 
 // ── IMAGE PRICE IMPORT (Google Gemini Vision — gratuito) ────────────────────
