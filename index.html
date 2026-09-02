@@ -3627,7 +3627,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.08.14-9';
+const APP_VERSION='2026.08.14-10';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -4873,11 +4873,22 @@ function getApiKey(){
 }
 
 // ── GEMINI CALL WITH RETRY + MODEL FALLBACK ─────────────────────────────────
+// Modelos em cascata. O Google aposenta modelo sem aviso — o gemini-1.5-flash
+// saiu do ar e devolvia 404, derrubando a importação inteira. Por isso: modelo
+// inexistente (404) apenas pula para o próximo, nunca aborta a cascata.
+const GEMINI_MODELOS=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite','gemini-2.5-pro'];
+let _geminiModeloOk=null;   // último que respondeu — tentado primeiro na próxima chamada
+
 async function geminiCallWithRetry(apiKey, body, logFn){
   if(!logFn) logFn=()=>{};
-  const MODELS=['gemini-2.5-flash','gemini-1.5-flash'];
+  // Começa pelo que funcionou por último, sem perder os demais como reserva
+  const MODELS=_geminiModeloOk
+    ? [_geminiModeloOk].concat(GEMINI_MODELOS.filter(m=>m!==_geminiModeloOk))
+    : GEMINI_MODELOS.slice();
   const DELAYS=[2000,5000,10000];
-  const RETRYABLE=new Set([429,500,503]);
+  const RETRYABLE=new Set([429,500,503]);   // sobrecarga: vale esperar e insistir
+  const FATAIS=new Set([400,401,403]);      // chave inválida ou requisição ruim: insistir não resolve
+  let ultimoErro='';
   for(let mi=0;mi<MODELS.length;mi++){
     const model=MODELS[mi];
     const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+apiKey;
@@ -4891,18 +4902,32 @@ async function geminiCallWithRetry(apiKey, body, logFn){
       try{
         resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       }catch(e){
+        ultimoErro='rede: '+e.message;
         logFn('Erro de rede: '+e.message,'var(--amber)');
         if(att<DELAYS.length) continue;
         break;
       }
-      if(resp.ok) return await resp.json();
+      if(resp.ok){ _geminiModeloOk=model; return await resp.json(); }
       const errText=await resp.text();
-      if(!RETRYABLE.has(resp.status)) throw new Error('HTTP '+resp.status+': '+errText.slice(0,200));
+      ultimoErro='HTTP '+resp.status+' em '+model;
+      if(FATAIS.has(resp.status)){
+        // Problema da chave ou do pedido: cascatear pelos modelos não ajuda
+        throw new Error('HTTP '+resp.status+': '+errText.slice(0,200));
+      }
+      if(resp.status===404){
+        logFn(model+' indisponível nesta conta — pulando para o próximo…','var(--amber)');
+        break;   // modelo não existe/não habilitado: próximo da lista
+      }
+      if(!RETRYABLE.has(resp.status)){
+        logFn('HTTP '+resp.status+' em '+model+' — tentando outro modelo…','var(--amber)');
+        break;
+      }
       logFn('HTTP '+resp.status+' em '+model,'var(--amber)');
       if(att>=DELAYS.length) break;
     }
   }
-  throw new Error('Gemini indisponível após múltiplas tentativas nos modelos disponíveis.');
+  throw new Error('Gemini indisponível — todos os modelos falharam ('+ultimoErro+'). '
+    +'Costuma ser sobrecarga temporária do Google: espere alguns minutos e tente de novo.');
 }
 
 // ── IMAGE PRICE IMPORT (Google Gemini Vision — gratuito) ────────────────────
