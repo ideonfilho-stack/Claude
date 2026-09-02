@@ -2775,16 +2775,40 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
           <label class="fl">Matéria-prima</label>
           <select id="addMP-mp" class="fi"></select>
         </div>
+        <!-- TRATAMENTOS — mesmas regras da formulação -->
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Tratamentos</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label id="addMP-trat-fp-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+              <input type="checkbox" id="addMP-trat-fp" onchange="atualizarCustoAddMP()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+              <span style="font-size:13px;font-weight:600;flex:1">Fertigran P <span style="font-size:11px;color:var(--text3);font-weight:400">(+100 U$/t · MAP e TSP)</span></span>
+            </label>
+            <label id="addMP-trat-sn-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+              <input type="checkbox" id="addMP-trat-sn" onchange="atualizarCustoAddMP()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+              <span style="font-size:13px;font-weight:600;flex:1">Super N Pro <span style="font-size:11px;color:var(--text3);font-weight:400">(+50 U$/t · Ureia)</span></span>
+            </label>
+            <label id="addMP-trat-uhf-row" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border);transition:.15s">
+              <input type="checkbox" id="addMP-trat-uhf" onchange="atualizarCustoAddMP()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--green)">
+              <span style="font-size:13px;font-weight:600;flex:1">UHF <span style="font-size:11px;color:var(--text3);font-weight:400">(+50 U$/t · sobre o custo)</span></span>
+            </label>
+          </div>
+          <div id="addMP-trat-aviso" style="display:none;font-size:10.5px;color:var(--text3);margin-top:6px;line-height:1.5"></div>
+        </div>
         <div class="frow c2">
           <div class="fg">
             <label class="fl">Quantidade (ton)</label>
             <input type="number" class="fi" id="addMP-qty" value="1" min="0.1" step="0.1">
           </div>
           <div class="fg">
-            <label class="fl">Custo/t (USD)</label>
-            <input type="number" class="fi" id="addMP-cost" min="0" step="0.01" placeholder="auto">
-            <div style="font-size:10.5px;color:var(--text3);margin-top:4px;font-weight:500">Deixe vazio para usar o custo cadastrado</div>
+            <label class="fl" id="addMP-cost-lbl">Custo/t (USD)</label>
+            <input type="number" class="fi" id="addMP-cost" min="0" step="0.01" placeholder="auto" oninput="atualizarCustoAddMP()">
+            <div style="font-size:10.5px;color:var(--text3);margin-top:4px;font-weight:500">Deixe vazio para usar o custo cadastrado. Com tratamento, é o custo da MP <em>antes</em> do tratamento.</div>
           </div>
+        </div>
+        <div id="addMP-preview" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">
+          <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">Custo final</div>
+          <div id="addMP-preview-nome" style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px">—</div>
+          <div id="addMP-preview-custo" style="font-size:12px;font-weight:700;color:var(--green)">—</div>
         </div>
       </div>
       <div class="modal-foot">
@@ -3951,8 +3975,11 @@ function setTratamento(key, val){
   sched();
 }
 
-function _fabSupportsFertigranP(){
-  const n=(fab().name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+// fabName opcional: sem ele vale a fábrica ativa (uso da formulação);
+// com ele, dá para checar outra fábrica (cotação de MP isolada).
+function _fabSupportsFertigranP(fabName){
+  const nome = fabName!=null ? fabName : (fab().name||'');
+  const n=String(nome).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
   return n.includes('catala') || n.includes('uberaba');
 }
 
@@ -3972,33 +3999,43 @@ function atualizarTogglesTratamentos(){
   chkUhf.checked=!!S.tratamentos.uhf;
 }
 
+// Tratamento de UMA matéria-prima — regra única, usada pela formulação e pela
+// cotação de MP isolada. Fertigran P só em MAP/TSP de fábrica habilitada;
+// Super N Pro só em Ureia. UHF não é tratamento de MP: entra como sobretaxa
+// sobre o custo final (ver uhfSobretaxa).
+function aplicarTratamentoMat(m, trat, fabName){
+  const t = trat || {};
+  const mat=Object.assign({},m);
+  if(t.fertigranP && _fabSupportsFertigranP(fabName)){
+    if(mat.name==='MAP'){
+      mat.name='MAP Fertigran P'; mat.N=10.6; mat.P=50.3;
+      mat.costUSD=(mat.costUSD||0)+100;
+      // Em R$ o produto tratado tem preço PRÓPRIO na lista (Fertigran P Map Evolve);
+      // só cai para a sobretaxa convertida se a lista não trouxe esse preço.
+      if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
+      else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+    } else if(mat.name==='TSP'){
+      mat.name='TSP FP'; mat.N=0; mat.P=44.5; mat.Ca=10;
+      mat.costUSD=(mat.costUSD||0)+100;
+      if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
+      else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
+    }
+  }
+  if(t.superNPro && mat.name==='Ureia'){
+    mat.costUSD=(mat.costUSD||0)+50;
+    // Super N Pro tem preço próprio na lista R$ (não é Ureia + sobretaxa)
+    if(mat.brlSuperNPro>0){ mat.costBRL=mat.brlSuperNPro; mat.brlSrc='lista'; }
+    else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(50*S.fx);
+  }
+  return mat;
+}
+
+// Sobretaxa do UHF: +U$50/t no caminho dólar, valor da lista no caminho R$
+function uhfSobretaxa(cur){ return cur==='BRL' ? (S.uhfBRL||325) : 50; }
+
 function aplicarTratamentos(matsArr){
   if(!S.tratamentos) return matsArr;
-  return matsArr.map(m=>{
-    const mat=Object.assign({},m);
-    if(S.tratamentos.fertigranP && _fabSupportsFertigranP()){
-      if(mat.name==='MAP'){
-        mat.name='MAP Fertigran P'; mat.N=10.6; mat.P=50.3;
-        mat.costUSD=(mat.costUSD||0)+100;
-        // Em R$ o produto tratado tem preço PRÓPRIO na lista (Fertigran P Map Evolve);
-        // só cai para a sobretaxa convertida se a lista não trouxe esse preço.
-        if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
-        else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
-      } else if(mat.name==='TSP'){
-        mat.name='TSP FP'; mat.N=0; mat.P=44.5; mat.Ca=10;
-        mat.costUSD=(mat.costUSD||0)+100;
-        if(mat.brlFertigranP>0){ mat.costBRL=mat.brlFertigranP; mat.brlSrc='lista'; }
-        else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(100*S.fx);
-      }
-    }
-    if(S.tratamentos.superNPro && mat.name==='Ureia'){
-      mat.costUSD=(mat.costUSD||0)+50;
-      // Super N Pro tem preço próprio na lista R$ (não é Ureia + sobretaxa)
-      if(mat.brlSuperNPro>0){ mat.costBRL=mat.brlSuperNPro; mat.brlSrc='lista'; }
-      else if(mat.brlSrc==='lista') mat.costBRL=(mat.costBRL||0)+(50*S.fx);
-    }
-    return mat;
-  });
+  return matsArr.map(m=>aplicarTratamentoMat(m, S.tratamentos, fab().name));
 }
 
 // Auto-desativa MPs com custo = 0 — nunca reativa MP que o usuário desativou manualmente
@@ -6438,10 +6475,9 @@ function _processResult(res, qty, lote, resAlt, altCur){
     if(resAlt&&resAlt.mats) resAlt.mats=resAlt.mats.map(wm=>treated.find(m=>m.name===wm.name)||wm);
     // UHF: +U$50/t no caminho dólar; no caminho R$ vale o valor da lista (R$325/t por padrão)
     const uhf=S.tratamentos&&S.tratamentos.uhf;
-    const uhfBRL=S.uhfBRL||325;
-    if(uhf) res.cpt=(res.cpt||0)+(S.cur==='BRL'?uhfBRL:50);
-    if(uhf&&resAlt) resAlt.cpt=(resAlt.cpt||0)+(altCur==='BRL'?uhfBRL:50);
-    if(res.nt) res.nt.cost=(res.nt.cost||0)+(uhf?(S.cur==='BRL'?uhfBRL:50):0);
+    if(uhf) res.cpt=(res.cpt||0)+uhfSobretaxa(S.cur);
+    if(uhf&&resAlt) resAlt.cpt=(resAlt.cpt||0)+uhfSobretaxa(altCur);
+    if(res.nt) res.nt.cost=(res.nt.cost||0)+(uhf?uhfSobretaxa(S.cur):0);
     S.lastRes={res,resAlt,altCur,qty,lote,date:_dd+'/'+_mm+'/'+_yy,fac:fab().name,cur:S.cur,tratamentos:Object.assign({},S.tratamentos)};
     S.hist=S.hist||[];
     const _gradeBase=fl2(res.nt.N)+'-'+fl2(res.nt.P)+'-'+fl2(res.nt.K);
@@ -8796,6 +8832,10 @@ function abrirAddMP(){
   atualizarMPsAddMP();
   document.getElementById('addMP-qty').value=1;
   document.getElementById('addMP-cost').value='';
+  ['addMP-trat-fp','addMP-trat-sn','addMP-trat-uhf'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.checked=false;
+  });
+  atualizarCustoAddMP();
   document.getElementById('mbkAddMP').classList.add('open');
 }
 function fecharAddMP(){
@@ -8810,49 +8850,140 @@ function atualizarMPsAddMP(){
     const c=costCur(m,S.cur);
     return `<option value="${i}">${esc(m.name)} — ${S.cur==='USD'?'$':'R$'}${c.toFixed(2)}/t</option>`;
   }).join('');
-  if(ms.length){
-    const m0=ms[0];
-    const c=costCur(m0,S.cur);
-    document.getElementById('addMP-cost').placeholder=c.toFixed(2);
-  }
-  mpSel.onchange=function(){
-    const m=ms[+mpSel.value];
-    if(m){
-      const c=costCur(m,S.cur);
-      document.getElementById('addMP-cost').placeholder=c.toFixed(2);
-    }
-  };
+  mpSel.onchange=atualizarCustoAddMP;
+  atualizarCustoAddMP();
 }
-function confirmarAddMP(){
-  const fabIdx=+document.getElementById('addMP-fab').value;
-  const mpIdx=+document.getElementById('addMP-mp').value;
-  const qty=+document.getElementById('addMP-qty').value||1;
-  const customCost=document.getElementById('addMP-cost').value;
-  // Todas as MPs — consistente com atualizarMPsAddMP
-  const ms=(S.fabs[fabIdx]?.mats||[]);
-  const m=ms[mpIdx];
-  if(!m){ alert('Selecione uma MP válida.'); return; }
-  if(qty<=0){ alert('Quantidade inválida.'); return; }
-  let custoUSD, custoBRLmp=brlLista(m);
-  if(customCost!==''&&!isNaN(+customCost)){
-    custoUSD = S.cur==='USD' ? +customCost : (+customCost)/(S.fx||1);
-    if(S.cur==='BRL') custoBRLmp=+customCost;   // digitado em R$ é preço R$ nativo
-  } else {
-    custoUSD = m.costUSD||0;
+
+// ── TRATAMENTOS NA MP ISOLADA ────────────────────────────────────────────────
+// Mesmas regras da formulação: Fertigran P só em MAP/TSP de fábrica habilitada,
+// Super N Pro só em Ureia, UHF livre (sobretaxa sobre o custo).
+function _addMPSelecao(){
+  const fabEl=document.getElementById('addMP-fab');
+  const mpEl=document.getElementById('addMP-mp');
+  if(!fabEl||!mpEl) return null;
+  const fabIdx=+fabEl.value;
+  const fabRec=S.fabs[fabIdx];
+  const ms=(fabRec?.mats||[]);
+  return {fabIdx, fabName:fabRec?fabRec.name:'', ms, m:ms[+mpEl.value]};
+}
+
+// Liga/desliga os checkboxes conforme a MP e a fábrica escolhidas e devolve
+// os tratamentos efetivamente aplicáveis.
+function _addMPTratamentos(){
+  const sel=_addMPSelecao();
+  const chk={fp:document.getElementById('addMP-trat-fp'),
+             sn:document.getElementById('addMP-trat-sn'),
+             uhf:document.getElementById('addMP-trat-uhf')};
+  if(!chk.fp) return {fertigranP:false,superNPro:false,uhf:false};
+  const nome=sel&&sel.m?sel.m.name:'';
+  const fabOk=sel?_fabSupportsFertigranP(sel.fabName):false;
+  const fpOk = fabOk && (nome==='MAP'||nome==='TSP');
+  const snOk = nome==='Ureia';
+  const gate=(el,rowId,ok)=>{
+    const row=document.getElementById(rowId);
+    if(row){ row.style.opacity=ok?'1':'0.45'; row.style.pointerEvents=ok?'':'none'; }
+    el.disabled=!ok;
+    if(!ok) el.checked=false;
+  };
+  gate(chk.fp,'addMP-trat-fp-row',fpOk);
+  gate(chk.sn,'addMP-trat-sn-row',snOk);
+  // Aviso do porquê de um tratamento estar bloqueado
+  const av=document.getElementById('addMP-trat-aviso');
+  if(av){
+    let msg='';
+    if(nome && !fpOk && !snOk){
+      msg = (nome==='MAP'||nome==='TSP')
+        ? 'Fertigran P só existe em Catalão e Uberaba — nesta fábrica só o UHF se aplica.'
+        : 'Em '+esc(nome)+' só o UHF se aplica. Fertigran P é para MAP e TSP; Super N Pro, para Ureia.';
+    }
+    av.innerHTML=msg;
+    av.style.display=msg?'':'none';
   }
+  return {fertigranP:chk.fp.checked, superNPro:chk.sn.checked, uhf:chk.uhf.checked};
+}
+
+// Custo final da MP isolada: tratamentos de MP entram no preço do produto
+// (com preço próprio da lista R$ quando existe); UHF é sobretaxa por cima.
+// O custo digitado, quando houver, é a BASE — os tratamentos somam sobre ele.
+function _addMPCusto(){
+  const sel=_addMPSelecao();
+  const trat=_addMPTratamentos();
+  if(!sel||!sel.m) return null;
+  const customCost=document.getElementById('addMP-cost').value;
+  const temCustom = customCost!=='' && !isNaN(+customCost);
+  let base=Object.assign({},sel.m);
+  if(temCustom){
+    if(S.cur==='BRL'){
+      // Digitado em R$ é preço R$ nativo e vira a base — o preço de lista do
+      // produto tratado não sobrepõe o que o usuário informou.
+      base.costBRL=+customCost; base.brlSrc='lista';
+      base.costUSD=(+customCost)/(S.fx||1);
+      base.brlFertigranP=0; base.brlSuperNPro=0;
+    } else {
+      base.costUSD=+customCost;
+    }
+  }
+  const tratado=aplicarTratamentoMat(base, trat, sel.fabName);
+  let custoUSD=tratado.costUSD||0;
+  let custoBRL=brlLista(tratado);
+  if(trat.uhf){
+    custoUSD += uhfSobretaxa('USD');
+    if(custoBRL!=null) custoBRL += uhfSobretaxa('BRL');
+  }
+  // Nome do produto cotado: Fertigran P já renomeia a MP; os demais viram sufixo
+  const sufixo=[];
+  if(trat.superNPro && tratado.name==='Ureia') sufixo.push('Super N Pro');
+  if(trat.uhf) sufixo.push('UHF');
+  const nome = sufixo.length ? tratado.name+' '+sufixo.join(' + ') : tratado.name;
+  return {sel, trat, tratado, custoUSD, custoBRL, nome, temCustom};
+}
+
+function atualizarCustoAddMP(){
+  const r=_addMPCusto();
+  const inp=document.getElementById('addMP-cost');
+  const elNome=document.getElementById('addMP-preview-nome');
+  const elCusto=document.getElementById('addMP-preview-custo');
+  if(!r){
+    if(elNome) elNome.textContent='—';
+    if(elCusto) elCusto.textContent='—';
+    return;
+  }
+  // Placeholder = custo cadastrado da MP crua (a base), na moeda ativa —
+  // que é também a moeda em que o campo é lido, então o rótulo acompanha
+  const lbl=document.getElementById('addMP-cost-lbl');
+  if(lbl) lbl.textContent='Custo/t ('+(S.cur==='BRL'?'BRL':'USD')+')';
+  if(inp) inp.placeholder=costCur(r.sel.m,S.cur).toFixed(2);
+  if(elNome) elNome.textContent=r.nome;
+  if(elCusto){
+    const partes=[fmtMoney(r.custoUSD,'USD')+'/t'];
+    partes.push(r.custoBRL!=null
+      ? fmtMoney(r.custoBRL,'BRL')+'/t (lista R$)'
+      : '≈ '+fmtMoney(r.custoUSD*(S.fx||1),'BRL')+'/t (convertido)');
+    elCusto.textContent=partes.join('  ·  ');
+  }
+}
+
+function confirmarAddMP(){
+  const qty=+document.getElementById('addMP-qty').value||1;
+  const r=_addMPCusto();
+  if(!r){ alert('Selecione uma MP válida.'); return; }
+  if(qty<=0){ alert('Quantidade inválida.'); return; }
+  const m=r.tratado;                   // MP já com os tratamentos aplicados
+  const custoUSD=r.custoUSD, custoBRLmp=r.custoBRL;
   S.cotacao=S.cotacao||[];
-  // Construir descrição da MP
+  // Construir descrição da MP — teores do produto tratado
   const teorStr = NUTS.filter(n=>(m[n.k]||0)>0).map(n=>fl2(m[n.k]||0)+'%'+n.lbl).join(' + ');
   S.cotacao.push({
     type:'mp',
-    grade: m.name,
-    formula: teorStr || m.name,   // nome + teores como "fórmula"
-    fabs: S.fabs[fabIdx].name,
+    grade: r.nome,                // nome do produto já com os tratamentos
+    formula: teorStr || r.nome,   // nome + teores como "fórmula"
+    fabs: r.sel.fabName,
     custo: custoUSD,
     custoBRL: custoBRLmp!=null?custoBRLmp:null,
     qty: qty*1000,
-    mats: [{name:m.name, kg:qty*1000, pct:100}],
+    mats: [{name:r.nome, kg:qty*1000, pct:100}],
     nt: NUTS.filter(n=>(m[n.k]||0)>0).map(n=>({lbl:n.lbl, val:fl2(m[n.k]||0)})),
+    tratamentos: Object.assign({}, r.trat),
     // Parâmetros por item (V11.1)
     params: { taxa:1.6, prazo:1, com:0, frete:0, mo:0, qtd:qty, embalagem:'bag', cur:'USD', cliente:'' }
   });
@@ -9889,7 +10020,7 @@ function recalcCotacao(){
     const usaBRL=listaSel==='BRL';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:10px">'
       +'<div style="min-width:0;flex:1">'
-      +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+(item.formula||item.grade)+'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--text);word-break:break-word">#'+(i+1)+' '+_cotItemLabel(item)+'</div>'
       +'<div style="font-size:11px;color:var(--text3)">'+item.fabs+' · '+P.qtd+'t · '+(P.embalagem==='granel'?'Granel':'Big Bag')+'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'
@@ -10009,6 +10140,13 @@ function _fmtTeorNPK(v){
 function _fmtTeorMicro(v){
   const n=Math.round((+v||0)*100)/100;
   return String(n).replace('.',',');
+}
+// Rótulo do item: MP isolada pelo nome do produto (que já carrega o tratamento,
+// ex. "Ureia Super N Pro"); formulação pela fórmula completa.
+function _cotItemLabel(item){
+  return item.type==='mp'
+    ? (item.grade||item.formula||'')
+    : (item.formula||item.grade||'');
 }
 function _cotResumoFmt(item){
   // Matéria-prima: usar o nome (KCL, Ureia…) em vez do grade NPK
@@ -10133,7 +10271,7 @@ function abrirCopiarParams(fromIdx){
   const destEl = document.getElementById('copiarParamsDestinos');
   if(destEl) destEl.innerHTML = S.cotacao.map((item,i)=>{
     if(i===fromIdx) return '';
-    const lbl = '#'+(i+1)+' '+(item.formula||item.grade);
+    const lbl = '#'+(i+1)+' '+_cotItemLabel(item);
     return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm)">'
       +'<input type="checkbox" class="dest-check" data-idx="'+i+'" style="accent-color:var(--blue);width:14px;height:14px">'
       +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+lbl+'</span>'
