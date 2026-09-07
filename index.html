@@ -3679,7 +3679,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.09.07-3';
+const APP_VERSION='2026.09.07-4';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -12940,6 +12940,25 @@ function renderCRM(){
   if(view&&view.style.display!=='none') renderKanban();
   else if(dashView&&dashView.style.display!=='none') renderCrmDashboard();
   else renderClientesGrid();
+}
+
+function crmShowTab(tab){
+  document.getElementById('crmPipelineView').style.display=tab==='pipeline'?'':'none';
+  document.getElementById('crmClientesView').style.display=tab==='clientes'?'':'none';
+  document.getElementById('crmDashView').style.display=tab==='dash'?'':'none';
+  document.getElementById('crmTabPipeline').classList.toggle('active',tab==='pipeline');
+  document.getElementById('crmTabClientes').classList.toggle('active',tab==='clientes');
+  document.getElementById('crmTabDash').classList.toggle('active',tab==='dash');
+  if(tab==='pipeline') renderKanban();
+  else if(tab==='clientes') renderClientesGrid();
+  else renderCrmDashboard();
+}
+
+function crmDoSearch(){
+  const q=(document.getElementById('crmSearch').value||'').toLowerCase().trim();
+  const view=document.getElementById('crmPipelineView');
+  if(view&&view.style.display!=='none') renderKanban(q);
+  else renderClientesGrid(q);
 }
 
 // Cadastro de clientes vem da planilha Comercial (aba Clientes → Importar planilha).
