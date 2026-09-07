@@ -3476,7 +3476,6 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
   </div>
   <div id="crmDashView" style="display:none">
     <div id="crmDashFilters" class="fin-filterbar">
-      <div class="fin-filter-group"><span class="fin-filter-lbl">Supervisão</span><span id="crmDashSupChips"></span></div>
       <div class="fin-filter-group"><span class="fin-filter-lbl">Categoria</span><span id="crmDashCatChips"></span></div>
       <div class="fin-filter-group"><span class="fin-filter-lbl">Subcategoria</span><span id="crmDashSubChips"></span></div>
     </div>
@@ -3500,8 +3499,8 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     <div id="crmDashHero"></div>
     <div id="crmDashKpis" class="fin-kpis"></div>
     <div class="fin-charts">
-      <div class="fin-card"><div class="fin-card-title">Market Share por Safra</div><div style="height:240px"><canvas id="crmDashBar"></canvas></div></div>
-      <div class="fin-card"><div class="fin-card-title">Market Share Total</div><div style="height:240px"><canvas id="crmDashPie"></canvas></div></div>
+      <div class="fin-card"><div class="fin-card-title">Share Mensal por Empresa (%)</div><div style="height:240px"><canvas id="crmDashBar"></canvas></div></div>
+      <div class="fin-card"><div class="fin-card-title">Market Share Total do Ano</div><div style="height:240px"><canvas id="crmDashPie"></canvas></div></div>
     </div>
     <div class="fin-card" id="crmDashCompetTable" style="margin-top:16px"></div>
     <div class="fin-card" id="crmDashSupTable" style="margin-top:16px"></div>
@@ -3679,7 +3678,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.09.07-4';
+const APP_VERSION='2026.09.07-5';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -13890,6 +13889,18 @@ function _crmBlocoComercial(cli){
   `;
 }
 
+// Categoria e subcategoria alimentam os filtros do Dashboard — gravar já
+// re-renderiza para o chip refletir a mudança na hora.
+function crmSetCategoria(id,campo,valor){
+  const c=(S.crm.clientes||[]).find(x=>x.id===id);
+  if(!c) return;
+  c[campo]=valor||'';
+  sched();
+  renderClientesGrid();
+  const dash=document.getElementById('crmDashView');
+  if(dash&&dash.style.display!=='none') renderCrmDashboard();
+}
+
 function abrirCliente(id){
   S.crm=S.crm||{clientes:[],leads:[]};
   const cli=S.crm.clientes.find(c=>c.id===id);
@@ -13948,7 +13959,18 @@ function abrirCliente(id){
       <div style="font-size:16px;font-weight:800;color:var(--text)">${cli.nome}</div>
       ${catObj?`<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;background:${catObj.color}22;color:${catObj.color};border:1px solid ${catObj.color}55;white-space:nowrap;flex-shrink:0">${catObj.lbl}</span>`:''}
     </div>
-    ${cli.subcategoria?`<div style="font-size:11px;color:var(--text3);margin-bottom:6px">${cli.subcategoria}</div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0 10px">
+      <select onchange="crmSetCategoria('${cli.id}','categoria',this.value)" title="Define a categoria usada nos filtros do Dashboard"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 9px;font-size:11.5px;font-weight:600">
+        <option value=""${!cli.categoria?' selected':''}>— sem categoria —</option>
+        ${CRM_CATEGORIAS.map(x=>`<option value="${x.key}"${cli.categoria===x.key?' selected':''}>${x.lbl}</option>`).join('')}
+      </select>
+      <select onchange="crmSetCategoria('${cli.id}','subcategoria',this.value)" title="Define a subcategoria usada nos filtros do Dashboard"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 9px;font-size:11.5px;font-weight:600">
+        <option value=""${!cli.subcategoria?' selected':''}>— sem subcategoria —</option>
+        ${CRM_SUBCATEGORIAS.map(x=>`<option value="${esc(x)}"${cli.subcategoria===x?' selected':''}>${esc(x)}</option>`).join('')}
+      </select>
+    </div>
     <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:1rem">
       ${cli.municipio?`<div style="font-size:12px;color:var(--text2)">📍 ${cli.municipio}</div>`:''}
       ${cli.supervisao?`<div style="font-size:12px;color:var(--text2)">🏢 ${esc(cli.supervisao)}</div>`:''}
@@ -14026,7 +14048,6 @@ function crmDeleteCliente(id){
 
 window._crmDashCats=new Set();
 window._crmDashSubs=new Set();
-window._crmDashSups=new Set();
 
 function crmDashToggleCat(key){
   if(window._crmDashCats.has(key)) window._crmDashCats.delete(key);
@@ -14036,11 +14057,6 @@ function crmDashToggleCat(key){
 function crmDashToggleSub(s){
   if(window._crmDashSubs.has(s)) window._crmDashSubs.delete(s);
   else window._crmDashSubs.add(s);
-  renderCrmDashboard();
-}
-function crmDashToggleSup(s){
-  if(window._crmDashSups.has(s)) window._crmDashSups.delete(s);
-  else window._crmDashSups.add(s);
   renderCrmDashboard();
 }
 // Supervisões presentes na base (as fixas + qualquer uma digitada num cliente)
@@ -14058,12 +14074,6 @@ function renderCrmDashboard(){
   // Filter chips
   const catChips=document.getElementById('crmDashCatChips');
   const subChips=document.getElementById('crmDashSubChips');
-  const supChips=document.getElementById('crmDashSupChips');
-  const sups=crmSupervisoesAtivas();
-  if(supChips) supChips.innerHTML=sups.map(s=>{
-    const on=!window._crmDashSups.size||window._crmDashSups.has(s);
-    return `<span class="fin-pill" onclick="crmDashToggleSup('${s.replace(/'/g,'\\\'')}')" style="border:1px solid ${on?'#A8FF53':'var(--border2)'};background:${on?'rgba(168,255,83,.14)':'transparent'};color:${on?'#A8FF53':'var(--text3)'}">${esc(s)}</span>`;
-  }).join('');
   if(catChips) catChips.innerHTML=CRM_CATEGORIAS.map(x=>{
     const on=!window._crmDashCats.size||window._crmDashCats.has(x.key);
     return `<span class="fin-pill" onclick="crmDashToggleCat('${x.key}')" style="border:1px solid ${x.color};background:${on?x.color+'2e':'transparent'};color:${on?x.color:'var(--text3)'}">${x.lbl}</span>`;
@@ -14075,254 +14085,195 @@ function renderCrmDashboard(){
 
   // Apply client filters
   const clients=allClients.filter(c=>{
-    if(window._crmDashSups.size&&!window._crmDashSups.has(c.supervisao)) return false;
     if(window._crmDashCats.size&&!window._crmDashCats.has(c.categoria)) return false;
     if(window._crmDashSubs.size&&!window._crmDashSubs.has(c.subcategoria)) return false;
     return true;
   });
   const clientIds=new Set(clients.map(c=>c.id));
 
-  // Potentials per safra
-  const potVerao   =clients.reduce((a,c)=>a+(+c.potencialVerao||0),0);
-  const potIrrigado=clients.reduce((a,c)=>a+(+c.potencialIrrigado||0),0);
-  const potSafrinha=clients.reduce((a,c)=>a+(+c.potencialSafrinha||0),0);
-  const potTotal   =clients.reduce((a,c)=>a+(+c.potencialTotal||0),0)||potVerao+potIrrigado+potSafrinha;
-  const potBySafra ={verao:potVerao,irrigado:potIrrigado,safrinha:potSafrinha};
-
-  // Atribuição por empresa (quem levou o volume). Fonte preferida: as vendas da
-  // Planilha Comercial, que são reais e mês a mês; sem elas, cai para os leads.
-  // O mês vira safra pela mesma régua das janelas: abr–out é verão, nov–mar safrinha.
-  // Meses da safrinha já encerrada ficam fora daqui — esta seção só cobre as janelas
-  // abertas, que são as que têm potencial cadastrado; o histórico completo está no
-  // gráfico de vendas por mês.
-  const empMap={};
-  const leadPorCli={};
-  const temComercial=clients.some(c=>c.visitas&&Object.keys(c.visitas).length);
-  if(temComercial){
-    clients.forEach(c=>{
-      Object.keys(c.visitas||{}).forEach(ym=>{
-        const safra=_comSafraDoMes(ym);
-        if(safra==='safrinha26') return;   // janela encerrada: fora do market share atual
-        const vendas=(c.visitas[ym]||{}).vendas||{};
-        Object.keys(vendas).forEach(k=>{
-          const tons=+vendas[k]||0;
-          if(!(tons>0)) return;
-          if(!empMap[k]) empMap[k]={verao:0,irrigado:0,safrinha:0,total:0};
-          empMap[k][safra]+=tons;
-          empMap[k].total+=tons;
-        });
+  // ── Potencial e mercado rodado: vêm do retrato mensal (planilha de Andamento) ──
+  // É lá que as safras são definidas, então o total de mercado sai da soma das três
+  // janelas daquele retrato. Respeita o filtro de categoria somando só as linhas
+  // cujo cliente está na seleção. Sem retrato importado, tudo fica zerado e a tela
+  // avisa — melhor do que somar campos de cadastro que vêm de outra planilha.
+  const snapsDash=(S.crm.andamentoMensal||[]).slice().sort((a,b)=>String(b.mes).localeCompare(String(a.mes)));
+  const snapAtual=snapsDash[0]||null;
+  const nomesSel=new Set(clients.map(c=>_brlNorm(c.nome)));
+  const janTot={};
+  AND_JANELAS.forEach(j=>janTot[j.key]={pot:0,vol:0});
+  if(snapAtual){
+    (snapAtual.porCliente||[]).forEach(r=>{
+      if(!nomesSel.has(_brlNorm(r.nome))) return;
+      AND_JANELAS.forEach(j=>{
+        const d=r[j.key]||{pot:0,vol:0};
+        janTot[j.key].pot+=(+d.pot||0);
+        janTot[j.key].vol+=(+d.vol||0);
       });
     });
-  } else {
-    allLeads.filter(l=>clientIds.has(l.clienteId)&&l.empresa&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
-      const tons=+l.volumeFechado||+l.qtdTons||0;
-      const safra=l.safra||'verao';
-      if(!empMap[l.empresa]) empMap[l.empresa]={verao:0,irrigado:0,safrinha:0,total:0};
-      empMap[l.empresa][safra]+=tons;
-      empMap[l.empresa].total+=tons;
-      if(!leadPorCli[l.clienteId]) leadPorCli[l.clienteId]={verao:0,irrigado:0,safrinha:0};
-      leadPorCli[l.clienteId][safra]+=tons;
-    });
   }
+  const potTotal=AND_JANELAS.reduce((a,j)=>a+janTot[j.key].pot,0);
+  const rodTotal=AND_JANELAS.reduce((a,j)=>a+janTot[j.key].vol,0);
 
-  // Mercado rodado por safra — o número da planilha de supervisão é a autoridade;
-  // clientes sem esse número caem para a soma dos leads.
-  const SAFRA_KEYS=['verao','irrigado','safrinha'];
-  const rodado={verao:0,irrigado:0,safrinha:0};
+  // ── Vendas por empresa: total do ano, da Planilha Comercial ──────────────────
+  // Só pelo total: a planilha registra venda por mês, não por safra, então dividir
+  // por janela seria invenção. O recorte temporal fica no gráfico de share mensal.
+  const empTot={};          // empresa → toneladas
+  const empPorMes={};       // mês → empresa → toneladas
   clients.forEach(c=>{
-    SAFRA_KEYS.forEach(s=>{rodado[s]+=crmRodadoCliente(c,s,leadPorCli[c.id]);});
+    Object.keys(c.visitas||{}).forEach(ym=>{
+      const vendas=(c.visitas[ym]||{}).vendas||{};
+      Object.keys(vendas).forEach(k=>{
+        const t=+vendas[k]||0;
+        if(!(t>0)) return;
+        empTot[k]=(empTot[k]||0)+t;
+        (empPorMes[ym]=empPorMes[ym]||{})[k]=(empPorMes[ym][k]||0)+t;
+      });
+    });
   });
-  rodado.total=rodado.verao+rodado.irrigado+rodado.safrinha;
-
-  // Volume rodado que os leads ainda não atribuem a nenhuma empresa.
-  const naoId={verao:0,irrigado:0,safrinha:0,total:0};
-  SAFRA_KEYS.forEach(s=>{
-    const atribuido=Object.values(empMap).reduce((a,d)=>a+d[s],0);
-    naoId[s]=Math.max(rodado[s]-atribuido,0);
+  // Fallback do rodado por cliente para quem não aparece no retrato mensal:
+  // soma dos leads manuais daquele cliente, como era antes.
+  const leadPorCli={};
+  allLeads.filter(l=>clientIds.has(l.clienteId)&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
+    const tons=+l.volumeFechado||+l.qtdTons||0;
+    const safra=l.safra||'verao';
+    if(!leadPorCli[l.clienteId]) leadPorCli[l.clienteId]={verao:0,irrigado:0,safrinha:0};
+    leadPorCli[l.clienteId][safra]+=tons;
   });
-  naoId.total=naoId.verao+naoId.irrigado+naoId.safrinha;
-  if(naoId.total>0) empMap['naoident']=naoId;
 
-  const fgD=empMap['fertigran']||{verao:0,irrigado:0,safrinha:0,total:0};
-  const pctOf=(tons,pot)=>pot>0?parseFloat((tons/pot*100).toFixed(1)):0;
+  const vendidoTotal=Object.values(empTot).reduce((a,b)=>a+b,0);
+  const fgVendido=empTot.fertigran||0;
+  const temComercial=vendidoTotal>0;
+
+  const pctOf=(v,base)=>base>0?parseFloat((v/base*100).toFixed(1)):0;
   const pc=p=>p>=50?'#A8FF53':p>=25?'#f8b53e':'#f87171';
-
   const FG_COL='#A8FF53', CC_COL='#fb923c', AR_COL='#565E5C';
 
   // ── Hero ─────────────────────────────────────────────────────────────────
   const heroEl=document.getElementById('crmDashHero');
   if(heroEl){
-    const shareFg=pctOf(fgD.total,potTotal);
-    const shareCc=pctOf(rodado.total-fgD.total,potTotal);
-    const shareAr=pctOf(Math.max(potTotal-rodado.total,0),potTotal);
+    const pRod=pctOf(rodTotal,potTotal);
+    const pAr=pctOf(Math.max(potTotal-rodTotal,0),potTotal);
+    const pFg=pctOf(fgVendido,vendidoTotal);
     heroEl.className='fin-hero';
     heroEl.innerHTML=`<div class="fin-hero-inner">
       <div>
         <div class="fin-hero-label">Potencial total de mercado</div>
         <div class="fin-hero-val">${potTotal.toLocaleString('pt-BR')} <span style="font-size:18px;color:var(--text3);font-weight:700">t</span></div>
-        <div class="fin-hero-sub">${clients.length} cliente${clients.length!==1?'s':''} · ${rodado.total.toLocaleString('pt-BR')}t já rodados (${pctOf(rodado.total,potTotal)}%)</div>
+        <div class="fin-hero-sub">${clients.length} cliente${clients.length!==1?'s':''} · ${rodTotal.toLocaleString('pt-BR')}t já rodados${snapAtual?' · retrato de '+esc(_andMesLbl(snapAtual.mes)):''}</div>
       </div>
       <div class="fin-hero-share">
-        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${FG_COL}">${shareFg}%</div><div class="fin-hero-share-lbl">Fertigran</div></div>
-        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${CC_COL}">${shareCc}%</div><div class="fin-hero-share-lbl">Concorrentes</div></div>
-        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--text2)">${shareAr}%</div><div class="fin-hero-share-lbl">A rodar</div></div>
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${CC_COL}">${pRod}%</div><div class="fin-hero-share-lbl">Mercado rodado</div></div>
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:var(--text2)">${pAr}%</div><div class="fin-hero-share-lbl">A rodar</div></div>
+        <div class="fin-hero-share-item"><div class="fin-hero-share-val" style="color:${FG_COL}">${pFg}%</div><div class="fin-hero-share-lbl">Fertigran<br><span style="font-size:9px;opacity:.7">do vendido no ano</span></div></div>
       </div>
     </div>`;
+    if(!snapAtual){
+      heroEl.innerHTML+=`<div style="font-size:11px;color:var(--amber);padding:8px 14px 2px">Nenhum retrato mensal importado — importe a planilha de Andamento de Mercado acima para o potencial aparecer.</div>`;
+    }
   }
 
-  // ── KPI tiles ────────────────────────────────────────────────────────────
+  // ── KPI tiles: uma por janela do retrato + total ──────────────────────────
   const kpiEl=document.getElementById('crmDashKpis');
   if(kpiEl){
-    const cards=[
-      {lbl:'Verão',   safra:'verao',   pot:potVerao},
-      {lbl:'Irrigado',safra:'irrigado',pot:potIrrigado},
-      {lbl:'Safrinha',safra:'safrinha',pot:potSafrinha},
-      {lbl:'Total',   safra:null,      pot:potTotal},
-    ];
+    const cards=AND_JANELAS.map(j=>({lbl:j.lbl,pot:janTot[j.key].pot,rod:janTot[j.key].vol,col:j.col}))
+      .concat([{lbl:'Total',pot:potTotal,rod:rodTotal,col:FG_COL,isTotal:true}]);
     kpiEl.innerHTML=cards.map(card=>{
-      const fg  =card.safra?fgD[card.safra]:fgD.total;
-      const rod =card.safra?rodado[card.safra]:rodado.total;
-      const cc  =rod-fg;
-      const ar  =Math.max(card.pot-rod,0);
-      const pFg =pctOf(fg,card.pot);
-      const pCc =pctOf(cc,card.pot);
-      const pAr =pctOf(ar,card.pot);
-      const wFg =Math.min(pFg,100);
-      const wCc =Math.min(pCc,100-wFg);
-      const wAr =Math.max(100-wFg-wCc,0);
-      const isTotal=card.safra===null;
-      return `<div class="fin-tile"${isTotal?' style="border-color:var(--border2);box-shadow:inset 0 0 0 1px rgba(74,222,128,0.10)"':''}>
+      const ar=Math.max(card.pot-card.rod,0);
+      const pRod=pctOf(card.rod,card.pot);
+      const wRod=Math.min(pRod,100);
+      return `<div class="fin-tile"${card.isTotal?' style="border-color:var(--border2);box-shadow:inset 0 0 0 1px rgba(74,222,128,0.10)"':''}>
         <div class="fin-tile-top">
-          <span class="fin-tile-lbl">${card.lbl}</span>
+          <span class="fin-tile-lbl">${esc(card.lbl)}</span>
           <span class="fin-tile-pot">Pot. <b>${card.pot.toLocaleString('pt-BR')}t</b></span>
         </div>
         <div class="fin-bar">
-          <div style="width:${wFg}%;background:${FG_COL}"></div>
-          <div style="width:${wCc}%;background:${CC_COL}"></div>
-          <div style="width:${wAr}%;background:rgba(255,255,255,0.06)"></div>
+          <div style="width:${wRod}%;background:${card.col}"></div>
+          <div style="width:${Math.max(100-wRod,0)}%;background:rgba(255,255,255,0.06)"></div>
         </div>
         <div class="fin-legend">
-          <div class="fin-legend-row"><span class="l" style="color:${FG_COL};font-weight:700"><i class="fin-dot" style="background:${FG_COL}"></i>Fertigran</span><span style="color:${FG_COL};font-weight:800">${pFg}% <span style="color:var(--text3);font-weight:600">· ${fg.toLocaleString('pt-BR')}t</span></span></div>
-          <div class="fin-legend-row"><span class="l" style="color:var(--text2)"><i class="fin-dot" style="background:${CC_COL}"></i>Concorrentes</span><span style="color:var(--text2);font-weight:700">${pCc}% <span style="color:var(--text3);font-weight:600">· ${cc.toLocaleString('pt-BR')}t</span></span></div>
-          <div class="fin-legend-row"><span class="l" style="color:var(--text3)"><i class="fin-dot" style="background:${AR_COL}"></i>A rodar</span><span style="color:var(--text3);font-weight:700">${pAr}% <span style="font-weight:600">· ${ar.toLocaleString('pt-BR')}t</span></span></div>
+          <div class="fin-legend-row"><span class="l" style="color:${card.col};font-weight:700"><i class="fin-dot" style="background:${card.col}"></i>Fechado</span><span style="color:${card.col};font-weight:800">${pRod}% <span style="color:var(--text3);font-weight:600">· ${card.rod.toLocaleString('pt-BR')}t</span></span></div>
+          <div class="fin-legend-row"><span class="l" style="color:var(--text3)"><i class="fin-dot" style="background:${AR_COL}"></i>A rodar</span><span style="color:var(--text3);font-weight:700">${pctOf(ar,card.pot)}% <span style="font-weight:600">· ${ar.toLocaleString('pt-BR')}t</span></span></div>
         </div>
       </div>`;
     }).join('');
   }
 
-  // ── Bar chart: 100% stacked market share por safra ─────────────────────────
+  // ── Share mensal por empresa (100%) ───────────────────────────────────────
+  // Substitui o antigo "market share por safra": a planilha alimenta share por mês,
+  // não por safra, então este é o recorte que os dados de fato sustentam.
   const barEl=document.getElementById('crmDashBar');
   if(barEl){
     if(barEl._chart){barEl._chart.destroy();barEl._chart=null;}
-    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
-    const safraKeys=['verao','irrigado','safrinha'];
-    const pots=[potVerao,potIrrigado,potSafrinha];
-    const datasets=sortedKeys.map(k=>{
-      const ent=crmEmpMeta(k);
-      const col=ent.color;
-      return {
-        label:ent.lbl,
-        data:safraKeys.map((s,i)=>pctOf(empMap[k][s],pots[i])),
-        backgroundColor:col+'bb',borderColor:col,borderWidth:1,
-      };
-    });
-    datasets.push({
-      label:'A Rodar',
-      data:safraKeys.map((s,i)=>pctOf(Math.max(pots[i]-rodado[s],0),pots[i])),
-      backgroundColor:'rgba(255,255,255,0.07)',borderColor:'rgba(255,255,255,0.15)',borderWidth:1,
-    });
-    barEl._chart=new Chart(barEl,{
-      type:'bar',
-      data:{labels:['Verão','Irrigado','Safrinha'],datasets},
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        plugins:{
-          legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:11},boxWidth:10,padding:12,usePointStyle:true,pointStyle:'rectRounded'}},
-          tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`}},
-        },
-        scales:{
-          x:{stacked:true,ticks:{color:'rgba(255,255,255,0.45)'},grid:{color:'rgba(255,255,255,0.04)'}},
-          y:{stacked:true,max:100,ticks:{color:'rgba(255,255,255,0.45)',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'}},
-        },
-      },
-    });
-  }
-
-  // ── Doughnut: market share total (todas safras) ────────────────────────────
-  const pieEl=document.getElementById('crmDashPie');
-  if(pieEl){
-    if(pieEl._chart){pieEl._chart.destroy();pieEl._chart=null;}
-    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
-    const aRodarTot=Math.max(potTotal-rodado.total,0);
-    const pieLabels=[...sortedKeys.map(k=>crmEmpMeta(k).lbl),'A Rodar'];
-    const pieData=[...sortedKeys.map(k=>empMap[k].total),aRodarTot];
-    const pieColors=[...sortedKeys.map(k=>crmEmpMeta(k).color),'#2A2F35'];
-    if(pieData.some(v=>v>0)){
-      pieEl._chart=new Chart(pieEl,{
-        type:'doughnut',
-        data:{labels:pieLabels,datasets:[{data:pieData,backgroundColor:pieColors.map(c=>c+'bb'),borderColor:pieColors,borderWidth:1}]},
-        options:{
-          responsive:true,maintainAspectRatio:false,
-          cutout:'62%',
-          plugins:{
-            legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10,padding:9,usePointStyle:true,pointStyle:'circle'}},
-            tooltip:{callbacks:{label:ctx=>{
-              const tot=ctx.dataset.data.reduce((a,b)=>a+b,0);
-              return `${ctx.label}: ${(+ctx.parsed).toLocaleString('pt-BR')}t (${tot>0?pctOf(ctx.parsed,tot)+'%':'—'})`;
-            }}},
-          },
-        },
+    const meses=Object.keys(empPorMes).sort();
+    if(meses.length){
+      const totMes={};
+      meses.forEach(m=>{totMes[m]=Object.values(empPorMes[m]).reduce((a,b)=>a+b,0);});
+      const ordem=Object.keys(empTot).sort((a,b)=>empTot[b]-empTot[a]);
+      barEl._chart=new Chart(barEl,{
+        type:'bar',
+        data:{labels:meses.map(_andMesLbl),datasets:ordem.map(k=>{
+          const e=crmEmpMeta(k);
+          return {label:e.lbl,backgroundColor:e.color+'bb',borderColor:e.color,borderWidth:1,
+            data:meses.map(m=>totMes[m]>0?+((empPorMes[m][k]||0)/totMes[m]*100).toFixed(1):0)};
+        })},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
+            tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y}%`}}},
+          scales:{x:{stacked:true,ticks:{color:'rgba(255,255,255,0.45)'},grid:{display:false}},
+            y:{stacked:true,max:100,ticks:{color:'rgba(255,255,255,0.45)',callback:v=>v+'%'},grid:{color:'rgba(255,255,255,0.04)'}}}}
       });
     }
   }
 
-  // ── Tabela: todas empresas vs potencial total ──────────────────────────────
-  const compEl=document.getElementById('crmDashCompetTable');
-  if(compEl){
-    const sortedKeys=Object.keys(empMap).sort((a,b)=>empMap[b].total-empMap[a].total);
-    const arV=Math.max(potVerao-rodado.verao,0);
-    const arI=Math.max(potIrrigado-rodado.irrigado,0);
-    const arS=Math.max(potSafrinha-rodado.safrinha,0);
-    const arT=arV+arI+arS;
-    const mkCell=(v,pot,bold,col)=>{
-      const p=pctOf(v,pot);
-      const c=col||(bold?'var(--text)':'var(--text2)');
-      return `<td class="num" style="color:${c};font-weight:${bold?700:400}">${v.toLocaleString('pt-BR')}</td>
-              <td class="pct">${p}%</td>`;
-    };
-    const mkRow=(k,d)=>{
-      const ent=crmEmpMeta(k);
-      const col=ent.color;
-      const isFG=k==='fertigran';
-      return `<tr style="${isFG?'background:rgba(74,222,128,0.05)':''}">
-        <td style="padding:7px 8px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${col};margin-right:8px"></span><span style="font-weight:${isFG?800:500};color:${isFG?'#A8FF53':'var(--text)'}">${ent.lbl}</span></td>
-        ${mkCell(d.verao,potVerao,false,isFG?'#A8FF53':null)}
-        ${mkCell(d.irrigado,potIrrigado,false,isFG?'#A8FF53':null)}
-        ${mkCell(d.safrinha,potSafrinha,false,isFG?'#A8FF53':null)}
-        ${mkCell(d.total,potTotal,true,isFG?'#A8FF53':null)}
-      </tr>`;
-    };
-    const arRow=`<tr style="border-top:2px solid var(--border2)">
-      <td style="padding:7px 8px;color:var(--text3)"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${AR_COL};margin-right:8px"></span>A Rodar</td>
-      ${mkCell(arV,potVerao,false,'var(--text3)')}
-      ${mkCell(arI,potIrrigado,false,'var(--text3)')}
-      ${mkCell(arS,potSafrinha,false,'var(--text3)')}
-      ${mkCell(arT,potTotal,true,'var(--text3)')}
-    </tr>`;
-    compEl.innerHTML=`<div class="fin-card-title">Market Share por Empresa · % do Potencial
-      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0"> · ${temComercial?'vendas da Planilha Comercial':'atribuição pelos leads'}</span></div>
-    <div style="overflow-x:auto"><table class="fin-tbl">
-      <thead><tr>
-        <th style="text-align:left">Empresa</th>
-        <th style="text-align:right" colspan="2">Verão</th>
-        <th style="text-align:right" colspan="2">Irrigado</th>
-        <th style="text-align:right" colspan="2">Safrinha</th>
-        <th style="text-align:right" colspan="2">Total</th>
-      </tr></thead>
-      <tbody>${sortedKeys.map(k=>mkRow(k,empMap[k])).join('')}${arRow}</tbody>
-    </table></div>`;
+  // ── Doughnut: market share total do ano ───────────────────────────────────
+  const pieEl=document.getElementById('crmDashPie');
+  if(pieEl){
+    if(pieEl._chart){pieEl._chart.destroy();pieEl._chart=null;}
+    const ordem=Object.keys(empTot).sort((a,b)=>empTot[b]-empTot[a]);
+    if(ordem.length){
+      pieEl._chart=new Chart(pieEl,{
+        type:'doughnut',
+        data:{labels:ordem.map(k=>crmEmpMeta(k).lbl),
+          datasets:[{data:ordem.map(k=>empTot[k]),
+            backgroundColor:ordem.map(k=>crmEmpMeta(k).color+'bb'),
+            borderColor:ordem.map(k=>crmEmpMeta(k).color),borderWidth:1}]},
+        options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+          plugins:{legend:{position:'right',labels:{color:'rgba(255,255,255,0.55)',font:{size:10},boxWidth:10,padding:9,usePointStyle:true,pointStyle:'circle'}},
+            tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${(+ctx.parsed).toLocaleString('pt-BR')}t (${pctOf(ctx.parsed,vendidoTotal)}%)`}}}}
+      });
+    }
   }
 
+  // ── Tabela: participação por empresa, só no total ──────────────────────────
+  const compEl=document.getElementById('crmDashCompetTable');
+  if(compEl){
+    const ordem=Object.keys(empTot).sort((a,b)=>empTot[b]-empTot[a]);
+    const linhas=ordem.map(k=>{
+      const e=crmEmpMeta(k), v=empTot[k], p=pctOf(v,vendidoTotal);
+      const isFG=k==='fertigran';
+      return `<tr style="${isFG?'background:rgba(74,222,128,0.05)':''}">
+        <td style="padding:7px 8px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${e.color};margin-right:8px"></span><span style="font-weight:${isFG?800:500};color:${isFG?'#A8FF53':'var(--text)'}">${esc(e.lbl)}</span></td>
+        <td class="num" style="font-weight:${isFG?800:600};color:${isFG?'#A8FF53':'var(--text)'}">${v.toLocaleString('pt-BR')}</td>
+        <td class="pct" style="color:${isFG?'#A8FF53':'var(--text2)'};font-weight:700">${p}%</td>
+      </tr>`;
+    }).join('');
+    compEl.innerHTML=`<div class="fin-card-title">Participação por Empresa · % do vendido no ano
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0"> · Planilha Comercial</span></div>
+    ${temComercial?`<div style="overflow-x:auto"><table class="fin-tbl">
+      <thead><tr>
+        <th style="text-align:left">Empresa</th>
+        <th style="text-align:right">Volume (t)</th>
+        <th style="text-align:right">Participação</th>
+      </tr></thead>
+      <tbody>${linhas}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border2);font-weight:800">
+        <td style="padding:7px 8px">Total vendido</td>
+        <td class="num" style="font-weight:800">${vendidoTotal.toLocaleString('pt-BR')}</td>
+        <td class="pct" style="font-weight:800">100%</td>
+      </tr></tfoot>
+    </table></div>`
+    :`<div style="font-size:12px;color:var(--text3);padding:1.25rem;text-align:center">Importe a Planilha Comercial na aba Clientes para ver a participação por empresa.</div>`}`;
+  }
   // ── Tabela: planilha de supervisão (cliente × janela de safra) ─────────────
   // Segue a mesma lógica do Andamento Mensal: quando existe um retrato importado,
   // esta tabela usa EXATAMENTE os números daquele retrato (não recalcula a partir
