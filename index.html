@@ -3449,6 +3449,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <input type="search" id="crmSearch" placeholder="Buscar lead ou cliente…" oninput="crmDoSearch()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 12px;font-size:12px;width:190px">
       <button class="btn btn-sm" onclick="abrirNovoCliente()">+ Cliente</button>
       <button class="btn btn-sm btn-green" onclick="abrirNovoLead()">+ Lead</button>
+      <button class="btn btn-sm btn-red" onclick="crmResetarClientes()" title="Apaga todos os clientes e leads — use para recomeçar do zero com uma planilha nova">Resetar clientes</button>
     </div>
   </div>
   <div class="crm-subtab">
@@ -3667,7 +3668,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.09.07-1';
+const APP_VERSION='2026.09.07-2';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -14002,6 +14003,21 @@ function abrirCliente(id){
   `);
 }
 
+// Apaga TODOS os clientes e leads. Não mexe no histórico de Andamento Mensal
+// (S.crm.andamentoMensal) nem nos seeds de fábrica — só o cadastro de clientes/leads
+// que o usuário está pedindo para zerar antes de reimportar do zero.
+function crmResetarClientes(){
+  const nCli=(S.crm.clientes||[]).length, nLead=(S.crm.leads||[]).length;
+  if(!nCli&&!nLead){ alert('Já não há clientes ou leads cadastrados.'); return; }
+  if(!confirm('Isto vai apagar TODOS os '+nCli+' cliente(s) e '+nLead+' lead(s) cadastrados. '
+    +'Não afeta o histórico de Andamento Mensal já importado.\n\nEsta ação não pode ser desfeita. Continuar?')) return;
+  S.crm.clientes=[];
+  S.crm.leads=[];
+  sched();
+  renderCRM();
+  alert('Clientes e leads apagados. Importe a planilha para recomeçar.');
+}
+
 function crmDeleteCliente(id){
   if(!confirm('Excluir este cliente? Os leads vinculados não serão excluídos.')) return;
   S.crm.clientes=S.crm.clientes.filter(c=>c.id!==id);
@@ -14286,23 +14302,43 @@ function renderCrmDashboard(){
   }
 
   // ── Tabela: planilha de supervisão (cliente × janela de safra) ─────────────
+  // Segue a mesma lógica do Andamento Mensal: quando existe um retrato importado,
+  // esta tabela usa EXATAMENTE os números daquele retrato (não recalcula a partir
+  // dos campos do cliente) — evita divergir se alguém editar um cliente à mão entre
+  // duas importações. Cliente ausente do retrato mais recente cai no cálculo ao vivo,
+  // para nunca ficar em branco.
   const supEl=document.getElementById('crmDashSupTable');
   if(supEl){
+    const snaps=(S.crm.andamentoMensal||[]).slice().sort((a,b)=>String(b.mes).localeCompare(String(a.mes)));
+    const ultimoSnap=snaps[0]||null;
+    const snapPorNome={};
+    if(ultimoSnap) (ultimoSnap.porCliente||[]).forEach(r=>{ snapPorNome[_brlNorm(r.nome)]=r; });
+    // CRM_JANELAS.key → chave correspondente no retrato mensal (AND_JANELAS)
+    const JANELA_PARA_SNAP={safrinha26:'safrinha26',verao:'verao',safrinha:'safrinha2027'};
+
     const rows=clients.map(c=>{
+      const snapCli=snapPorNome[_brlNorm(c.nome)];
       const cel=CRM_JANELAS.map(j=>{
+        if(snapCli){
+          const d=snapCli[JANELA_PARA_SNAP[j.key]]||{pot:0,vol:0};
+          return {pot:d.pot,rod:d.vol,pct:d.pot>0?Math.round(d.vol/d.pot*100):0,doRetrato:true};
+        }
         const pot=crmPotJanela(c,j);
         const rod=j.key==='safrinha'
           ? crmRodadoCliente(c,'safrinha',leadPorCli[c.id])+crmRodadoCliente(c,'irrigado',leadPorCli[c.id])
           : crmRodadoCliente(c,j.key,leadPorCli[c.id]);
-        return {pot,rod,pct:pot>0?Math.round(rod/pot*100):0};
+        return {pot,rod,pct:pot>0?Math.round(rod/pot*100):0,doRetrato:false};
       });
-      return {c,cel};
+      return {c,cel,semRetrato:ultimoSnap&&!snapCli};
     }).sort((a,b)=>(a.c.nome||'').localeCompare(b.c.nome||'','pt-BR'));
 
     const tot=CRM_JANELAS.map((j,i)=>rows.reduce((a,r)=>({pot:a.pot+r.cel[i].pot,rod:a.rod+r.cel[i].rod}),{pot:0,rod:0}));
     const pctCell=p=>`<td class="pct" style="color:${pc(p)};font-weight:700">${p}%</td>`;
 
-    supEl.innerHTML=`<div class="fin-card-title">Potencial × Mercado Rodado por Cliente</div>
+    supEl.innerHTML=`<div class="fin-card-title">Potencial × Mercado Rodado por Cliente
+      ${ultimoSnap?`<span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0"> · dados do retrato de ${esc(_andMesLbl(ultimoSnap.mes))}</span>`
+                  :`<span style="font-size:10px;font-weight:600;color:var(--amber);text-transform:none;letter-spacing:0"> · nenhum retrato mensal importado ainda — calculado a partir do cadastro</span>`}
+    </div>
     <div style="overflow-x:auto"><table class="fin-tbl" style="min-width:840px">
       <thead>
         <tr>
@@ -14320,7 +14356,7 @@ function renderCrmDashboard(){
       <tbody>
         ${rows.map(r=>`<tr>
           <td style="padding:6px 8px;color:var(--text3);white-space:nowrap">${esc(r.c.supervisao||'—')}</td>
-          <td style="padding:6px 8px;color:var(--text);font-weight:600;cursor:pointer" onclick="abrirCliente('${r.c.id}')">${esc(r.c.nome)}</td>
+          <td style="padding:6px 8px;color:var(--text);font-weight:600;cursor:pointer" onclick="abrirCliente('${r.c.id}')">${esc(r.c.nome)}${r.semRetrato?'<span style="margin-left:6px;font-size:9px;font-weight:700;color:var(--amber)" title="Este cliente não aparece no retrato mais recente — valores calculados a partir do cadastro atual">fora do retrato</span>':''}</td>
           ${r.cel.map(x=>`
             <td class="num" style="border-left:1px solid var(--border2)">${x.pot.toLocaleString('pt-BR')}</td>
             <td class="num" style="color:${x.rod>0?'var(--text)':'var(--text3)'};font-weight:${x.rod>0?700:400}">${x.rod.toLocaleString('pt-BR')}</td>
@@ -14337,7 +14373,7 @@ function renderCrmDashboard(){
         }).join('')}
       </tr></tfoot>
     </table></div>
-    <div style="font-size:10px;color:var(--text3);margin-top:8px">Vol. fechado = mercado já rodado (todas as empresas). A janela Safrinha 2027 soma safrinha + irrigado, como na planilha de supervisão.</div>`;
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Vol. fechado = mercado já rodado (todas as empresas). ${ultimoSnap?'Números vêm do retrato mensal mais recente — "fora do retrato" marca cliente sem linha nessa planilha, calculado a partir do cadastro.':'A janela Safrinha 2027 soma safrinha + irrigado, como na planilha de supervisão.'}</div>`;
   }
   _renderAndamentoMensal();
 }
