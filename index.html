@@ -3449,7 +3449,6 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <input type="search" id="crmSearch" placeholder="Buscar lead ou cliente…" oninput="crmDoSearch()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 12px;font-size:12px;width:190px">
       <button class="btn btn-sm" onclick="abrirNovoCliente()">+ Cliente</button>
       <button class="btn btn-sm btn-green" onclick="abrirNovoLead()">+ Lead</button>
-      <button class="btn btn-sm btn-red" onclick="crmResetarClientes()" title="Apaga todos os clientes e leads — use para recomeçar do zero com uma planilha nova">Resetar clientes</button>
     </div>
   </div>
   <div class="crm-subtab">
@@ -3461,8 +3460,19 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
     <div class="crm-kanban" id="crmKanban"></div>
   </div>
   <div id="crmClientesView" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div style="font-size:14px;font-weight:800;color:var(--text)">Planilha Comercial</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:11px;color:var(--text3);font-weight:600">Ano</label>
+        <input type="number" id="comAno" min="2020" max="2099" step="1" class="fi" style="padding:6px 10px;font-size:12px;width:90px">
+        <input type="file" id="comFileInput" accept=".xlsx,.xls" style="display:none" onchange="crmImportarComercial(this)">
+        <button class="btn btn-sm btn-green" onclick="crmAbrirImportComercial()">Importar planilha</button>
+      </div>
+    </div>
+    <div id="comStatus" style="font-size:11.5px;color:var(--text3);margin-bottom:10px"></div>
+    <div id="comDivergencias" style="margin-bottom:12px"></div>
     <div class="crm-cliente-grid" id="crmClienteGrid"></div>
-    <div id="crmClienteEmpty" style="text-align:center;padding:3rem;color:var(--text3);font-size:13px;display:none">Nenhum cliente cadastrado ainda.</div>
+    <div id="crmClienteEmpty" style="text-align:center;padding:3rem;color:var(--text3);font-size:13px;display:none">Nenhum cliente cadastrado. Importe a Planilha Comercial ou use "+ Cliente".</div>
   </div>
   <div id="crmDashView" style="display:none">
     <div id="crmDashFilters" class="fin-filterbar">
@@ -3483,6 +3493,7 @@ a:focus-visible,textarea:focus-visible,[role=button]:focus-visible,[role=switch]
       <div class="fin-card"><div class="fin-card-title">% Mercado Rodado por Mês</div><div style="height:220px"><canvas id="andChartPct"></canvas></div></div>
       <div class="fin-card"><div class="fin-card-title">Volume Fechado por Mês (t)</div><div style="height:220px"><canvas id="andChartVol"></canvas></div></div>
     </div>
+    <div class="fin-card" style="margin-top:16px"><div class="fin-card-title">Vendas por Empresa por Mês · Planilha Comercial</div><div style="height:260px"><canvas id="comChartMes"></canvas></div><div id="comChartVazio" style="display:none;font-size:12px;color:var(--text3);text-align:center;padding:1.5rem">Importe a Planilha Comercial na aba Clientes para ver a movimentação de mercado mês a mês.</div></div>
     <div class="fin-card" id="andHistTable" style="margin-top:16px"></div>
     <div class="divider" style="margin:1.25rem 0"></div>
 
@@ -3668,7 +3679,7 @@ const DEF_MATS=[
 ];
 // Marcador de build — BUMPAR a cada deploy. Serve para responder, sem console,
 // se o navegador está servindo a versão nova ou uma do cache.
-const APP_VERSION='2026.09.07-2';
+const APP_VERSION='2026.09.07-3';
 
 function _renderAppVersion(){
   const t=document.getElementById('appVersionTag');
@@ -12922,8 +12933,8 @@ function renderCRM(){
   S.crm.clientes=S.crm.clientes||[];
   S.crm.leads=S.crm.leads||[];
   S.crm.andamentoMensal=S.crm.andamentoMensal||[];
-  _seedCrmClientes();
-  _seedCrmLeads();
+  S.crm.comercial=S.crm.comercial||{anos:{},divergencias:null};
+  _limparCadastroAntigo();
   const view=document.getElementById('crmPipelineView');
   const dashView=document.getElementById('crmDashView');
   if(view&&view.style.display!=='none') renderKanban();
@@ -12931,164 +12942,19 @@ function renderCRM(){
   else renderClientesGrid();
 }
 
-// Planilha de supervisão — Rio Verde II. Colunas:
-// [nome, contato, município, telefone, e-mail,
-//  áreaVerão, áreaIrrigado, áreaSafrinha,
-//  potVerão, potIrrigado, potSafrinha, potTotal,
-//  supervisão, mercado rodado Verão 26/27, mercado rodado Safrinha 2027 (safrinha+irrigado)]
-const CRM_SEED_CLIENTES=[
-  ['ADAIR BOLDRIN','Ronan','Montividiu','064-9 9675-8495','adairboldrim@gmail.com',19000,0,14000,6650,0,7000,13650,'Rio Verde II',4500,6000],
-  ['ALESSANDRO CHIOGNA','Alessandro','Castelândia','064-9 9209-1280','achiogna@uol.com.br',2500,0,1000,875,0,500,1375,'Rio Verde II',0,0],
-  ['APARECIDO ALDEMIR COCARELLI','Elton','Rio Verde','064-9 9933-3034','tatiana@cocarelii.com.br',6000,0,6000,2100,0,3000,5100,'Rio Verde II',900,2000],
-  ['BRUNO ABREU LEÃO','Bruno Abreu','Rio Verde','','',2600,0,2600,910,0,1300,2210,'Rio Verde II',0,0],
-  ['CARGILL BIOENERGIA','Juliano Souza','Quirinópolis','034-9 9994-6924','cleber_cabral@sjcbioenergia.com.br',65000,0,15000,22750,0,7500,30250,'Rio Verde II',10000,0],
-  ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU','Tiago','Rio Verde','067-9 9856-6272','tiago@cargill.com',75000,0,40000,26250,0,20000,46250,'Rio Verde II',25000,5000],
-  ['CEREAL OURO','Arthur','Rio Verde','064 99975-0989','',21200,0,10000,7420,0,5000,12420,'Rio Verde II',7420,0],
-  ['DANIEL PRANTE','Daniel','Montividiu','64 99213-3434','',17000,0,13000,5950,0,6500,12450,'Rio Verde II',5950,0],
-  ['DIEGO LOBON','Diego Filho','Montividiu','(64) 99925-8005','lobon.jimenez@gmail.com',14800,0,13500,5180,0,6750,11930,'Rio Verde II',5180,0],
-  ['DIRCEU ZANCHE','Dirceu','Rio Verde','064 99870-101','',1300,0,1300,455,0,650,1105,'Rio Verde II',0,0],
-  ['EDGAR LEÃO','Humberto','Rio Verde','','',4000,0,3500,1400,0,1750,3150,'Rio Verde II',0,0],
-  ['FAMÍLIA CESCA','Alysson Cesca','Rio Verde','064-9 9987-0757','kasuecesca@gmail.com',9000,0,6000,3150,0,3000,6150,'Rio Verde II',2400,0],
-  ['FAZENDA REUNIDAS BAUMGART','Claudio','Rio Verde','064-9 9218-5237','',6000,0,3000,2100,0,1500,3600,'Rio Verde II',2100,0],
-  ['GRUPO CASSOL','Marcos','Rio Verde','(64) 99977-0238','marcos.dir@aclmaquinas.com.br',30000,0,24000,10500,0,12000,22500,'Rio Verde II',8700,0],
-  ['GRUPO CBAGRO','Josiel','Rio Verde','064-9 9987-8663','compras2.cbagro@uol.com.br',34000,0,28000,11900,0,14000,25900,'Rio Verde II',7210,0],
-  ['GRUPO G5','Elias','Rio Verde','064-9 9987-8239','',60000,0,40000,21000,0,20000,41000,'Rio Verde II',21000,20000],
-  ['GRUPO GAPES','Zizo','Rio Verde','64 99641-0323','zizo@gapescna.agr.br',100000,0,80000,35000,0,40000,75000,'Rio Verde II',35000,20400],
-  ['GRUPO SOMA','Cida','Rio Verde','064-9 9994-6576','regis@somaagronegocio.com.br',80000,0,60000,28000,0,30000,58000,'Rio Verde II',15400,10000],
-  ['GRUPO TERRA FORTE','Maicon','Rio Verde','64 99604-2058','administrativo@grupoterraforte.com',12000,0,8000,4200,0,4000,8200,'Rio Verde II',0,0],
-  ['GRUPO VALE RIO','Chiquinho','Rio Verde','64 98407-9729','',4000,0,2000,1400,0,1000,2400,'Rio Verde II',0,0],
-  ['HELIO FERREIRA LIMA','Helio','Rio Verde','(64) 99987-2923','agrocastrorv@terra.com.br',4000,0,3000,1400,0,1500,2900,'Rio Verde II',1400,0],
-  ['JOAO DOS SANTOS CANCIANO','João dos Santos','Rio Verde','(64) 9671-7666','joaoscanciano@gmail.com',3750,0,3750,1313,0,1875,3188,'Rio Verde II',1313,0],
-  ['JOSÉ DIOGO','José Diogo','Rio Verde','064-9 9987-0536','zediogoagrorv@gmail.com',4000,0,2000,1400,0,1000,2400,'Rio Verde II',0,0],
-  ['JOSE ROBERTO BRUCELLI','Jose Roberto Brucelli','Rio Verde','(64) 9987-7360','jrbrucceli@uol.com.br',4500,0,4000,1575,0,2000,3575,'Rio Verde II',460,0],
-  ['JUNIOR RIZZI','Junior','Rio Verde','64 9 9217-0462','',12000,0,7000,4200,0,3500,7700,'Rio Verde II',4200,0],
-  ['SEBASTIÃO CRUVINEL','Sebastião','Montividiu','64 99642-8284','tiaocruvinel@uol.com.br',2000,0,1500,700,0,750,1450,'Rio Verde II',0,0],
-  ['SEMENTES VITORIA','Zito','Montividiu','064 99246-0087','',3000,500,500,1050,0,250,1300,'Rio Verde II',1050,0],
-  ['SILMAR / LINDOMAR CRUVINEL','Lindomar','Montividiu','64 99641-1833','lindomaragro@gmail.com',10000,0,7000,3500,0,3500,7000,'Rio Verde II',0,0],
-  ['VALDIR ANTONIO JACOMINI','Guilherme','Rio Verde','064-9 9987-1025','grupojacomini@yahoo.com.br',3500,0,2000,1225,0,1000,2225,'Rio Verde II',0,0],
-  ['WALTER DELFINO MUNIZ','Camilla','Rio Verde','064-9 9609-9406','delfinomuniz@hotmail.com',8000,0,4000,2800,0,2000,4800,'Rio Verde II',1900,0],
-];
-
-function _seedCrmClientes(){
-  if(S.crm._clientesSeedV1){ _migrarCrmSupervisao(); return; } // seed já rodou — não ressuscitar clientes apagados
-  if(S.crm.clientes.length){ S.crm._clientesSeedV1=true; _migrarCrmSupervisao(); return; }
-  if(window._authEmail !== 'ideondw@gmail.com') return;
-  S.crm._clientesSeedV1=true;
-  S.crm._supervisaoSeedV1=true;
-  const now=crmNow();
-  CRM_SEED_CLIENTES.forEach((r,i)=>{
-    S.crm.clientes.push({
-      id:'seed'+i,nome:r[0],contato:r[1],municipio:r[2],telefone:r[3],email:r[4],
-      categoria:'ferti30',subcategoria:'',
-      areaVerao:r[5],areaIrrigado:r[6],areaSafrinha:r[7],
-      potencialVerao:r[8],potencialIrrigado:r[9],potencialSafrinha:r[10],potencialTotal:r[11],
-      supervisao:r[12],rodadoVerao:r[13],rodadoSafrinha:r[14],
-      obs:'',criadoEm:now
-    });
-  });
-  sched();
+// Cadastro de clientes vem da planilha Comercial (aba Clientes → Importar planilha).
+// O seed fixo de 30 clientes e os leads de demonstração foram removidos: a planilha é
+// a fonte, e dados de exemplo hardcoded só atrapalhavam a importação real.
+// Limpeza única da base antiga — roda uma vez por conta e nunca mais.
+function _limparCadastroAntigo(){
+  if(S.crm._limpezaCadastroV1) return;
+  S.crm._limpezaCadastroV1=true;
+  const tinha=(S.crm.clientes||[]).length+(S.crm.leads||[]).length;
+  S.crm.clientes=[];
+  S.crm.leads=[];
+  if(tinha) sched();
 }
 
-// Aplica supervisão + mercado rodado da planilha em bases que já foram semeadas
-// antes destas colunas existirem. Casa por nome e nunca sobrescreve valor já preenchido.
-function _migrarCrmSupervisao(){
-  if(S.crm._supervisaoSeedV1) return;
-  S.crm._supervisaoSeedV1=true;
-  let n=0;
-  CRM_SEED_CLIENTES.forEach(r=>{
-    const c=(S.crm.clientes||[]).find(x=>(x.nome||'').trim().toUpperCase()===r[0].toUpperCase());
-    if(!c) return;
-    if(!c.supervisao) c.supervisao=r[12];
-    if(c.rodadoVerao===undefined||c.rodadoVerao===null||c.rodadoVerao==='') c.rodadoVerao=r[13];
-    if(c.rodadoSafrinha===undefined||c.rodadoSafrinha===null||c.rodadoSafrinha==='') c.rodadoSafrinha=r[14];
-    n++;
-  });
-  if(n) sched();
-}
-
-function crmShowTab(tab){
-  document.getElementById('crmPipelineView').style.display=tab==='pipeline'?'':'none';
-  document.getElementById('crmClientesView').style.display=tab==='clientes'?'':'none';
-  document.getElementById('crmDashView').style.display=tab==='dash'?'':'none';
-  document.getElementById('crmTabPipeline').classList.toggle('active',tab==='pipeline');
-  document.getElementById('crmTabClientes').classList.toggle('active',tab==='clientes');
-  document.getElementById('crmTabDash').classList.toggle('active',tab==='dash');
-  if(tab==='pipeline') renderKanban();
-  else if(tab==='clientes') renderClientesGrid();
-  else renderCrmDashboard();
-}
-
-function crmDoSearch(){
-  const q=(document.getElementById('crmSearch').value||'').toLowerCase().trim();
-  const view=document.getElementById('crmPipelineView');
-  if(view&&view.style.display!=='none') renderKanban(q);
-  else renderClientesGrid(q);
-}
-
-function _seedCrmLeads(){
-  if(window._authEmail!=='ideondw@gmail.com') return;
-  if(S.crm._leadsSeedV1) return;
-  const now=crmNow();
-  const cli=nome=>(S.crm.clientes||[]).find(c=>c.nome===nome);
-  const ent=key=>CRM_EMPRESAS.find(e=>e.key===key);
-  // [clienteNome, titulo, safra, empresa, produto, volume, etapa]
-  const D=[
-    ['ADAIR BOLDRIN',                                  'Soja 26/27','verao','eurochem',       null,          1500,'perdido'],
-    ['ADAIR BOLDRIN',                                  'Soja 26/27','verao','outras',          null,          3200,'perdido'],
-    ['CARGILL BIOENERGIA',                             'Soja 26/27','verao','gen',             null,          5037,'perdido'],
-    ['CARGILL BIOENERGIA',                             'Soja 26/27','verao','outras',          null,          9400,'perdido'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'Convencional',5459,'fechado'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'Super N Pro', 230, 'fechado'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','fertigran',       'UHF',         150, 'fechado'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','mosaic',          null,          3000,'perdido'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','eurochem',        null,          3000,'perdido'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','cibra',           null,          1000,'perdido'],
-    ['CARGILL RIO VERDE / SANTA HELENA / MONTIVIDIU',  'Soja 26/27','verao','outras',          null,          1200,'perdido'],
-    ['CEREAL OURO',                                    'Soja 26/27','verao','outras',          null,          7420,'perdido'],
-    ['DIEGO LOBON',                                    'Soja 26/27','verao','fertigran',       'Super N Pro', 235, 'fechado'],
-    ['DIEGO LOBON',                                    'Soja 26/27','verao','fertigran',       'Convencional',25,  'fechado'],
-    ['DIEGO LOBON',                                    'Soja 26/27','verao','outras',          null,          7165,'perdido'],
-    ['FAMÍLIA CESCA',                                  'Soja 26/27','verao','outras',          null,          1200,'perdido'],
-    ['FAZENDA REUNIDAS BAUMGART',                      'Soja 26/27','verao','outras',          null,          2100,'perdido'],
-    ['GRUPO CASSOL',                                   'Soja 26/27','verao','fertigran',       'Convencional',4000,'fechado'],
-    ['GRUPO CASSOL',                                   'Soja 26/27','verao','outras',          null,          6200,'perdido'],
-    ['GRUPO CBAGRO',                                   'Soja 26/27','verao','fertigran',       'Convencional',1560,'fechado'],
-    ['GRUPO CBAGRO',                                   'Soja 26/27','verao','outras',          null,          2500,'perdido'],
-    ['GRUPO G5',                                       'Soja 26/27','verao','outras',          null,          6000,'perdido'],
-    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Convencional',11744,'fechado'],
-    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Super N Pro', 416, 'fechado'],
-    ['GRUPO GAPES',                                    'Soja 26/27','verao','fertigran',       'Fertigran P', 10028,'fechado'],
-    ['GRUPO GAPES',                                    'Soja 26/27','verao','outras',          null,          550, 'perdido'],
-    ['GRUPO SOMA',                                     'Soja 26/27','verao','fertigran',       'Super N Pro', 36,  'fechado'],
-    ['GRUPO SOMA',                                     'Soja 26/27','verao','outras',          null,          5560,'perdido'],
-    ['JOAO DOS SANTOS CANCIANO',                       'Soja 26/27','verao','outras',          null,          1300,'perdido'],
-    ['JUNIOR RIZZI',                                   'Soja 26/27','verao','eurochem',        null,          4200,'perdido'],
-    ['SEMENTES VITORIA',                               'Soja 26/27','verao','outras',          null,          450, 'perdido'],
-    ['WALTER DELFINO MUNIZ',                           'Soja 26/27','verao','outras',          null,          1900,'perdido'],
-  ];
-  D.forEach((r,i)=>{
-    const c=cli(r[0]);
-    const empresa=r[3];
-    const produto=r[4]||'';
-    const vol=r[5];
-    const etapa=r[6];
-    const empLbl=(ent(empresa)||{lbl:empresa}).lbl;
-    const titulo=`${r[1]} — ${empLbl}${produto?' ('+produto+')':''}`;
-    S.crm.leads.push({
-      id:'seedl'+i,
-      clienteId:c?c.id:'',
-      titulo,etapa,empresa,produto,
-      safra:r[2],volumeFechado:vol,qtdTons:vol,valorUSD:0,
-      probabilidade:etapa==='fechado'?100:0,
-      proximaAcao:{tipo:'',data:'',obs:''},
-      cotacao:'',
-      historico:[{ts:now,obs:'Importado da planilha Soja 26/27.'}],
-      criadoEm:now,fechadoEm:etapa==='fechado'?now:null
-    });
-  });
-  S.crm._leadsSeedV1=true;
-  sched();
-}
 
 function renderKanban(q){
   S.crm=S.crm||{clientes:[],leads:[]};
@@ -13117,6 +12983,16 @@ function renderKanban(q){
         onclick="if(!window._crmWasDrag)abrirLead('${lead.id}')">
         <div class="crm-card-name">${esc(lead.titulo||'(sem título)')}</div>
         <div class="crm-card-sub">${cli?cli.nome:''}</div>
+        ${(()=>{
+          if(!cli) return '';
+          const rc=crmResumoComercial(cli);
+          if(!rc.visitas&&!rc.totalVendido) return '';
+          const share=rc.totalVendido>0?Math.round(rc.fertigran/rc.totalVendido*100):null;
+          return `<div style="font-size:9.5px;color:var(--text3);margin-top:2px;display:flex;gap:7px;flex-wrap:wrap">`
+            +(rc.visitas?`<span>🚗 ${rc.visitas} visita${rc.visitas>1?'s':''}${rc.ultimoMes?' · '+_andMesLbl(rc.ultimoMes):''}</span>`:'')
+            +(share!=null?`<span style="color:${share>=50?'#A8FF53':share>=25?'#f8b53e':'#f87171'};font-weight:700">FG ${share}%</span>`:'')
+            +`</div>`;
+        })()}
         ${lead.valorUSD?`<div class="crm-card-val">${crmFmtMoney(lead.valorUSD)}${lead.qtdTons?' · '+lead.qtdTons+'t':''}</div>`:''}
         ${acaoLbl?`<div class="crm-card-action${overdue?' crm-card-overdue':''}">${acaoIcon[acaoLbl]||'📌'} ${acaoLbl}${acaoData?' · '+acaoData:''}</div>`:''}
       </div>`;
@@ -13191,11 +13067,56 @@ function crmDrop(e,etapaKey){
   renderKanban();
 }
 
+function crmAbrirImportComercial(){
+  const a=document.getElementById('comAno');
+  if(a&&!a.value) a.value=new Date().getFullYear();
+  document.getElementById('comFileInput').click();
+}
+// Resumo das visitas/vendas de um cliente no ano — usado no card e no modal
+function crmResumoComercial(c,ano){
+  const vis=c.visitas||{};
+  const meses=Object.keys(vis).filter(ym=>!ano||ym.slice(0,4)===String(ano)).sort();
+  let visitas=0, porEmpresa={}, totalVendido=0, dif={};
+  meses.forEach(ym=>{
+    const v=vis[ym]||{};
+    visitas+=+v.qtd||0;
+    Object.keys(v.vendas||{}).forEach(k=>{ porEmpresa[k]=(porEmpresa[k]||0)+v.vendas[k]; totalVendido+=v.vendas[k]; });
+    Object.keys(v.dif||{}).forEach(k=>{ dif[k]=(dif[k]||0)+v.dif[k]; });
+  });
+  const ultimoMes=meses.filter(ym=>(vis[ym].qtd||0)>0).pop()||null;
+  return {meses,visitas,porEmpresa,totalVendido,dif,ultimoMes,fertigran:porEmpresa.fertigran||0};
+}
+// Painel de divergências: o que mudou de nome entre a planilha e o cadastro
+function renderComDivergencias(){
+  const el=document.getElementById('comDivergencias');
+  if(!el) return;
+  const d=S.crm.comercial&&S.crm.comercial.divergencias;
+  if(!d||(!d.novos.length&&!d.ausentes.length)){ el.innerHTML=''; return; }
+  const chip=(txt,cor)=>`<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:${cor}18;color:${cor};border:1px solid ${cor}44;margin:2px 3px 2px 0">${esc(txt)}</span>`;
+  const renomes=d.possiveisRenomes.map(rn=>
+    `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:11.5px;color:var(--text2)"><b style="color:var(--amber)">${esc(rn.de)}</b> → <b style="color:var(--green)">${esc(rn.para)}</b></span>
+      <span style="font-size:10px;color:var(--text3)">${rn.score}% parecido</span>
+      <button class="btn btn-sm" style="padding:3px 9px;font-size:10.5px" onclick="crmAplicarRenome('${String(rn.de).replace(/'/g,"\\'")}','${String(rn.para).replace(/'/g,"\\'")}')">É o mesmo cliente</button>
+    </div>`).join('');
+  el.innerHTML=`<div class="fin-card" style="border-color:rgba(248,181,62,.4)">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:800;color:var(--amber)">Divergências de nome na última importação</div>
+      <button class="btn btn-sm" onclick="crmIgnorarDivergencias()">Dispensar</button>
+    </div>
+    ${renomes?`<div style="margin-bottom:10px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Provável renomeação</div>${renomes}</div>`:''}
+    ${d.novos.length?`<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Só na planilha — foram criados (${d.novos.length})</div>${d.novos.map(n=>chip(n,'#A8FF53')).join('')}</div>`:''}
+    ${d.ausentes.length?`<div><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Só no cadastro — não vieram nesta planilha (${d.ausentes.length})</div>${d.ausentes.map(n=>chip(n,'#f8b53e')).join('')}</div>`:''}
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Cliente que só existe no cadastro continua salvo — a importação nunca apaga. Use "É o mesmo cliente" quando for só troca de nome.</div>
+  </div>`;
+}
+
 function renderClientesGrid(q){
   S.crm=S.crm||{clientes:[],leads:[]};
   const clientes=S.crm.clientes||[];
   const grid=document.getElementById('crmClienteGrid');
   const empty=document.getElementById('crmClienteEmpty');
+  renderComDivergencias();
   if(!grid) return;
   const filtered=q?clientes.filter(c=>((c.nome||'')+(c.municipio||'')+(c.contato||'')+(c.categoria||'')+(c.subcategoria||'')+(c.supervisao||'')).toLowerCase().includes(q)):clientes;
   if(!filtered.length){
@@ -13210,6 +13131,7 @@ function renderClientesGrid(q){
     const totalVal=cLeads.reduce((a,l)=>a+(+l.valorUSD||0),0);
     const catObj=CRM_CATEGORIAS.find(x=>x.key===c.categoria);
     const potTotal=+c.potencialTotal||(+c.potencialVerao||0)+(+c.potencialIrrigado||0)+(+c.potencialSafrinha||0);
+    const rc=crmResumoComercial(c);
     return `<div class="crm-cli-card" onclick="abrirCliente('${c.id}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:3px">
         <div style="font-size:13px;font-weight:800;color:var(--text)">${esc(c.nome)}</div>
@@ -13220,9 +13142,15 @@ function renderClientesGrid(q){
       ${c.contato?`<div style="font-size:11px;color:var(--text2);margin-bottom:2px">${esc(c.contato)}${c.telefone?' · '+esc(c.telefone):''}</div>`:''}
       <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
         ${potTotal>0?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Pot.:</span> ${potTotal.toLocaleString('pt-BR')}t</div>`:''}
+        ${rc.totalVendido>0?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Vendido:</span> ${rc.totalVendido.toLocaleString('pt-BR')}t</div>`:''}
+        ${rc.fertigran>0?`<div style="font-size:11px;font-weight:700;color:#A8FF53">FG ${Math.round(rc.fertigran/rc.totalVendido*100)}%</div>`:''}
         ${totalVal>0?`<div style="font-size:11px;font-weight:700;color:var(--blue)">${crmFmtMoney(totalVal)} em pipeline</div>`:''}
       </div>
-      ${cLeads.length?`<div style="font-size:10px;color:var(--text3);margin-top:6px">${cLeads.length} oportunidade${cLeads.length>1?'s':''} ativa${cLeads.length>1?'s':''}</div>`:''}
+      <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;font-size:10px;color:var(--text3)">
+        ${rc.visitas>0?`<span>${rc.visitas} visita${rc.visitas>1?'s':''}${rc.ultimoMes?' · última '+_andMesLbl(rc.ultimoMes):''}</span>`
+                     :`<span style="color:var(--amber)">sem visita registrada</span>`}
+        ${cLeads.length?`<span>${cLeads.length} oportunidade${cLeads.length>1?'s':''} ativa${cLeads.length>1?'s':''}</span>`:''}
+      </div>
     </div>`;
   }).join('');
 }
@@ -13878,6 +13806,71 @@ function salvarNovoCliente(){
   fecharCrmModal();
 }
 
+// Bloco da Planilha Comercial dentro da ficha do cliente: contexto de mercado
+// (empresas atuantes, motivo), histórico de visitas mês a mês e vendas por empresa.
+function _crmBlocoComercial(cli){
+  const rc=crmResumoComercial(cli);
+  const temAlgo=rc.meses.length||cli.empresasAtuantes||cli.motivo||cli.volumeFechadoAnterior;
+  if(!temAlgo) return '';
+  const linhaMes=rc.meses.map(ym=>{
+    const v=(cli.visitas||{})[ym]||{};
+    const vend=Object.keys(v.vendas||{}).sort((a,b)=>v.vendas[b]-v.vendas[a])
+      .map(k=>{const e=crmEmpMeta(k);return `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${e.color}22;color:${e.color};margin-right:3px">${esc(e.lbl)} ${v.vendas[k].toLocaleString('pt-BR')}t</span>`;}).join('');
+    const difs=Object.keys(v.dif||{}).map(k=>{
+      const lbl={superNPro:'Super N Pro',mastergran:'Mastergran',fertigranP:'Fertigran P',uhf:'UHF'}[k]||k;
+      return `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(168,255,83,.16);color:#A8FF53;margin-right:3px">${lbl} ${v.dif[k].toLocaleString('pt-BR')}t</span>`;
+    }).join('');
+    if(!v.qtd&&!v.objetivo&&!vend&&!difs) return '';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:5px 6px;font-weight:700;color:var(--text);white-space:nowrap">${esc(_andMesLbl(ym))}</td>
+      <td style="padding:5px 6px;text-align:center;color:${v.qtd?'var(--text)':'var(--text3)'}">${v.qtd||0}</td>
+      <td style="padding:5px 6px;color:var(--text2);font-size:11px">${esc(v.objetivo||'—')}</td>
+      <td style="padding:5px 6px">${vend||'<span style="color:var(--text3);font-size:10px">—</span>'}${difs?'<div style="margin-top:3px">'+difs+'</div>':''}</td>
+    </tr>`;
+  }).join('');
+  const empresas=Object.keys(rc.porEmpresa).sort((a,b)=>rc.porEmpresa[b]-rc.porEmpresa[a]);
+  const share=empresas.map(k=>{
+    const e=crmEmpMeta(k), v=rc.porEmpresa[k];
+    const p=rc.totalVendido>0?Math.round(v/rc.totalVendido*100):0;
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+      <span style="width:9px;height:9px;border-radius:3px;background:${e.color};flex-shrink:0"></span>
+      <span style="font-size:11px;color:var(--text2);flex:1">${esc(e.lbl)}</span>
+      <span style="font-size:11px;font-weight:700;color:${k==='fertigran'?'#A8FF53':'var(--text)'}">${v.toLocaleString('pt-BR')}t</span>
+      <span style="font-size:10px;color:var(--text3);width:34px;text-align:right">${p}%</span>
+    </div>`;
+  }).join('');
+  return `
+    <div class="crm-section-title">Planilha Comercial</div>
+    ${cli.motivo?`<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:.75rem;padding:8px 10px;background:var(--surface2);border-radius:6px;border-left:3px solid var(--amber)"><div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Motivo de atuar ou não</div>${esc(cli.motivo)}</div>`:''}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:.75rem">
+      ${cli.empresasAtuantes?`<div style="flex:1;min-width:180px;font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Empresas atuantes:</span> ${esc(cli.empresasAtuantes)}</div>`:''}
+      ${cli.volumeFechadoAnterior?`<div style="font-size:11px;color:var(--text2)"><span style="color:var(--text3)">Fechado ano anterior:</span> <b>${(+cli.volumeFechadoAnterior).toLocaleString('pt-BR')}t</b></div>`:''}
+    </div>
+    ${rc.visitas||rc.totalVendido?`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:.75rem">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1;min-width:110px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700">Visitas no ano</div>
+        <div style="font-size:18px;font-weight:800;color:var(--text)">${rc.visitas}</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;flex:1;min-width:110px">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:700">Mercado vendido</div>
+        <div style="font-size:18px;font-weight:800;color:var(--text)">${rc.totalVendido.toLocaleString('pt-BR')}t</div>
+      </div>
+      <div style="background:rgba(168,255,83,.1);border:1px solid rgba(168,255,83,.35);border-radius:8px;padding:8px 12px;flex:1;min-width:110px">
+        <div style="font-size:10px;color:#A8FF53;text-transform:uppercase;font-weight:700">Fertigran</div>
+        <div style="font-size:18px;font-weight:800;color:#A8FF53">${rc.fertigran.toLocaleString('pt-BR')}t${rc.totalVendido>0?` <span style="font-size:11px">(${Math.round(rc.fertigran/rc.totalVendido*100)}%)</span>`:''}</div>
+      </div>
+    </div>`:''}
+    ${share?`<div style="margin-bottom:.75rem"><div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Vendas por empresa no ano</div>${share}</div>`:''}
+    ${linhaMes?`<div style="overflow-x:auto;margin-bottom:1rem"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:480px">
+      <thead><tr style="color:var(--text3);font-size:10px;text-transform:uppercase">
+        <th style="text-align:left;padding:4px 6px">Mês</th>
+        <th style="text-align:center;padding:4px 6px">Visitas</th>
+        <th style="text-align:left;padding:4px 6px">Objetivo</th>
+        <th style="text-align:left;padding:4px 6px">Vendas</th>
+      </tr></thead><tbody>${linhaMes}</tbody></table></div>`:''}
+  `;
+}
+
 function abrirCliente(id){
   S.crm=S.crm||{clientes:[],leads:[]};
   const cli=S.crm.clientes.find(c=>c.id===id);
@@ -13993,6 +13986,8 @@ function abrirCliente(id){
       </div>
     </div>`:''}
 
+    ${_crmBlocoComercial(cli)}
+
     ${cli.obs?`<div style="font-size:12px;color:var(--text2);margin-bottom:1rem;padding:8px 10px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">${cli.obs}</div>`:''}
     <div class="crm-section-title">Oportunidades (${leads.length})</div>
     ${leadsHtml||'<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Nenhuma oportunidade vinculada.</div>'}
@@ -14001,21 +13996,6 @@ function abrirCliente(id){
       <button class="btn btn-sm btn-red" onclick="crmDeleteCliente('${id}')">Excluir cliente</button>
     </div>
   `);
-}
-
-// Apaga TODOS os clientes e leads. Não mexe no histórico de Andamento Mensal
-// (S.crm.andamentoMensal) nem nos seeds de fábrica — só o cadastro de clientes/leads
-// que o usuário está pedindo para zerar antes de reimportar do zero.
-function crmResetarClientes(){
-  const nCli=(S.crm.clientes||[]).length, nLead=(S.crm.leads||[]).length;
-  if(!nCli&&!nLead){ alert('Já não há clientes ou leads cadastrados.'); return; }
-  if(!confirm('Isto vai apagar TODOS os '+nCli+' cliente(s) e '+nLead+' lead(s) cadastrados. '
-    +'Não afeta o histórico de Andamento Mensal já importado.\n\nEsta ação não pode ser desfeita. Continuar?')) return;
-  S.crm.clientes=[];
-  S.crm.leads=[];
-  sched();
-  renderCRM();
-  alert('Clientes e leads apagados. Importe a planilha para recomeçar.');
 }
 
 function crmDeleteCliente(id){
@@ -14090,19 +14070,41 @@ function renderCrmDashboard(){
   const potTotal   =clients.reduce((a,c)=>a+(+c.potencialTotal||0),0)||potVerao+potIrrigado+potSafrinha;
   const potBySafra ={verao:potVerao,irrigado:potIrrigado,safrinha:potSafrinha};
 
-  // Aggregate ALL companies from ALL leads with empresa + volume (fechado=FG, perdido=concorrentes)
-  // Os leads dão a ATRIBUIÇÃO (quem levou o volume), não o total do mercado.
+  // Atribuição por empresa (quem levou o volume). Fonte preferida: as vendas da
+  // Planilha Comercial, que são reais e mês a mês; sem elas, cai para os leads.
+  // O mês vira safra pela mesma régua das janelas: abr–out é verão, nov–mar safrinha.
+  // Meses da safrinha já encerrada ficam fora daqui — esta seção só cobre as janelas
+  // abertas, que são as que têm potencial cadastrado; o histórico completo está no
+  // gráfico de vendas por mês.
   const empMap={};
   const leadPorCli={};
-  allLeads.filter(l=>clientIds.has(l.clienteId)&&l.empresa&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
-    const tons=+l.volumeFechado||+l.qtdTons||0;
-    const safra=l.safra||'verao';
-    if(!empMap[l.empresa]) empMap[l.empresa]={verao:0,irrigado:0,safrinha:0,total:0};
-    empMap[l.empresa][safra]+=tons;
-    empMap[l.empresa].total+=tons;
-    if(!leadPorCli[l.clienteId]) leadPorCli[l.clienteId]={verao:0,irrigado:0,safrinha:0};
-    leadPorCli[l.clienteId][safra]+=tons;
-  });
+  const temComercial=clients.some(c=>c.visitas&&Object.keys(c.visitas).length);
+  if(temComercial){
+    clients.forEach(c=>{
+      Object.keys(c.visitas||{}).forEach(ym=>{
+        const safra=_comSafraDoMes(ym);
+        if(safra==='safrinha26') return;   // janela encerrada: fora do market share atual
+        const vendas=(c.visitas[ym]||{}).vendas||{};
+        Object.keys(vendas).forEach(k=>{
+          const tons=+vendas[k]||0;
+          if(!(tons>0)) return;
+          if(!empMap[k]) empMap[k]={verao:0,irrigado:0,safrinha:0,total:0};
+          empMap[k][safra]+=tons;
+          empMap[k].total+=tons;
+        });
+      });
+    });
+  } else {
+    allLeads.filter(l=>clientIds.has(l.clienteId)&&l.empresa&&(+l.volumeFechado||+l.qtdTons||0)>0).forEach(l=>{
+      const tons=+l.volumeFechado||+l.qtdTons||0;
+      const safra=l.safra||'verao';
+      if(!empMap[l.empresa]) empMap[l.empresa]={verao:0,irrigado:0,safrinha:0,total:0};
+      empMap[l.empresa][safra]+=tons;
+      empMap[l.empresa].total+=tons;
+      if(!leadPorCli[l.clienteId]) leadPorCli[l.clienteId]={verao:0,irrigado:0,safrinha:0};
+      leadPorCli[l.clienteId][safra]+=tons;
+    });
+  }
 
   // Mercado rodado por safra — o número da planilha de supervisão é a autoridade;
   // clientes sem esse número caem para a soma dos leads.
@@ -14288,7 +14290,8 @@ function renderCrmDashboard(){
       ${mkCell(arS,potSafrinha,false,'var(--text3)')}
       ${mkCell(arT,potTotal,true,'var(--text3)')}
     </tr>`;
-    compEl.innerHTML=`<div class="fin-card-title">Market Share por Empresa · % do Potencial</div>
+    compEl.innerHTML=`<div class="fin-card-title">Market Share por Empresa · % do Potencial
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0"> · ${temComercial?'vendas da Planilha Comercial':'atribuição pelos leads'}</span></div>
     <div style="overflow-x:auto"><table class="fin-tbl">
       <thead><tr>
         <th style="text-align:left">Empresa</th>
@@ -14376,6 +14379,335 @@ function renderCrmDashboard(){
     <div style="font-size:10px;color:var(--text3);margin-top:8px">Vol. fechado = mercado já rodado (todas as empresas). ${ultimoSnap?'Números vêm do retrato mensal mais recente — "fora do retrato" marca cliente sem linha nessa planilha, calculado a partir do cadastro.':'A janela Safrinha 2027 soma safrinha + irrigado, como na planilha de supervisão.'}</div>`;
   }
   _renderAndamentoMensal();
+  _renderComChartMes(clients);
+}
+
+// ══════════ PLANILHA COMERCIAL ═════════════════════════════════════════════
+// Importa a "Planilha Comercial FERTI 30" inteira: a aba GERAL alimenta o cadastro
+// do cliente e as 12 abas "Visitas MÊS" alimentam o histórico de visitas e as vendas
+// por empresa. Como o arquivo carrega o ano todo, cada importação REPÕE o ano
+// inteiro — importar em agosto traz jan a ago, com julho já corrigido se mudou.
+// Cadastro manual continua valendo: a importação preenche, não bloqueia.
+
+const COM_MESES=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+// Cabeçalho da planilha → chave de empresa do app (CRM_EMPRESAS)
+const COM_EMPRESA_COL={
+  'FERTIGRAN':'fertigran','MOSAIC':'mosaic','EUROCHEN':'eurochem','EUROCHEM':'eurochem',
+  'CIBRAFÉRTIL':'cibra','CIBRAFERTIL':'cibra','CIBRA':'cibra','ARAGUAIA':'araguaia',
+  'YARA':'yara','NUTRIEN':'nutrien','GEN':'gen','SUDOESTE':'sudoeste',
+  'RIFÉRTIL':'rifertil','RIFERTIL':'rifertil','EQUILÍBRIO':'equilibrio','EQUILIBRIO':'equilibrio',
+  'OUTRAS':'outras',
+};
+// Colunas do bloco DIFERENCIADOS → chave interna
+const COM_DIF_COL={'SUPER N PRO':'superNPro','MASTERGRAN':'mastergran','FERTIGRAN P':'fertigranP','UHF':'uhf'};
+
+function _comNorm(v){return String(v==null?'':v).trim().toUpperCase();}
+function _comNum(v){
+  if(v==null||v==='') return 0;
+  if(typeof v==='number') return v;
+  const n=parseFloat(String(v).replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,''));
+  return isNaN(n)?0:n;
+}
+// Mês do calendário → janela de safra, usando as mesmas datas das CRM_JANELAS.
+// Safrinha vai de novembro a março; verão, de abril a outubro.
+function _comSafraDoMes(ym){
+  const m=+String(ym).slice(5,7);
+  if(m>=4&&m<=10) return 'verao';
+  return m<=3?'safrinha26':'safrinha';   // jan–mar fecham a safrinha anterior; nov–dez abrem a próxima
+}
+
+// ── GERAL: cadastro do cliente ──────────────────────────────────────────────
+function _comParseGeral(rows){
+  let hdrIdx=-1;
+  for(let r=0;r<rows.length;r++){
+    if((rows[r]||[]).some(c=>_comNorm(c)==='CLIENTE')){ hdrIdx=r; break; }
+  }
+  if(hdrIdx<0) return {erro:'Aba GERAL sem coluna "CLIENTE".'};
+  const hdr=rows[hdrIdx]||[];
+  const col=alvo=>hdr.findIndex(c=>_comNorm(c).startsWith(alvo));
+  const idx={
+    supervisao:col('SUPERVIS'), cliente:col('CLIENTE'), contato:col('CONTATO'),
+    municipio:col('MUNIC'), telefone:col('TELEFONE'), email:col('E-MAIL'),
+    areaVerao:col('ÁREA PLANTADA VERÃO'), areaIrrigado:col('ÁREA PLANTADA IRRIGADO'),
+    areaSafrinha:col('ÁREA PLANTADA SAFRINHA'),
+    potVerao:col('POTENCIAL DE COMPRA VERÃO'), potIrrigado:col('POTENCIAL DE COMPRA IRRIGADO'),
+    potSafrinha:col('POTENCIAL DE COMPRA SAFRINHA'), potTotal:col('POTENCIAL DE COMPRA TOTAL'),
+    fechado2025:col('VOLUME FECHADO'), empresas:col('EMPRESAS ATUANTES'), motivo:col('MOTIVO'),
+  };
+  const txt=(row,i)=>i>=0?String(row[i]==null?'':row[i]).trim():'';
+  const num=(row,i)=>i>=0?_comNum(row[i]):0;
+  const registros=[];
+  for(let r=hdrIdx+1;r<rows.length;r++){
+    const row=rows[r]||[];
+    const nome=txt(row,idx.cliente);
+    if(!nome||_comNorm(nome)==='TOTAL') continue;
+    registros.push({
+      nome, supervisao:txt(row,idx.supervisao), contato:txt(row,idx.contato),
+      municipio:txt(row,idx.municipio), telefone:txt(row,idx.telefone), email:txt(row,idx.email),
+      areaVerao:num(row,idx.areaVerao), areaIrrigado:num(row,idx.areaIrrigado), areaSafrinha:num(row,idx.areaSafrinha),
+      potVerao:num(row,idx.potVerao), potIrrigado:num(row,idx.potIrrigado), potSafrinha:num(row,idx.potSafrinha),
+      potTotal:num(row,idx.potTotal), fechado2025:num(row,idx.fechado2025),
+      empresasAtuantes:txt(row,idx.empresas), motivo:txt(row,idx.motivo),
+    });
+  }
+  if(!registros.length) return {erro:'Aba GERAL sem linhas de cliente.'};
+  return {registros};
+}
+
+// ── Visitas MÊS: visitas, objetivo, vendas por empresa e diferenciados ──────
+function _comParseVisitas(rows){
+  let hdrIdx=-1;
+  for(let r=0;r<rows.length;r++){
+    if((rows[r]||[]).some(c=>_comNorm(c)==='CLIENTE')){ hdrIdx=r; break; }
+  }
+  if(hdrIdx<0) return {erro:'Aba de visitas sem coluna "CLIENTE".'};
+  const hdr=rows[hdrIdx]||[];
+  const titulo=rows[hdrIdx-1]||[];
+  const iCliente=hdr.findIndex(c=>_comNorm(c)==='CLIENTE');
+  const iQtd=hdr.findIndex(c=>_comNorm(c).startsWith('QUANTIDADE DE VISITAS'));
+  const iObj=hdr.findIndex(c=>_comNorm(c)==='OBJETIVO');
+
+  // "TOTAL" aparece duas vezes (empresas e diferenciados); o bloco DIFERENCIADOS
+  // começa onde o título da linha de cima diz isso. Antes dele são empresas.
+  let iDif=titulo.findIndex(c=>_comNorm(c).startsWith('DIFERENCIADOS'));
+  if(iDif<0) iDif=hdr.length;
+  const empresaCols={}, difCols={};
+  hdr.forEach((c,i)=>{
+    const k=_comNorm(c);
+    if(i<iDif&&COM_EMPRESA_COL[k]) empresaCols[COM_EMPRESA_COL[k]]=i;
+    if(i>=iDif&&COM_DIF_COL[k]) difCols[COM_DIF_COL[k]]=i;
+  });
+
+  const registros=[];
+  for(let r=hdrIdx+1;r<rows.length;r++){
+    const row=rows[r]||[];
+    const nome=String(row[iCliente]==null?'':row[iCliente]).trim();
+    if(!nome||_comNorm(nome)==='TOTAL') continue;   // pula rodapé de totais/participação
+    const vendas={}; let totalVendas=0;
+    Object.keys(empresaCols).forEach(k=>{
+      const v=_comNum(row[empresaCols[k]]);
+      if(v>0){ vendas[k]=v; totalVendas+=v; }
+    });
+    const dif={}; let totalDif=0;
+    Object.keys(difCols).forEach(k=>{
+      const v=_comNum(row[difCols[k]]);
+      if(v>0){ dif[k]=v; totalDif+=v; }
+    });
+    const qtd=iQtd>=0?_comNum(row[iQtd]):0;
+    const objetivo=iObj>=0?String(row[iObj]==null?'':row[iObj]).trim():'';
+    if(!qtd&&!objetivo&&!totalVendas&&!totalDif) continue;   // linha sem nada no mês
+    registros.push({nome,qtd,objetivo,vendas,totalVendas,dif,totalDif});
+  }
+  return {registros};
+}
+
+// ── Divergências de nome ────────────────────────────────────────────────────
+// Compara os nomes da planilha com o cadastro e separa em: novos (só na planilha),
+// ausentes (só no cadastro) e prováveis renomeações (par parecido entre os dois).
+function _comSimilaridade(a,b){
+  const ta=_brlNorm(a), tb=_brlNorm(b);
+  if(!ta||!tb) return 0;
+  if(ta===tb) return 1;
+  // Similaridade por bigramas — tolera troca de palavra, abreviação e erro de digitação
+  const big=s=>{const o=[];for(let i=0;i<s.length-1;i++)o.push(s.slice(i,i+2));return o;};
+  const A=big(ta), B=big(tb);
+  if(!A.length||!B.length) return 0;
+  const restante=B.slice();
+  let comuns=0;
+  A.forEach(g=>{const i=restante.indexOf(g); if(i>=0){comuns++;restante.splice(i,1);}});
+  return (2*comuns)/(A.length+B.length);
+}
+function _comDivergencias(nomesPlanilha){
+  const cadastro=(S.crm.clientes||[]).map(c=>c.nome).filter(Boolean);
+  const normPl=new Set(nomesPlanilha.map(_brlNorm));
+  const normCad=new Set(cadastro.map(_brlNorm));
+  const novos=nomesPlanilha.filter(n=>!normCad.has(_brlNorm(n)));
+  const ausentes=cadastro.filter(n=>!normPl.has(_brlNorm(n)));
+  // Par mais parecido entre cada ausente e os novos — candidato a renomeação
+  const possiveisRenomes=[];
+  ausentes.forEach(a=>{
+    let melhor=null, score=0;
+    novos.forEach(n=>{ const s=_comSimilaridade(a,n); if(s>score){score=s;melhor=n;} });
+    if(melhor&&score>=0.55) possiveisRenomes.push({de:a,para:melhor,score:Math.round(score*100)});
+  });
+  return {novos,ausentes,possiveisRenomes,em:crmNow()};
+}
+
+// Renomeia um cliente do cadastro — resolve a divergência sem perder histórico,
+// leads nem retratos, porque tudo se liga pelo id (e o retrato, pelo nome novo).
+function crmAplicarRenome(de,para){
+  const c=(S.crm.clientes||[]).find(x=>_brlNorm(x.nome)===_brlNorm(de));
+  if(!c){ alert('Cliente "'+de+'" não encontrado.'); return; }
+  if(!confirm('Renomear "'+c.nome+'" para "'+para+'"?\n\nO histórico, os leads e os retratos mensais desse cliente são preservados.')) return;
+  c.nome=para;
+  const d=S.crm.comercial&&S.crm.comercial.divergencias;
+  if(d){
+    d.ausentes=d.ausentes.filter(x=>_brlNorm(x)!==_brlNorm(de));
+    d.novos=d.novos.filter(x=>_brlNorm(x)!==_brlNorm(para));
+    d.possiveisRenomes=d.possiveisRenomes.filter(x=>_brlNorm(x.de)!==_brlNorm(de));
+  }
+  sched();
+  renderCRM();
+}
+function crmIgnorarDivergencias(){
+  if(S.crm.comercial) S.crm.comercial.divergencias=null;
+  sched();
+  renderCRM();
+}
+
+// ── Aplicação ───────────────────────────────────────────────────────────────
+function _comAplicar(geral,visitasPorMes,ano,arquivo){
+  S.crm.comercial=S.crm.comercial||{anos:{},divergencias:null};
+  let atualizados=0, criados=0;
+  geral.forEach(reg=>{
+    const alvo=_brlNorm(reg.nome);
+    let c=(S.crm.clientes||[]).find(x=>_brlNorm(x.nome)===alvo);
+    if(!c){
+      c={id:crmId(),nome:reg.nome,categoria:'',subcategoria:'',obs:'',criadoEm:crmNow()};
+      S.crm.clientes.push(c);
+      criados++;
+    } else atualizados++;
+    // A planilha é a fonte do cadastro; campo vazio nela não apaga o que já existe
+    const set=(k,v)=>{ if(v!==''&&v!=null&&!(typeof v==='number'&&v===0&&c[k])) c[k]=v; };
+    set('supervisao',reg.supervisao); set('contato',reg.contato); set('municipio',reg.municipio);
+    set('telefone',reg.telefone); set('email',reg.email);
+    c.areaVerao=reg.areaVerao; c.areaIrrigado=reg.areaIrrigado; c.areaSafrinha=reg.areaSafrinha;
+    c.potencialVerao=reg.potVerao; c.potencialIrrigado=reg.potIrrigado; c.potencialSafrinha=reg.potSafrinha;
+    c.potencialTotal=reg.potTotal||(reg.potVerao+reg.potIrrigado+reg.potSafrinha);
+    c.volumeFechadoAnterior=reg.fechado2025;
+    set('empresasAtuantes',reg.empresasAtuantes);
+    set('motivo',reg.motivo);
+  });
+
+  // Visitas e vendas: substitui o ano inteiro, já que o arquivo carrega os 12 meses
+  (S.crm.clientes||[]).forEach(c=>{
+    c.visitas=c.visitas||{};
+    Object.keys(c.visitas).forEach(ym=>{ if(ym.slice(0,4)===String(ano)) delete c.visitas[ym]; });
+  });
+  let mesesComDado=0, visitasTotal=0;
+  Object.keys(visitasPorMes).forEach(ym=>{
+    const regs=visitasPorMes[ym];
+    if(!regs.length) return;
+    mesesComDado++;
+    regs.forEach(v=>{
+      const c=(S.crm.clientes||[]).find(x=>_brlNorm(x.nome)===_brlNorm(v.nome));
+      if(!c) return;
+      c.visitas=c.visitas||{};
+      c.visitas[ym]={qtd:v.qtd,objetivo:v.objetivo,vendas:v.vendas,dif:v.dif};
+      visitasTotal+=v.qtd;
+    });
+  });
+
+  S.crm.comercial.anos[ano]={ano,arquivo,importadoEm:crmNow(),mesesComDado,visitasTotal,clientes:geral.length};
+  S.crm.comercial.divergencias=_comDivergencias(geral.map(r=>r.nome));
+  return {atualizados,criados,mesesComDado,visitasTotal};
+}
+
+async function crmImportarComercial(input){
+  const file=input.files[0]; if(!file) return;
+  input.value='';
+  const anoEl=document.getElementById('comAno');
+  const ano=anoEl&&anoEl.value?String(anoEl.value):String(new Date().getFullYear());
+  const status=document.getElementById('comStatus');
+  status.innerHTML='Lendo planilha…';
+
+  if(!window.XLSX){
+    try{
+      await new Promise((res,rej)=>{
+        const sc=document.createElement('script');
+        sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        sc.onload=res; sc.onerror=()=>rej(new Error('Falha ao carregar SheetJS'));
+        document.head.appendChild(sc);
+      });
+    }catch(e){ status.innerHTML='<span style="color:var(--red)">'+e.message+'</span>'; return; }
+  }
+
+  let wb;
+  try{
+    const ab=await new Promise((res,rej)=>{
+      const r=new FileReader();
+      r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('Falha ao ler o arquivo'));
+      r.readAsArrayBuffer(file);
+    });
+    wb=XLSX.read(ab,{type:'array'});
+  }catch(e){ status.innerHTML='<span style="color:var(--red)">Erro ao ler Excel: '+e.message+'</span>'; return; }
+
+  const nomeAba=alvo=>wb.SheetNames.find(n=>_comNorm(n)===_comNorm(alvo))
+                   ||wb.SheetNames.find(n=>_comNorm(n).indexOf(_comNorm(alvo))>=0);
+  const abaGeral=nomeAba('GERAL');
+  if(!abaGeral){ status.innerHTML='<span style="color:var(--red)">Não encontrei a aba GERAL nesta planilha.</span>'; return; }
+  const linhas=aba=>XLSX.utils.sheet_to_json(wb.Sheets[aba],{header:1,defval:''});
+
+  const g=_comParseGeral(linhas(abaGeral));
+  if(g.erro){ status.innerHTML='<span style="color:var(--red)">'+esc(g.erro)+'</span>'; return; }
+
+  const visitasPorMes={};
+  let abasLidas=0;
+  COM_MESES.forEach((m,i)=>{
+    const aba=nomeAba('Visitas '+m);
+    if(!aba) return;
+    const v=_comParseVisitas(linhas(aba));
+    if(v.erro||!v.registros.length) return;
+    abasLidas++;
+    visitasPorMes[ano+'-'+String(i+1).padStart(2,'0')]=v.registros;
+  });
+
+  const res=_comAplicar(g.registros,visitasPorMes,ano,file.name);
+  sched();
+  renderCRM();
+  const d=S.crm.comercial.divergencias;
+  const nDiv=(d?d.novos.length+d.ausentes.length:0);
+  status.innerHTML='<span style="color:var(--green)">'+ano+': '+res.atualizados+' cliente(s) atualizados'
+    +(res.criados?', '+res.criados+' criado(s)':'')+' · '+res.mesesComDado+' mês(es) de visitas, '
+    +res.visitasTotal+' visita(s).</span>'
+    +(nDiv?' <span style="color:var(--amber)">'+nDiv+' divergência(s) de nome — veja abaixo.</span>':'');
+}
+
+let _comChart=null;
+// Movimentação de mercado mês a mês, por empresa — a série completa da Planilha
+// Comercial, incluindo os meses da safrinha já encerrada que o market share por
+// safra não cobre.
+function _renderComChartMes(clients){
+  const cv=document.getElementById('comChartMes');
+  const vazio=document.getElementById('comChartVazio');
+  if(_comChart){_comChart.destroy();_comChart=null;}
+  if(!cv) return;
+  const porMes={};
+  (clients||[]).forEach(c=>{
+    Object.keys(c.visitas||{}).forEach(ym=>{
+      const vendas=(c.visitas[ym]||{}).vendas||{};
+      Object.keys(vendas).forEach(k=>{
+        const t=+vendas[k]||0;
+        if(!(t>0)) return;
+        (porMes[ym]=porMes[ym]||{})[k]=(porMes[ym][k]||0)+t;
+      });
+    });
+  });
+  const meses=Object.keys(porMes).sort();
+  if(!meses.length){
+    cv.style.display='none';
+    if(vazio) vazio.style.display='';
+    return;
+  }
+  cv.style.display='';
+  if(vazio) vazio.style.display='none';
+  const empresas={};
+  meses.forEach(m=>Object.keys(porMes[m]).forEach(k=>{empresas[k]=(empresas[k]||0)+porMes[m][k];}));
+  const ordem=Object.keys(empresas).sort((a,b)=>empresas[b]-empresas[a]);
+  if(typeof Chart==='undefined') return;
+  _comChart=new Chart(cv,{
+    type:'bar',
+    data:{labels:meses.map(_andMesLbl),datasets:ordem.map(k=>{
+      const e=crmEmpMeta(k);
+      return {label:e.lbl,backgroundColor:e.color+'cc',borderColor:e.color,borderWidth:1,
+        data:meses.map(m=>porMes[m][k]||0)};
+    })},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'rgba(255,255,255,.55)',font:{size:10},boxWidth:10,padding:8,usePointStyle:true,pointStyle:'rectRounded'}},
+        tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(+ctx.parsed.y).toLocaleString('pt-BR')+'t'}}},
+      scales:{x:{stacked:true,ticks:{color:'rgba(255,255,255,.45)'},grid:{display:false}},
+        y:{stacked:true,beginAtZero:true,ticks:{color:'rgba(255,255,255,.45)'},grid:{color:'rgba(255,255,255,.04)'}}}}
+  });
 }
 
 // ══════════ ANDAMENTO MENSAL ═══════════════════════════════════════════════
